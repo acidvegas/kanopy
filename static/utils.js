@@ -136,7 +136,8 @@ const esc     = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;
 const linkify = (md) => md.replace(/(^|[\s(])#(\d+)\b/g, (m, pre, id) => `${pre}[#${id}](${taskHref(id)})`);
 const mdHtml  = (text) => DOMPurify.sanitize(marked.parse(linkify(text)), { FORBID_ATTR: ['id', 'name', 'class', 'style'], FORBID_TAGS: ['style', 'form'] }); // user markup must not clobber or restyle the app's own elements
 const pane    = () => KB.view === 'task' ? $('#taskpage') : $('#drawer');
-const taskHref = (id) => KB.view === 'task' ? `#/task/${id}` : `${kbBase()}/${id}`;
+const narrow  = () => matchMedia('(max-width: 800px)').matches;
+const taskHref = (id) => KB.view === 'task' || narrow() ? `#/task/${id}` : `${kbBase()}/${id}`; // phones open the full page, not the side panel
 const kbView  = () => KB.view === 'calendar' ? 'calendar' : 'board';
 const kbBase  = () => `#/${kbView()}/${KB.project ?? 'all'}`;
 const ymd     = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -290,7 +291,7 @@ async function kbNewTask(status = 'todo') {
 	if (!title) return;
 	await guard(async () => {
 		const task = await api('POST', '/api/tasks', { project_id: target.id, title, status });
-		location.hash = `${kbBase()}/${task.id}`;
+		location.hash = taskHref(task.id);
 	});
 }
 
@@ -1334,7 +1335,7 @@ function kbBind() {
 	$('#lbl-new').onclick   = lblNew;
 	$('#cal-grid').addEventListener('click', (e) => {
 		const ev = e.target.closest('.ev');
-		if (ev) location.hash = `${kbBase()}/${ev.dataset.id}`;
+		if (ev) location.hash = taskHref(ev.dataset.id);
 	});
 	$('#labels').addEventListener('click', (e) => {
 		const btn = e.target.closest('[data-act]');
@@ -1406,7 +1407,7 @@ function kbBind() {
 	$('#board').addEventListener('click', (e) => {
 		const card = e.target.closest('.card');
 		if (!card || e.target.closest('.open-new')) return;
-		if (!KB.selecting) return location.hash = `${kbBase()}/${card.dataset.id}`;
+		if (!KB.selecting) return location.hash = taskHref(card.dataset.id);
 		const id = +card.dataset.id;
 		KB.picked.has(id) ? KB.picked.delete(id) : KB.picked.add(id);
 		card.classList.toggle('picked', KB.picked.has(id));
@@ -1585,7 +1586,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	marked.setOptions({ gfm: true });
 	kbBind();
 	$('#toggle').onclick = () => {
-		if (matchMedia('(max-width: 800px)').matches) return $('#app').classList.toggle('open');
+		if (narrow()) return $('#app').classList.toggle('open');
 		$('#app').classList.toggle('collapsed');
 		store('collapsed', $('#app').classList.contains('collapsed'));
 	};

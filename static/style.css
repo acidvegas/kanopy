@@ -544,6 +544,7 @@ p.small code { font-family: var(--mono); font-size: .78rem; background: var(--co
 .card .open-new:hover { color: var(--accent); background: var(--hover); }
 .card .open-new svg { width: 13px; height: 13px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
 @media (hover: none) { .card .open-new { opacity: .7; } }
+@media (max-width: 800px) { .card .open-new { visibility: hidden; } .tp-head [data-act=panel] { display: none; } } /* tapping a card already opens the full page; the space stays for the select checkbox */
 /* touch screens: 16px fields so iPhones do not zoom on focus, and finger-sized tap targets */
 @media (pointer: coarse) {
 	input:not([type=checkbox]):not([type=radio]), textarea, select { font-size: max(16px, 1em) !important; }
