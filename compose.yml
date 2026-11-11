@@ -1,0 +1,12 @@
+# kanopy - Developed by acidvegas in YAML (https://github.com/acidvegas)
+# compose.yml
+
+services:
+  kanopy:
+    build: .
+    env_file: .env
+    network_mode: host # binds KANOPY_HOST:KANOPY_PORT from .env, which also builds the links in notifications
+    user: "${UID:-1000}:${GID:-1000}" # data/ stays owned by you
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
