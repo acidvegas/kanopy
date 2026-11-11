@@ -1027,6 +1027,28 @@ function mdTab(btn) {
 
 /* ---------- drawer ---------- */
 
+function kbEvent(e) {
+	const v = (x) => `<b>${esc(x)}</b>`;
+	const who = e.agent ? `${v(e.agent)} <span class="dim">(${esc(e.actor)})</span>` : v(e.actor);
+	const link = (x) => { const [k, id] = x.split(':'); return `${KINDS[k] || esc(k)} <a href="${taskHref(+id)}">#${+id}</a>`; };
+	const what = {
+		created    : () => 'created the task',
+		title      : () => `renamed it to ${v(e.new)}`,
+		description: () => 'edited the description',
+		status     : () => `moved it from ${v(STATUS[e.old] || e.old)} to ${v(STATUS[e.new] || e.new)}`,
+		priority   : () => `set priority to ${v(PRIO[+e.new] ?? e.new)}`,
+		due        : () => e.new ? `set the due date to ${v(e.new)}` : 'cleared the due date',
+		remind_at  : () => e.new ? `set a reminder for ${v(new Date(e.new).toLocaleString())}` : 'cleared the reminder',
+		project    : () => `moved it from ${v(e.old)} to ${v(e.new)}`,
+		label      : () => e.new ? `added label ${v(e.new)}` : `removed label ${v(e.old)}`,
+		assignee   : () => e.new ? `assigned ${v(e.new)}` : `unassigned ${v(e.old)}`,
+		link       : () => e.new ? `added link: ${link(e.new)}` : `removed link: ${link(e.old)}`,
+		attachment : () => e.new ? `attached ${v(e.new)}` : `removed attachment ${v(e.old)}`,
+		comment    : () => 'commented'
+	}[e.field];
+	return `<li><span>${who} ${what ? what() : esc(e.field)}</span><span class="dim at">${new Date(e.at).toLocaleString()}</span></li>`;
+}
+
 function kbDrawer() {
 	const t     = KB.task;
 	const old   = pane();
@@ -1078,6 +1100,12 @@ function kbDrawer() {
 				${mdEditor('comment-input', '', 'Add a comment  (markdown, Ctrl+Enter to send)', 3)}
 				<div class="row end"><button class="primary" data-act="comment">Comment</button></div>
 			</section>`;
+	const history = t.history.length ? `<section>
+				<details class="history"${same && old.querySelector('.history')?.open ? ' open' : ''}>
+					<summary><h4>${ICONS.chev}History <span class="dim">${t.history.length}</span></h4></summary>
+					<ul class="events">${t.history.map(kbEvent).join('')}</ul>
+				</details>
+			</section>` : '';
 	const stamps = `<p class="stamps dim">Created ${new Date(t.created).toLocaleString()} · updated ${new Date(t.updated).toLocaleString()}${t.done_at ? ` · done ${new Date(t.done_at).toLocaleString()}` : ''}${t.archived ? ' · archived' : ''}</p>`;
 	const el = pane();
 	if (page) {
@@ -1100,7 +1128,7 @@ function kbDrawer() {
 			</header>
 			${title}
 			<div class="tp-grid">
-				<div class="tp-main">${desc}${files}${comments}</div>
+				<div class="tp-main">${desc}${files}${comments}${history}</div>
 				<aside class="tp-side">${fields}${people}${labels}${links}${stamps}</aside>
 			</div>
 		</div>`;
@@ -1113,7 +1141,7 @@ function kbDrawer() {
 			<button class="icon danger" data-act="delete" title="Delete task" aria-label="Delete task">${SVG.trash}</button>
 			<button class="icon" data-act="close" title="Close (Esc)" aria-label="Close">${SVG.x}</button>
 		</header>
-		<div class="body">${title}${fields}${people}${labels}${desc}${files}${links}${comments}${stamps}</div>`;
+		<div class="body">${title}${fields}${people}${labels}${desc}${files}${links}${comments}${history}${stamps}</div>`;
 		el.hidden = false;
 		document.querySelectorAll('.card').forEach((card) => card.classList.toggle('active', +card.dataset.id === t.id));
 	}
