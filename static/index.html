@@ -1,0 +1,287 @@
+<!-- kanopy - Developed by acidvegas in HTML (https://github.com/acidvegas) -->
+<!-- static/index.html -->
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>Kanopy</title>
+	<meta name="description" content="Projects, tasks and ideas, shared with AI agents.">
+	<meta name="theme-color" content="#07060d">
+	<script>
+		window.kbLogo = (key) => {
+			const pal = {"": ["#2e1065", "#0c0a1d", "#c4b5fd", "#f472b6"], "dracula": ["#44475a", "#21222c", "#bd93f9", "#ff79c6"], "nord": ["#434c5e", "#242933", "#88c0d0", "#81a1c1"], "gruvbox": ["#504945", "#1d2021", "#fabd2f", "#fe8019"], "catppuccin": ["#45475a", "#11111b", "#cba6f7", "#f5c2e7"], "tokyonight": ["#2f3549", "#16161e", "#7aa2f7", "#bb9af7"], "onedark": ["#3e4451", "#1e2127", "#61afef", "#c678dd"], "monokai": ["#3e3d32", "#1e1f1c", "#a6e22e", "#66d9ef"], "githubdark": ["#30363d", "#0d1117", "#58a6ff", "#bc8cff"], "github": ["#ddf4ff", "#ffffff", "#0969da", "#8250df"]};
+			const [b1, b2, f1, f2] = pal[key] || pal[''];
+			const r = (x, y, w, hh, o) => `<rect x="${x}" y="${y}" width="${w}" height="${hh}" rx="18"${o ? ` opacity="${o}"` : ''}/>`;
+			const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="b" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${b1}"/><stop offset="1" stop-color="${b2}"/></linearGradient><linearGradient id="f" x1="96" y1="96" x2="416" y2="416" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="${f1}"/><stop offset="1" stop-color="${f2}"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#b)"/><g fill="url(#f)">${r(100, 112, 88, 96)}${r(100, 228, 88, 72, .75)}${r(100, 320, 88, 80, .5)}${r(212, 112, 88, 140)}${r(212, 272, 88, 72, .75)}${r(324, 112, 88, 72)}</g></svg>`;
+			const url = 'data:image/svg+xml,' + encodeURIComponent(svg);
+			document.querySelectorAll('link[rel~="icon"]').forEach((l) => l.remove());
+			document.head.append(Object.assign(document.createElement('link'), { rel: 'icon', type: 'image/svg+xml', href: url }));
+			document.querySelectorAll('img.logo').forEach((img) => img.src = url);
+			document.querySelector('meta[name="theme-color"]')?.setAttribute('content', b2);
+		};
+		document.documentElement.dataset.theme = (document.cookie.match(/(?:^|; )kb_theme=([a-z]+)/) || [])[1] || '';
+		window.kbLogo(document.documentElement.dataset.theme);
+		document.addEventListener('DOMContentLoaded', () => window.kbLogo(document.documentElement.dataset.theme));
+	</script>
+	<meta name="mobile-web-app-capable" content="yes">
+	<meta name="apple-mobile-web-app-title" content="Kanopy">
+	<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+	<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="/favicon.ico" sizes="48x48">
+	<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+	<link rel="manifest" href="/manifest.webmanifest">
+	<meta property="og:type" content="website">
+	<meta property="og:site_name" content="Kanopy">
+	<meta property="og:title" content="Kanopy">
+	<meta property="og:description" content="Projects, tasks and ideas, shared with AI agents.">
+	<meta property="og:url" content="{{BASE}}/">
+	<meta property="og:image" content="{{BASE}}/og.png">
+	<meta property="og:image:width" content="1200">
+	<meta property="og:image:height" content="630">
+	<meta name="twitter:card" content="summary_large_image">
+	<meta name="twitter:title" content="Kanopy">
+	<meta name="twitter:description" content="Projects, tasks and ideas, shared with AI agents.">
+	<meta name="twitter:image" content="{{BASE}}/og.png">
+	<link rel="stylesheet" href="/style.css">
+	<script src="/vendor/marked.min.js" defer></script>
+	<script src="/vendor/purify.min.js" defer></script>
+	<script src="/vendor/Sortable.min.js" defer></script>
+	<script src="/utils.js" defer></script>
+</head>
+<body>
+	<div id="app">
+		<aside id="sidebar">
+			<div class="head">
+				<a class="brand" href="#/board/all"><img class="logo" src="/favicon.svg" alt=""><span>KANOPY</span></a>
+				<div class="tools">
+					<a id="nav-inbox" class="icon-link" href="#/inbox" title="Inbox" aria-label="Inbox"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><b class="badge" hidden></b></a>
+					<a id="nav-search" class="icon-link" href="#/search" title="Search all tasks" aria-label="Search all tasks"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></a>
+					<a id="nav-settings" class="icon-link" href="#/settings" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></a>
+					<button id="kb-new-project" class="icon" title="New project" aria-label="New project"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M12 10v6M9 13h6"/></svg></button>
+				</div>
+			</div>
+			<nav class="views">
+				<a data-view="board" href="#/board/all"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>Board</a>
+				<a data-view="calendar" href="#/calendar/all"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar</a>
+			</nav>
+			<input id="kb-filter" type="search" placeholder="Filter  #id  text  host:pi  /" autocomplete="off" spellcheck="false">
+			<nav id="kb-tree" aria-label="Projects"></nav>
+		</aside>
+		<div id="scrim"></div>
+		<main id="main">
+			<div id="side-grip" class="grip" title="Drag to resize, double-click to reset"></div>
+			<header id="bar">
+				<button id="toggle" class="icon" aria-label="Toggle sidebar"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+				<div id="crumb"></div>
+				<div class="actions">
+					<span id="kb-project-ops" hidden>
+						<button id="kb-share" class="icon" title="Share project" aria-label="Share project"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
+						<button id="kb-rename" class="icon" title="Rename / move project" aria-label="Rename / move project"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6m-2-2 2 2-2 2"/></svg></button>
+						<button id="kb-archive" class="icon" title="Archive project" aria-label="Archive project"><svg viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg></button>
+						<button id="kb-delete" class="icon danger" title="Delete project" aria-label="Delete project"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg></button>
+					</span>
+					<span id="cal-ops" hidden>
+						<button id="cal-prev" class="icon" title="Previous month" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+						<button id="cal-today" title="This month">Today</button>
+						<button id="cal-next" class="icon" title="Next month" aria-label="Next month"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+					</span>
+					<button id="kb-select" class="icon" title="Select tasks" aria-label="Select tasks"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg></button>
+					<button id="kb-new-task" class="icon primary" title="New task (n)" aria-label="New task (n)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+				</div>
+			</header>
+			<section id="board">
+				<div id="kb-desc" class="desc-panel" hidden></div>
+				<div class="columns">
+					<div class="column" data-status="todo"><header><span>To-Do</span><b class="count"></b><button class="icon add" title="Add to To-Do" aria-label="Add to To-Do"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></header><div class="cards" data-status="todo"></div></div>
+					<div class="column" data-status="doing"><header><span>Doing</span><b class="count"></b><button class="icon add" title="Add to Doing" aria-label="Add to Doing"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></header><div class="cards" data-status="doing"></div></div>
+					<div class="column" data-status="done"><header><span>Done</span><b class="count"></b><button class="icon add" title="Add to Done" aria-label="Add to Done"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button></header><div class="cards" data-status="done"></div><button class="more link-btn" hidden>Show more</button></div>
+				</div>
+			</section>
+			<section id="calendar" hidden>
+				<div class="cal-head"><h2 id="cal-title"></h2></div>
+				<div class="cal-grid" id="cal-grid"></div>
+			</section>
+			<section id="search" hidden>
+				<input id="search-q" type="search" placeholder="Search titles, descriptions and comments (all words must match)" autocomplete="off" spellcheck="false">
+				<form id="search-filters" autocomplete="off">
+					<div class="sf-selects">
+						<label>Project<select name="project"></select></label>
+						<label>Assignee<select name="assignee"></select></label>
+						<label>Label<select name="label"></select></label>
+						<label>Priority<select name="priority"><option value="0">Any</option><option value="1">1+ low</option><option value="2">2+ medium</option><option value="3">3+ high</option><option value="4">4+ urgent</option><option value="5">5 do now</option></select></label>
+						<label>Due<select name="due"><option value="">Any time</option><option value="overdue">Overdue</option><option value="today">Today</option><option value="week">Next 7 days</option><option value="any">Has a due date</option><option value="none">No due date</option></select></label>
+						<label>Sort<select name="sort"><option value="updated">Recently updated</option><option value="created">Newest</option><option value="priority">Priority</option><option value="due">Due date</option><option value="id">Task #</option></select></label>
+					</div>
+					<div class="sf-checks">
+						<span class="sf-group"><b>Status</b>
+							<label class="pick"><input type="checkbox" name="status" value="todo" checked><span>To-Do</span></label>
+							<label class="pick"><input type="checkbox" name="status" value="doing" checked><span>Doing</span></label>
+							<label class="pick"><input type="checkbox" name="status" value="done" checked><span>Done</span></label>
+						</span>
+						<span class="sf-group"><b>Search in</b>
+							<label class="pick"><input type="checkbox" name="fields" value="title" checked><span>Titles</span></label>
+							<label class="pick"><input type="checkbox" name="fields" value="description" checked><span>Descriptions</span></label>
+							<label class="pick"><input type="checkbox" name="fields" value="comments" checked><span>Comments</span></label>
+						</span>
+						<button type="reset" class="link-btn" id="sf-reset">Reset</button>
+					</div>
+				</form>
+				<div id="search-results"></div>
+			</section>
+			<section id="settings" hidden>
+				<div class="set-wrap">
+					<form id="profile-form" class="set-card" autocomplete="off">
+						<header class="card-head">
+							<div class="me-head">
+								<span id="me-avatar" class="me-avatar"></span>
+								<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Account</h2><p>Signed in as <b id="me-name"></b></p>
+									<div class="me-pic"><button type="button" class="link-btn" id="avatar-pick">Change picture</button><button type="button" class="link-btn danger" id="avatar-clear" hidden>Remove</button><input type="file" id="avatar-file" accept="image/png,image/jpeg,image/webp,image/gif" hidden></div>
+								</div>
+							</div>
+							<button type="button" id="logout" class="ib"><svg class="si" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>Sign out</button>
+						</header>
+						<h3><svg class="si" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Password</h3>
+						<div class="set-grid">
+							<label>Current password<input name="current_password" type="password" autocomplete="current-password"></label>
+							<label>New password<input name="password" type="password" autocomplete="new-password" placeholder="at least 8 characters"></label>
+						</div>
+						<h3><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>My notifications</h3>
+						<div class="set-grid">
+							<label>My ntfy topic<input name="ntfy_topic" placeholder="blank = inbox only, no pushes"></label>
+						</div>
+						<div class="toggles">
+							<label class="toggle"><input type="checkbox" name="notify_mention"><span class="sw"></span><span class="txt"><b>@mentions</b><small>Someone writes @you in a description or comment</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_assign"><span class="sw"></span><span class="txt"><b>Assignments</b><small>Someone assigns you a task</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_activity"><span class="sw"></span><span class="txt"><b>Activity on my tasks</b><small>Comments and status changes on tasks assigned to you</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_due"><span class="sw"></span><span class="txt"><b>Due dates and reminders</b><small>On tasks assigned to you, pushed to your ntfy topic</small></span></label>
+						</div>
+						<footer class="card-foot"><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
+					</form>
+					<div class="set-card" id="set-theme">
+						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a3 3 0 0 1 0-6h1.5a2 2 0 0 0 2-2"/></svg>Theme</h2><p>Remembered in this browser.</p></div></header>
+						<div class="themes" id="themes"></div>
+					</div>
+					<div class="set-card" id="set-teams">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a5 5 0 0 1 5.5 5.5"/></svg>Teams</h2><p>Share a project with a whole team instead of person by person.</p></div>
+							<form id="team-new" class="inline-form"><input name="name" placeholder="new team name"><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>Create</button></form>
+						</header>
+						<div id="teams"></div>
+					</div>
+					<div class="set-card" id="set-tokens">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>API tokens</h2><p>For agents like Claude Code and Hermes: they act as you and see what you see. Send one as the <code>X-Key</code> header to <code>/mcp</code>.</p></div>
+							<form id="token-new" class="inline-form"><input name="name" placeholder="name, like claude"><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>Create</button></form>
+						</header>
+						<div id="token-shown" class="secret" hidden></div>
+						<div id="tokens"></div>
+					</div>
+					<div class="set-card admin-only" id="set-users">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="10" cy="8" r="4"/><path d="M3 21a7 7 0 0 1 11-5.7M19 14v6M16 17h6"/></svg>Users and invites</h2><p>Invite links work once and expire after 7 days.</p></div>
+							<button type="button" id="invite-new" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>New invite link</button>
+						</header>
+						<div id="invite-shown" class="secret" hidden></div>
+						<h3><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Users</h3>
+						<div id="users"></div>
+						<h3><svg class="si" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>Invites</h3>
+						<div id="invites"></div>
+					</div>
+					<form id="settings-form" class="set-card admin-only" autocomplete="off">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Notifications</h2><p>Pushes go to an ntfy topic. Subscribe to it in the ntfy app.</p></div>
+							<span id="set-status" class="pill"></span>
+						</header>
+						<div class="set-grid">
+							<label>Server<input name="ntfy_url" placeholder="https://ntfy.sh"></label>
+							<label>Topic<input name="ntfy_topic" placeholder="BRAIN"></label>
+							<label>Access token<span class="field-row"><input name="ntfy_token" type="password" placeholder="not set"><button type="button" id="set-clear" class="link-btn" hidden>Clear</button></span><input type="hidden" name="clear_token" value=""></label>
+							<label>Timezone<input name="timezone" placeholder="America/New_York"></label>
+						</div>
+						<h3><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send a push when</h3>
+						<div class="toggles">
+							<label class="toggle"><input type="checkbox" name="notify_remind" value="1"><span class="sw"></span><span class="txt"><b>Reminder time</b><small>At the reminder set on a task</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_due" value="1"><span class="sw"></span><span class="txt"><b>Due today</b><small>Morning of the due date</small></span><input name="due_time" type="time"></label>
+							<label class="toggle"><input type="checkbox" name="notify_digest" value="1"><span class="sw"></span><span class="txt"><b>Overdue digest</b><small>One daily list of everything past due</small></span><input name="digest_time" type="time"></label>
+							<label class="toggle"><input type="checkbox" name="notify_agent_done" value="1"><span class="sw"></span><span class="txt"><b>Agent finished a task</b><small>Claude or Hermes marks a task done</small></span></label>
+						</div>
+						<footer class="card-foot">
+							<button type="button" id="settings-test" class="ib"><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send test push</button>
+							<button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button>
+						</footer>
+					</form>
+					<form id="board-form" class="set-card admin-only" autocomplete="off">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>Board</h2><p>Archived tasks leave the board but stay in search and in agent queries for done tasks. Reopening one brings it back.</p></div>
+						</header>
+						<label class="inline-field">Archive done tasks after <input name="archive_days" type="number" min="0" max="3650" step="1"> days <small class="dim">(0 keeps them forever)</small></label>
+						<p class="dim small">The database is backed up daily to <code>data/backups</code>; the newest 3 are kept.</p>
+						<footer class="card-foot"><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
+					</form>
+					<div class="set-card" id="set-labels">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="8" cy="8" r="1.5"/></svg>Labels</h2><p>Rename onto an existing label to merge them. Click a dot to recolor.</p></div>
+							<button id="lbl-new" type="button" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New label</button>
+						</header>
+						<div id="labels"></div>
+					</div>
+				</div>
+			</section>
+			<div id="lbl-palette" class="palette" hidden></div>
+			<section id="taskpage" role="region" aria-label="Task" tabindex="-1" hidden></section>
+			<section id="inbox" hidden></section>
+			<div id="bulk" hidden>
+				<b id="bulk-count">0 selected</b>
+				<button type="button" class="link-btn" id="bulk-all">Select all</button>
+				<select id="bulk-status"><option value="">Move to status</option><option value="todo">To-Do</option><option value="doing">Doing</option><option value="done">Done</option></select>
+				<select id="bulk-project"></select>
+				<input id="bulk-label" list="bulk-labels" placeholder="add label  ns:value" spellcheck="false"><datalist id="bulk-labels"></datalist>
+				<select id="bulk-unlabel"></select>
+				<button type="button" class="danger" id="bulk-delete">Delete</button>
+				<button type="button" class="icon" id="bulk-close" title="Done selecting (Esc)" aria-label="Done selecting"><svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+			</div>
+			<aside id="drawer" role="dialog" aria-modal="false" aria-label="Task" tabindex="-1" hidden></aside>
+		</main>
+	</div>
+	<dialog id="dialog">
+		<form method="dialog">
+			<h3 id="dlg-title"></h3>
+			<p id="dlg-text"></p>
+			<input id="dlg-input" autocomplete="off" spellcheck="false">
+			<div class="row">
+				<button type="button" id="dlg-cancel">Cancel</button>
+				<button value="ok" id="dlg-ok" class="primary">OK</button>
+			</div>
+		</form>
+	</dialog>
+	<div id="toast" role="status" hidden></div>
+	<datalist id="user-list"></datalist>
+	<dialog id="share-dlg">
+		<form method="dialog" class="share">
+			<h3>Share <span id="share-name"></span></h3>
+			<div id="share-list"></div>
+			<div class="share-add">
+				<input id="share-who" list="share-targets" placeholder="username or team:name" autocomplete="off" spellcheck="false"><datalist id="share-targets"></datalist>
+				<select id="share-role"><option value="viewer">Viewer</option><option value="editor" selected>Editor</option><option value="manager">Manager</option></select>
+				<button type="button" id="share-add" class="primary">Share</button>
+			</div>
+			<p class="dim small">Viewers can read. Editors work on tasks. Managers can also edit, archive and share the project. Sub-projects are included.</p>
+			<div class="row"><button value="close">Done</button></div>
+		</form>
+	</dialog>
+	<section id="auth" hidden>
+		<form id="auth-form" class="auth-card" autocomplete="on">
+			<div class="auth-brand"><img class="logo" src="/favicon.svg" alt=""><span>KANOPY</span></div>
+			<h2 id="auth-title">Sign in</h2>
+			<p id="auth-text" class="dim"></p>
+			<label>Username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+			<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+			<label id="auth-confirm" hidden>Confirm password<input name="confirm" type="password" autocomplete="new-password"></label>
+			<p id="auth-error" class="auth-error" hidden></p>
+			<button type="submit" class="primary" id="auth-submit">Sign in</button>
+		</form>
+	</section>
+</body>
+</html>

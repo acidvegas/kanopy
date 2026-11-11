@@ -1,0 +1,15 @@
+[Unit]
+Description=kanopy
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=YOUR_USER
+WorkingDirectory=/path/to/kanopy
+EnvironmentFile=/path/to/kanopy/.env
+ExecStart=/path/to/kanopy/venv/bin/python app.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
