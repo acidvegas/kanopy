@@ -573,9 +573,10 @@ def auth():
 
 @app.teardown_request
 def auth_end(exc: Exception = None):
-	'''Forget the signed-in user once the request is done.'''
+	'''Forget the signed-in user and agent once the request is done.'''
 
 	kanban.ACTOR.set(None)
+	kanban.AGENT.set(None)
 
 
 def housekeep():
@@ -620,6 +621,7 @@ def mcp() -> tuple:
 	'''MCP endpoint (streamable HTTP, JSON responses, stateless). The X-Agent header tags comments.'''
 
 	agent = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
+	kanban.AGENT.set(agent)
 	agent = agent if g.user['is_admin'] else f'{agent} ({g.user["username"]})'
 	reply = mcp_server.handle(request.get_json(force=True) or {}, agent)
 

@@ -26,6 +26,8 @@ CHECK_RE = re.compile(r'^\s*[-*] \[( |x|X)\]', re.M)
 ROLES    = {'viewer': 1, 'editor': 2, 'manager': 3} # project share roles; 4 = owner
 VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
+AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
+HISTORY  = 200 # events kept per task
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS projects (
@@ -67,33 +69,44 @@ CREATE TABLE IF NOT EXISTS teams          (id INTEGER PRIMARY KEY, name TEXT NOT
 CREATE TABLE IF NOT EXISTS team_members   (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, owner INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team_id, user_id));
 CREATE TABLE IF NOT EXISTS shares         (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE, role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_assignees (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (task_id, user_id));
+CREATE TABLE IF NOT EXISTS task_events    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, at TEXT NOT NULL, actor TEXT NOT NULL, agent TEXT, field TEXT NOT NULL, old TEXT, new TEXT);
+CREATE INDEX IF NOT EXISTS task_events_task ON task_events (task_id, id);
 CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
 '''
 
 
-def apply_fields(db: sqlite3.Connection, task_id: int, data: dict):
+def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = True):
 	'''
 	Write any task fields present in data inside the caller's transaction.
 
 	:param db: Open database connection
 	:param task_id: Task id
 	:param data: Any of: title, description, project_id, status, priority, due, remind_at, labels, assignees (usernames)
+	:param log: Record changes in the task history (off while a task is being created)
 	'''
 
-	row = require(db, 'tasks', task_id)
+	row  = require(db, 'tasks', task_id)
+	note = (lambda *args: record(db, task_id, *args)) if log else (lambda *args: None)
 
 	if 'title' in data:
 		if not (data['title'] or '').strip():
 			raise ValueError('title is required')
 		db.execute('UPDATE tasks SET title = ? WHERE id = ?', (data['title'].strip(), task_id))
+		if data['title'].strip() != row['title']:
+			note('title', row['title'], data['title'].strip())
 
 	if 'description' in data:
 		db.execute('UPDATE tasks SET description = ? WHERE id = ?', (data['description'] or '', task_id))
+		if (data['description'] or '') != row['description']:
+			note('description') # text not kept, so the table stays small
 
 	if 'project_id' in data:
 		require(db, 'projects', data['project_id'])
 		need(db, data['project_id'], EDIT)
 		db.execute('UPDATE tasks SET project_id = ? WHERE id = ?', (data['project_id'], task_id))
+		if int(data['project_id']) != row['project_id']:
+			names = paths(db)
+			note('project', names[row['project_id']], names[int(data['project_id'])])
 
 	if 'assignees' in data:
 		pid = data.get('project_id') or row['project_id']
@@ -106,13 +119,21 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict):
 			if lv is not None and lv.get(pid, 0) < VIEW:
 				raise ValueError(f'{name} has no access to this project; share it with them first')
 			ids.append(person['id'])
+		before = set(assignees_map(db, task_id).get(task_id, []))
+		after  = {n.strip().lower().lstrip('@') for n in data['assignees'] or [] if n.strip()}
 		db.execute('DELETE FROM task_assignees WHERE task_id = ?', (task_id,))
 		db.executemany('INSERT INTO task_assignees VALUES (?, ?)', [(task_id, uid) for uid in ids])
+		for name in sorted(after - before):
+			note('assignee', None, name)
+		for name in sorted(before - after):
+			note('assignee', name, None)
 
 	if 'priority' in data:
 		if int(data['priority'] or 0) not in range(6):
 			raise ValueError('priority must be 0-5')
 		db.execute('UPDATE tasks SET priority = ? WHERE id = ?', (int(data['priority'] or 0), task_id))
+		if int(data['priority'] or 0) != row['priority']:
+			note('priority', str(row['priority']), str(int(data['priority'] or 0)))
 
 	for key, fmt, shape in (('due', '%Y-%m-%d', 'YYYY-MM-DD'), ('remind_at', '%Y-%m-%dT%H:%M', 'YYYY-MM-DDTHH:MM')):
 		if key in data:
@@ -122,12 +143,20 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict):
 				except (TypeError, ValueError):
 					raise ValueError(f'{key} must look like {shape}') from None
 			db.execute(f'UPDATE tasks SET {key} = ? WHERE id = ?', (data[key] or None, task_id))
+			if (data[key] or None) != row[key]:
+				note(key, row[key], data[key] or None)
 
 	if 'labels' in data:
+		before = {r['name'] for r in db.execute('SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?', (task_id,))}
 		set_labels(db, task_id, data['labels'] or [])
+		after  = {name.strip().lower() for name in data['labels'] or [] if name.strip()}
+		for name in sorted(after - before):
+			note('label', None, name)
+		for name in sorted(before - after):
+			note('label', name, None)
 
 	if data.get('status') and data['status'] != row['status']:
-		set_status(db, task_id, data['status'])
+		set_status(db, task_id, data['status'], log)
 
 	touch(db, task_id)
 
@@ -179,6 +208,7 @@ def attachment_add(task_id: int, name: str, mime: str, data: bytes) -> dict:
 	with connect() as db:
 		need_task(db, task_id, EDIT)
 		db.execute('INSERT INTO attachments (task_id, name, mime, size, data, created) VALUES (?, ?, ?, ?, ?, ?)', (task_id, name, mime if mime in SAFE_MIME else 'application/octet-stream', len(data), data, now()))
+		record(db, task_id, 'attachment', None, name)
 		touch(db, task_id)
 
 	return task(task_id)
@@ -195,6 +225,7 @@ def attachment_delete(attachment_id: int) -> dict:
 		row = require(db, 'attachments', attachment_id)
 		need_task(db, row['task_id'], EDIT)
 		db.execute('DELETE FROM attachments WHERE id = ?', (attachment_id,))
+		record(db, row['task_id'], 'attachment', row['name'], None)
 		touch(db, row['task_id'])
 
 	return task(row['task_id'])
@@ -278,6 +309,7 @@ def comment_add(task_id: int, author: str, body: str) -> dict:
 	with connect() as db:
 		need_task(db, task_id, EDIT)
 		db.execute('INSERT INTO comments (task_id, author, body, created) VALUES (?, ?, ?, ?)', (task_id, author, body.strip(), now()))
+		record(db, task_id, 'comment')
 		touch(db, task_id)
 
 	return task(task_id)
@@ -404,8 +436,10 @@ def link_add(task_id: int, kind: str, other_id: int) -> dict:
 	with connect() as db:
 		need_task(db, task_id, EDIT)
 		need_task(db, other_id, VIEW)
-		db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (task_id, kind, other_id))
-		db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (other_id, INVERSE[kind], task_id))
+		if db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (task_id, kind, other_id)).rowcount:
+			record(db, task_id, 'link', None, f'{kind}:{other_id}')
+		if db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (other_id, INVERSE[kind], task_id)).rowcount:
+			record(db, other_id, 'link', None, f'{INVERSE[kind]}:{task_id}')
 		touch(db, task_id)
 
 	return task(task_id)
@@ -422,8 +456,10 @@ def link_remove(task_id: int, kind: str, other_id: int) -> dict:
 
 	with connect() as db:
 		need_task(db, task_id, EDIT)
-		db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (task_id, kind, other_id))
-		db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (other_id, INVERSE.get(kind, kind), task_id))
+		if db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (task_id, kind, other_id)).rowcount:
+			record(db, task_id, 'link', f'{kind}:{other_id}', None)
+		if db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (other_id, INVERSE.get(kind, kind), task_id)).rowcount:
+			record(db, other_id, 'link', f'{INVERSE.get(kind, kind)}:{task_id}', None)
 		touch(db, task_id)
 
 	return task(task_id)
@@ -709,6 +745,23 @@ def projects() -> list:
 	return out
 
 
+def record(db: sqlite3.Connection, task_id: int, field: str, old: str = None, new: str = None):
+	'''
+	Add an event to a task's history as the signed-in user (and MCP agent), keeping only the newest HISTORY events.
+
+	:param db: Open database connection
+	:param task_id: Task id
+	:param field: What changed: created, title, description, status, priority, due, remind_at, project, label, assignee, link, attachment, comment
+	:param old: Value before, or None
+	:param new: Value after, or None
+	'''
+
+	actor = ACTOR.get()
+
+	db.execute('INSERT INTO task_events (task_id, at, actor, agent, field, old, new) VALUES (?, ?, ?, ?, ?, ?, ?)', (task_id, now(), actor['username'] if actor else 'system', AGENT.get(), field, old, new))
+	db.execute('DELETE FROM task_events WHERE task_id = ? AND id NOT IN (SELECT id FROM task_events WHERE task_id = ? ORDER BY id DESC LIMIT ?)', (task_id, task_id, HISTORY))
+
+
 def reorder(status: str, ids: list):
 	'''
 	Put tasks into a status column in the given order.
@@ -870,17 +923,22 @@ def set_labels(db: sqlite3.Connection, task_id: int, names: list):
 		db.execute('INSERT INTO task_labels SELECT ?, id FROM labels WHERE name = ?', (task_id, name))
 
 
-def set_status(db: sqlite3.Connection, task_id: int, status: str):
+def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = True):
 	'''
 	Change a task's status, moving it to the bottom of the new column and tracking done_at.
 
 	:param db: Open database connection
 	:param task_id: Task id
 	:param status: New status
+	:param log: Record the change in the task history
 	'''
 
 	if status not in STATUSES:
 		raise ValueError(f'status must be one of: {", ".join(STATUSES)}')
+
+	old = db.execute('SELECT status FROM tasks WHERE id = ?', (task_id,)).fetchone()['status']
+	if log and old != status:
+		record(db, task_id, 'status', old, status)
 
 	bottom = db.execute('SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE status = ?', (status,)).fetchone()[0]
 	db.execute('UPDATE tasks SET status = ?, position = ?, done_at = ?, archived = 0 WHERE id = ?', (status, bottom, now() if status == 'done' else None, task_id))
@@ -945,6 +1003,7 @@ def task(task_id: int) -> dict:
 		data['attachments'] = [dict(r) for r in db.execute('SELECT id, name, mime, size, created FROM attachments WHERE task_id = ? ORDER BY id', (task_id,))]
 		data['links']       = [{k: r[k] for k in ('kind', 'id', 'title', 'status')} for r in db.execute('SELECT k.kind, t.id, t.title, t.status, t.project_id FROM links k JOIN tasks t ON t.id = k.other_id WHERE k.task_id = ? ORDER BY k.kind, t.id', (task_id,)) if lv is None or lv.get(r['project_id'])] # hide tasks the user cannot see
 		data['comments']    = [dict(r) for r in db.execute('SELECT id, author, body, created FROM comments WHERE task_id = ? ORDER BY id', (task_id,))]
+		data['history']     = [dict(r) for r in db.execute('SELECT at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id DESC', (task_id,))]
 
 	return data
 
@@ -966,8 +1025,9 @@ def task_create(data: dict) -> dict:
 		need(db, data['project_id'], EDIT)
 		stamp   = now()
 		task_id = db.execute('INSERT INTO tasks (project_id, title, created, updated) VALUES (?, ?, ?, ?)', (data['project_id'], title, stamp, stamp)).lastrowid
-		set_status(db, task_id, data.get('status') or 'todo')
-		apply_fields(db, task_id, {key: value for key, value in data.items() if key not in ('project_id', 'title', 'status')})
+		set_status(db, task_id, data.get('status') or 'todo', False)
+		apply_fields(db, task_id, {key: value for key, value in data.items() if key not in ('project_id', 'title', 'status')}, False)
+		record(db, task_id, 'created', None, title)
 
 	return task(task_id)
 
