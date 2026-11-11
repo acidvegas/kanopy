@@ -25,13 +25,13 @@ LIST = {'type': 'array', 'items': STR}
 
 TOOLS = [
 	('list_projects', 'Project tree with open-task counts.', {}, []),
-	('save_project', 'Create a project by path (parents too), or update the given project: move to path, description, folder, archived.', {
-		'path'        : {**STR, 'description': 'like AI/hermes'},
-		'project'     : {**STR, 'description': 'path or id to update; omit to create'},
+	('save_project', 'Update a project: move to path, description, folder, archived. New projects are made by save_task with a new project path, so none is ever empty.', {
+		'path'        : {**STR, 'description': 'new path, like AI/hermes'},
+		'project'     : {**STR, 'description': 'path or id to update'},
 		'description' : {**STR, 'description': 'one line'},
 		'folder'      : {**STR, 'description': 'local repo dir; "" clears'},
 		'archived'    : BOOL
-	}, []),
+	}, ['project']),
 	('list_tasks', 'Tasks as compact lines under [project] headers. Filters AND together.', {
 		'project'      : {**STR, 'description': 'path or id, includes sub-projects'},
 		'labels'       : {**LIST, 'description': 'must have all'},
@@ -48,7 +48,7 @@ TOOLS = [
 	('save_task', 'Create (project + title) or update by id; only given fields change.', {
 		'id'            : {**INT, 'description': 'omit to create'},
 		'ids'           : {'type': 'array', 'items': INT, 'description': 'apply the same update to each'},
-		'project'       : {**STR, 'description': 'path or id; moves on update'},
+		'project'       : {**STR, 'description': 'path or id; moves on update; a new path creates the project'},
 		'title'         : STR,
 		'description'   : {**STR, 'description': 'markdown, replaces it all; steps as "- [ ] "'},
 		'add_labels'    : {**LIST, 'description': 'like host:pi'},
@@ -109,11 +109,11 @@ def call(name: str, args: dict, agent: str) -> str:
 		return '\n'.join(f'{p["path"]}  (id {p["id"]}, {p["open"]} open{", archived" if p["archived"] else ""}{roles[p["role"]]}){"  " + p["folder"] if p["folder"] else ""}' for p in rows)
 
 	if name == 'save_project':
-		pid = project_id(args['project']) if args.get('project') else None
-		if not pid and not args.get('path'):
-			raise ValueError('path is required to create a project')
+		if not args.get('project'):
+			raise ValueError('new projects are made by save_task with the new path as project, so none is ever empty; then set its folder and description here')
+		pid   = project_id(args['project'])
 		saved = kanban.project_save(args.get('path'), pid, args.get('description'), args.get('archived'), folder=args.get('folder'))
-		return f'{"updated" if pid else "saved"} {project_path(saved["id"])} (id {saved["id"]})'
+		return f'updated {project_path(saved["id"])} (id {saved["id"]})'
 
 	if name == 'list_tasks':
 		return list_tasks(args)
@@ -538,8 +538,14 @@ def save_task(args: dict, agent: str) -> str:
 
 	fields = {key: args[key] for key in ('title', 'description', 'priority', 'due', 'remind_at', 'status') if key in args}
 
+	new_path = None
 	if args.get('project'):
-		fields['project_id'] = project_id(args['project'])
+		try:
+			fields['project_id'] = project_id(args['project'])
+		except LookupError:
+			if str(args['project']).strip().isdigit():
+				raise
+			new_path = str(args['project']).strip().strip('/') # created together with the task, so no project is ever empty
 
 	add    = [norm_label(l)[0] for l in args.get('add_labels') or []]
 	remove = {norm_label(l)[0] for l in args.get('remove_labels') or []}
@@ -556,7 +562,7 @@ def save_task(args: dict, agent: str) -> str:
 			fields['assignees'] = [a for a in t['assignees'] if a not in unassign] + assign
 		if args.get('check'):
 			fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
-		saved = kanban.task_update(t['id'], fields)
+		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
 		notify.task_event(t, saved)
 		out = task_line(t['id'])
 		if saved['status'] == 'done' and t['status'] != 'done':
@@ -567,17 +573,44 @@ def save_task(args: dict, agent: str) -> str:
 		extras(t['id'], args, agent)
 		return out
 
-	if not fields.get('project_id') or not (fields.get('title') or '').strip():
+	if not (fields.get('project_id') or new_path) or not (fields.get('title') or '').strip():
 		raise ValueError('project and title are required to create a task')
 
 	fields['labels'] = add
 	if assign:
 		fields['assignees'] = assign
-	created = kanban.task_create(fields)
+	created = with_project(fields, new_path, lambda: kanban.task_create(fields))
 	notify.task_event(None, created)
 	extras(created['id'], args, agent)
 
 	return task_line(created['id'])
+
+
+def with_project(fields: dict, new_path: str, write):
+	'''
+	Run a task write, first creating the project at new_path (if any) and removing it again if the write fails.
+
+	:param fields: Task fields; project_id is set to the new project
+	:param new_path: Path of a project that does not exist yet, or None
+	:param write: Callable that saves the task
+	'''
+
+	if not new_path:
+		return write()
+
+	known  = {p['path'].lower(): p['path'] for p in kanban.projects()}
+	parts  = [part.strip() for part in new_path.split('/') if part.strip()]
+	path   = '/'.join(known.get('/'.join(parts[:i + 1]).lower(), part).split('/')[-1] for i, part in enumerate(parts)) # reuse existing parents whatever their case
+	before = {p['id'] for p in kanban.projects()}
+
+	fields['project_id'] = kanban.project_save(path)['id']
+
+	try:
+		return write()
+	except Exception:
+		for pid in sorted({p['id'] for p in kanban.projects()} - before, reverse=True): # children were created after their parents
+			kanban.project_delete(pid)
+		raise
 
 
 def task_line(task_id: int) -> str:

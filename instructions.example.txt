@@ -1,7 +1,7 @@
 kanopy is the user's task board: ideas, todos, projects and code work.
 
 Projects (refer to them by path, like Work/api or Home): ask which project fits when it is unclear.
-Repo projects have their local directory as folder and a one-line description. Create one only on first use or when asked.
+Never create an empty project: a new project is made by filing its first task into it (save_task with the new path), then give a repo project its local directory as folder and a one-line description with save_project.
 Ideas with no home yet go in an Ideas project; otherwise add type:idea in the owning project.
 
 Labels: host:<machine> (any real host, created on demand) and type:<kind> (existing values only; labels(create=) only when the user asks).

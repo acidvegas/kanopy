@@ -59,10 +59,10 @@ The app serves an MCP endpoint at `/mcp` *(streamable HTTP, JSON responses, stat
 | Tool            | Does                                                                                                                                                                         |
 |-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `list_projects` | Project tree with open task counts                                                                                                                                           |
-| `save_project`  | Create by path *(missing parents included)*, or rename/move, describe, archive                                                                                               |
+| `save_project`  | Rename/move, describe, set the folder, archive; new projects come from `save_task`                                                                                               |
 | `list_tasks`    | Grouped by project; filter by project *(recursive)*, labels, text *(titles, descriptions and comments)*, status, priority, due; `changed` lists recent activity newest first |
 | `get_task`      | One or more tasks: markdown description, relations, comment log; or the text of one attachment                                                                               |
-| `save_task`     | Create or update any field, move, add/remove labels, set status, tick a checklist item, add a comment or text file; `ids` updates several tasks at once                      |
+| `save_task`     | Create or update any field, move, add/remove labels, set status, tick a checklist item, add a comment or text file; a new project path creates the project *(parents included)* with the task, so no project is ever empty; `ids` updates several tasks at once                      |
 | `comment`       | Progress note                                                                                                                                                                |
 | `link`          | Relate two tasks or remove the relation                                                                                                                                      |
 | `labels`        | List by namespace, create a `type:` value, delete a label                                                                                                                    |
