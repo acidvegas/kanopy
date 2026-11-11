@@ -113,9 +113,11 @@ body.dragging #app { transition: none; }
 .markdown th { background: var(--panel); font-weight: 600; white-space: nowrap; }
 .markdown tr:last-child td { border-bottom: none; }
 .markdown tbody tr:hover { background: var(--hover); }
+.markdown :is(ul, ol) { padding-left: 1.5em; }
 .markdown li + li { margin-top: .2em; }
 .markdown input[type=checkbox] { accent-color: var(--accent); }
 .markdown li:has(> input[type=checkbox]), .markdown li:has(> p:first-child > input[type=checkbox]) { list-style: none; } /* checklist lines show the box, not a bullet too */
+.markdown > :is(ul, ol) > li:has(> input[type=checkbox], > p:first-child > input[type=checkbox]) { margin-left: -1.5em; } /* top-level checklists sit flush with the text */
 
 /* dialog + toast */
 dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--raised); color: var(--text); padding: 1.4rem; width: min(440px, calc(100vw - 2rem)); box-shadow: 0 20px 60px rgb(0 0 0 / .35); }
@@ -212,7 +214,6 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 :is(#drawer, #taskpage) .label-input { width: 140px; font-family: var(--mono); font-size: .78rem; }
 :is(#drawer, #taskpage) .desc { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: .75rem 1rem; font-size: .9rem; }
 :is(#drawer, #taskpage) .desc input[type=checkbox] { cursor: pointer; }
-:is(#drawer, #taskpage) .desc li:has(> input[type=checkbox]) { list-style: none; margin-left: -1.2em; }
 :is(#drawer, #taskpage) .desc-input { width: 100%; font-family: var(--mono); font-size: .82rem; line-height: 1.55; resize: vertical; }
 :is(#drawer, #taskpage) .row { display: flex; gap: .4rem; align-items: center; margin-top: .4rem; }
 :is(#drawer, #taskpage) .row.end { justify-content: flex-end; }
