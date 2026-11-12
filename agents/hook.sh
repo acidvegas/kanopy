@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# hook.sh
+# agents/hook.sh
 
 # Print the kanopy project and open tasks for a directory (default $PWD); Claude Code's SessionStart hook adds the output to the session
 
-dir="$(cd "$(dirname "$0")" && pwd)"
+dir="$(cd "$(dirname "$0")/.." && pwd)"
 key="$(sed -n 's/^KANOPY_KEY=//p' "$dir/.env" 2>/dev/null)"
 host="$(sed -n 's/^KANOPY_HOST=//p' "$dir/.env" 2>/dev/null)"
 port="$(sed -n 's/^KANOPY_PORT=//p' "$dir/.env" 2>/dev/null)"

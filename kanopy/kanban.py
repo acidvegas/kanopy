@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# kanban.py
+# kanopy/kanban.py
 
 import calendar
 import contextvars
@@ -13,7 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
-DB       = Path(__file__).parent / 'data' / 'kanban.db'
+DB       = Path(__file__).parent.parent / 'data' / 'kanban.db'
 BACKUPS  = DB.parent / 'backups'
 KEEP     = 3 # backups kept
 MAX_FILE = 25 * 1024 * 1024 # bytes per attachment

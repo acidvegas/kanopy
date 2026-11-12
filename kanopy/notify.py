@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# notify.py
+# kanopy/notify.py
 
 import json
 import logging
@@ -11,7 +11,7 @@ import urllib.request
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-import kanban
+from . import kanban
 
 
 BASE_URL   = '' # set by app.py from HOST and PORT

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# app.py
+# kanopy/app.py
 
 import logging
 import os
@@ -26,10 +26,10 @@ try:
 except ImportError:
 	raise ImportError('missing waitress library (pip install waitress)')
 
-import accounts
-import kanban
-import mcp_server
-import notify
+from . import accounts
+from . import kanban
+from . import mcp_server
+from . import notify
 
 
 COOKIE = 'kb_session'
@@ -41,7 +41,7 @@ HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
 OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
-STATIC = Path(__file__).parent / 'static'
+STATIC = Path(__file__).parent.parent / 'static'
 URL    = os.environ.get('KANOPY_URL', '').rstrip('/') # public address when behind a reverse proxy
 
 notify.BASE_URL = URL or f'http://{HOST}:{PORT}'

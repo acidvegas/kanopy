@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# mcp_server.py
+# kanopy/mcp_server.py
 
 import re
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import accounts
-import kanban
-import notify
+from . import accounts
+from . import kanban
+from . import notify
 
 
-INSTRUCTIONS = next(p for p in (Path(__file__).parent / 'instructions.txt', Path(__file__).parent / 'instructions.example.txt') if p.exists()).read_text().strip() # your own instructions.txt wins
+AGENTS       = Path(__file__).parent.parent / 'agents'
+INSTRUCTIONS = next(p for p in (AGENTS / 'instructions.txt', AGENTS / 'instructions.example.txt') if p.exists()).read_text().strip() # your own instructions.txt wins
 NAMESPACES   = {'host': True, 'type': False} # namespace -> new values allowed without create
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
