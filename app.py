@@ -352,10 +352,10 @@ def api_context() -> Response:
 
 @app.post('/api/labels')
 def api_label_create() -> dict:
-	'''Create a label.'''
+	'''Create a personal label, or a global one when the body has global (admin only).'''
 
 	body = request.get_json(force=True) or {}
-	kanban.label_create(body.get('name', ''), body.get('color'))
+	kanban.label_create(body.get('name', ''), body.get('color'), bool(body.get('global')))
 
 	return {'ok': True}
 
@@ -381,7 +381,7 @@ def api_label_update() -> dict:
 
 @app.get('/api/labels')
 def api_labels() -> dict:
-	'''Return every label with its usage count.'''
+	'''Return the global labels and the user's own, with usage counts.'''
 
 	return {'labels': kanban.labels()}
 

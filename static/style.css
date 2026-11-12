@@ -261,6 +261,9 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 .swatch.on { border-color: var(--text); }
 .swatch.none { background: transparent; border: 2px dashed var(--muted); }
 .swatch.none.on { border-style: solid; border-color: var(--text); }
+.chip.foreign { opacity: .6; } /* someone else's personal label on a shared task */
+.lbl-btns { display: flex; gap: .5rem; flex-wrap: wrap; }
+.lbl-scope { margin: .6rem 0 .2rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
 .chip[style*="--c"] { background: color-mix(in srgb, var(--c) 16%, transparent); color: color-mix(in srgb, var(--c) 70%, var(--text)); }
 
 /* view tabs */

@@ -71,7 +71,7 @@ TOOLS = [
 		'kind'   : {**STR, 'description': 'id is <kind> other: blocked, blocking, subtask, parenttask, related, precedes, follows, duplicateof, duplicates'},
 		'remove' : BOOL
 	}, ['id', 'other', 'kind']),
-	('labels', 'List labels. create: add a type: value (only when asked). delete: remove a label everywhere.', {'create': STR, 'delete': STR}, []),
+	('labels', 'List global labels and your own. create: add a global type: value (admin, only when asked). delete: remove one of your labels everywhere (global ones: admin).', {'create': STR, 'delete': STR}, []),
 	('inbox', 'Your unread notifications; read=true marks them all read.', {'read': BOOL}, []),
 	('delete', 'Delete a task or an empty project. Confirm first.', {'task': INT, 'project': {**STR, 'description': 'path or id'}}, [])
 ]
@@ -306,7 +306,7 @@ def labels(args: dict) -> str:
 	'''
 
 	if args.get('create'):
-		kanban.label_create(norm_label(args['create'])[0])
+		kanban.label_create(norm_label(args['create'])[0], glob=True)
 
 	if args.get('delete'):
 		kanban.label_delete(args['delete'])
