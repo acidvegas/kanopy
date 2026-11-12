@@ -39,7 +39,7 @@ FAIL_LIMIT  = 5
 FAIL_WINDOW = 900 # seconds
 HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
-OPEN   = ('/api/login', '/api/logout', '/api/signup', '/api/invites/check') # API paths that work signed out
+OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 STATIC = Path(__file__).parent / 'static'
 URL    = os.environ.get('KANOPY_URL', '').rstrip('/') # public address when behind a reverse proxy
@@ -191,6 +191,26 @@ def api_share_remove(share_id: int) -> dict:
 	'''Remove a share.'''
 
 	return {'shares': accounts.share_remove(share_id)}
+
+
+@app.get('/api/setup')
+def api_setup_needed() -> dict:
+	'''Say whether the first admin still has to be created.'''
+
+	return {'needed': accounts.setup_needed()}
+
+
+@app.post('/api/setup')
+def api_setup() -> Response:
+	'''Create the first admin on an empty board and sign in.'''
+
+	body  = request.get_json(force=True) or {}
+	token = accounts.setup(body.get('username'), body.get('password'))
+
+	if KEY:
+		accounts.token_import(accounts.user_by_session(token)['id'], 'shared key', KEY)
+
+	return session_response(token)
 
 
 @app.post('/api/signup')
