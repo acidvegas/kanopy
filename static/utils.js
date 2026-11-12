@@ -138,7 +138,7 @@ const linkify = (md) => md.replace(/(^|[\s(])#(\d+)\b/g, (m, pre, id) => `${pre}
 const mdHtml  = (text) => DOMPurify.sanitize(marked.parse(linkify(text)), { FORBID_ATTR: ['id', 'name', 'class', 'style'], FORBID_TAGS: ['style', 'form'] }); // user markup must not clobber or restyle the app's own elements
 const pane    = () => KB.view === 'task' ? $('#taskpage') : $('#drawer');
 const narrow  = () => matchMedia('(max-width: 800px)').matches;
-const taskHref = (id) => KB.view === 'task' || narrow() ? `#/task/${id}` : `${kbBase()}/${id}`; // phones open the full page, not the side panel
+const taskHref = (id) => ['task', 'activity'].includes(KB.view) || narrow() ? `#/task/${id}` : `${kbBase()}/${id}`; // phones open the full page, not the side panel
 const kbView  = () => KB.view === 'calendar' ? 'calendar' : 'board';
 const kbBase  = () => `#/${kbView()}/${KB.project ?? 'all'}`;
 const ymd     = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -271,11 +271,14 @@ function kbBar() {
 	});
 	const page = { search: 'Search', settings: 'Settings', inbox: 'Inbox', task: KB.task ? `Task #${KB.task.id}` : 'Task' }[KB.view];
 	if (page) $('#crumb').textContent = page;
-	document.title = `${page || (p ? p.title : 'All tasks')} · Kanopy`;
+	if (KB.view === 'activity') $('#crumb').insertAdjacentHTML('beforeend', '<span class="sep">/</span><span>Activity</span>');
+	document.title = `${page || (p ? p.title : 'All tasks')}${KB.view === 'activity' ? ' activity' : ''} · Kanopy`;
 	$('#kb-project-ops').hidden = !p || !!page || p.role < 3;
 	$('#kb-delete').hidden      = !p || p.role < 4;
 	$('#nav-inbox').classList.toggle('active', KB.view === 'inbox');
-	$('#kb-new-task').hidden    = !!page;
+	$('#kb-new-task').hidden    = !!page || KB.view === 'activity';
+	$('#kb-activity').hidden    = !p || !!page;
+	$('#kb-activity').classList.toggle('on', KB.view === 'activity');
 	$('#kb-select').hidden      = KB.view !== 'board';
 	$('#kb-select').classList.toggle('on', KB.selecting);
 	$('#nav-search').classList.toggle('active', KB.view === 'search');
@@ -307,7 +310,9 @@ function kbRender() {
 	for (const v of ['board', 'calendar', 'search', 'settings']) $(`#${v}`).hidden = KB.view !== v;
 	$('#taskpage').hidden = KB.view !== 'task';
 	$('#inbox').hidden    = KB.view !== 'inbox';
+	$('#activity').hidden = KB.view !== 'activity';
 	if (KB.view === 'inbox') inboxLoad();
+	if (KB.view === 'activity') activityLoad();
 	if (KB.view !== 'board') $('#bulk').hidden = true;
 	if (KB.view === 'board') kbBoard();
 	if (KB.view === 'calendar') kbCalendar();
@@ -458,24 +463,31 @@ function descRender(p, editing = false) {
 		input.style.height = Math.max(110, input.scrollHeight + 4) + 'px';
 		return input.focus();
 	}
-	const act = store('activityOpen');
 	box.innerHTML = `<div class="desc-head"><button class="desc-toggle${open ? ' open' : ''}" data-desc="toggle">${ICONS.chev}<b>Description</b></button>${p.folder ? `<code class="desc-path" title="Folder">${esc(p.folder)}</code>` : ''}<span class="spacer"></span><button class="icon small" data-desc="edit" title="Edit description and color" aria-label="Edit description and color">${SVG.edit}</button></div>` +
-		(open ? `<div class="markdown desc-body">${p.description.trim() ? mdHtml(p.description) : '<p class="dim">No description yet. Click the pencil to add one.</p>'}</div>` : '') +
-		`<div class="desc-head"><button class="desc-toggle${act ? ' open' : ''}" data-desc="activity">${ICONS.chev}<b>Activity</b></button></div>` +
-		(act ? `<ul class="events activity">${KB.activity?.pid === p.id ? activityHtml(KB.activity.events) : ''}</ul>` : '');
-	if (act && !(KB.activity?.pid === p.id && KB.activity.seq === KB.loadSeq)) activityLoad(p.id); // fetched again after each board load
+		(open ? `<div class="markdown desc-body">${p.description.trim() ? mdHtml(p.description) : '<p class="dim">No description yet. Click the pencil to add one.</p>'}</div>` : '');
 }
 
-function activityHtml(events) {
-	return events.map((e) => kbEvent(e, `<a href="${taskHref(e.task_id)}">#${e.task_id} ${esc(e.title)}</a> · `)).join('') || '<li class="dim">No activity yet</li>';
-}
 
-async function activityLoad(pid) {
-	const seq  = KB.loadSeq;
-	const data = await api('GET', `/api/projects/${pid}/activity`);
-	KB.activity = { pid, seq, events: data.events };
-	const list = $('#kb-desc .activity');
-	if (list && $('#kb-desc').dataset.pid === String(pid)) list.innerHTML = activityHtml(data.events);
+/* ---------- project activity ---------- */
+
+async function activityLoad(more = false) {
+	const pid    = KB.project;
+	const events = more ? KB.activity.events : [];
+	const data   = await api('GET', `/api/projects/${pid}/activity?before=${more ? events.at(-1).id : 0}`);
+	if (KB.view !== 'activity' || KB.project !== pid) return;
+	KB.activity = { events: events.concat(data.events), done: data.events.length < 100 }; // the server sends 100 a page
+	let day = '';
+	const rows = KB.activity.events.map((e) => {
+		const d = new Date(e.at).toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+		const head = d === day ? '' : `${day ? '</ul>' : ''}<h3>${d}</h3><ul class="events">`;
+		day = d;
+		return head + kbEvent(e, `<a href="${taskHref(e.task_id)}">#${e.task_id} ${esc(e.title)}</a> · `).replace(/>[^<]*<\/span><\/li>$/, `>${new Date(e.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span></li>`);
+	}).join('') + (day ? '</ul>' : '');
+	$('#activity').innerHTML = `<div class="activity-wrap">
+		<header class="inbox-head"><h2>Activity</h2><span class="dim">${esc(project(pid)?.path || '')} and its sub-projects</span></header>
+		${rows || '<p class="dim">No activity yet.</p>'}
+		${KB.activity.done ? '' : '<button class="more link-btn" id="activity-more">Show more</button>'}
+	</div>`;
 }
 
 
@@ -803,6 +815,8 @@ function accountBind() {
 		const sel = e.target.closest('[data-share-role]');
 		if (sel) guard(async () => shareRender((await api('POST', `/api/projects/${KB.project}/shares`, { [sel.dataset.kind === 'team' ? 'team' : 'username']: sel.dataset.name, role: sel.value })).shares));
 	});
+	$('#kb-activity').onclick = () => location.hash = KB.view === 'activity' ? `#/board/${KB.project}` : `#/activity/${KB.project}`;
+	$('#activity').addEventListener('click', (e) => { if (e.target.closest('#activity-more')) guard(() => activityLoad(true)); });
 	$('#inbox').addEventListener('click', (e) => {
 		if (e.target.closest('#inbox-read')) return guard(async () => { inboxRender(await api('POST', '/api/notifications/read', {})); KB.me.unread = 0; meRender(); });
 		const row = e.target.closest('.note[data-id]');
@@ -1302,8 +1316,8 @@ function kbLost() {
 
 async function kbRoute(hash) {
 	const seq = ++KB.routeSeq;
-	const [, kind, a, b] = hash.match(/^#\/(board|calendar|labels|search|settings|task|inbox)\/?([^/]*)\/?([^/]*)/) || [];
-	if (kind === 'task' ? !/^\d+$/.test(a) : ['board', 'calendar'].includes(kind) && !(/^(all|\d+)?$/.test(a) && /^\d*$/.test(b))) return kbLost();
+	const [, kind, a, b] = hash.match(/^#\/(board|calendar|labels|search|settings|task|inbox|activity)\/?([^/]*)\/?([^/]*)/) || [];
+	if (['task', 'activity'].includes(kind) ? !/^\d+$/.test(a) : ['board', 'calendar'].includes(kind) && !(/^(all|\d+)?$/.test(a) && /^\d*$/.test(b))) return kbLost();
 	if (kind === 'labels') return location.replace('#/settings');
 	if (['search', 'settings', 'inbox'].includes(kind)) {
 		if (KB.view !== kind) KB.setLoaded = false;
@@ -1366,7 +1380,6 @@ function kbBind() {
 		const p   = project(KB.project);
 		if (!act || !p) return;
 		if (act === 'toggle') { store('descCollapsed', !store('descCollapsed')); return descRender(p); }
-		if (act === 'activity') { store('activityOpen', !store('activityOpen')); return descRender(p); }
 		if (act === 'edit') return descRender(p, true);
 		if (act === 'cancel') return descRender(p);
 		if (act === 'color') return box.querySelectorAll('.swatch').forEach((el) => el.classList.toggle('on', el === e.target.closest('.swatch')));
@@ -1659,7 +1672,7 @@ document.addEventListener('DOMContentLoaded', () => {
 		const invite = location.hash.match(/^#\/invite\/([\w-]+)/);
 		if (invite) return authShow('signup', invite[1]);
 		if (!KB.me) return;
-		if (!/^#\/(board|calendar|labels|search|settings|task|inbox)(\/|$)/.test(location.hash)) return location.replace(store('last') || '#/board/all');
+		if (!/^#\/(board|calendar|labels|search|settings|task|inbox|activity)(\/|$)/.test(location.hash)) return location.replace(store('last') || '#/board/all');
 		$('#app').classList.remove('open');
 		kbRoute(location.hash).catch((err) => [403, 404].includes(err.status) ? kbLost() : toast(err.message, true));
 	};
