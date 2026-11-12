@@ -127,6 +127,7 @@ const SVG = {
 	clock : '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
 	edit  : '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
 	plus  : '<svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>',
+	repeat: '<svg viewBox="0 0 24 24"><path d="m17 2 4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="m7 22-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/></svg>',
 	proj  : '<svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16M15 4v16"/></svg>',
 	trash : '<svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg>',
 	x     : '<svg viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></svg>'
@@ -227,6 +228,7 @@ function kbCard(t) {
 	const foot  = [
 		...t.labels.map((l) => chip(l)),
 		due ? `<span class="due${late}">${SVG.clock}${new Date(due + 'T00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>` : '',
+		t.repeat ? `<span title="Repeats ${esc(t.repeat)}">${SVG.repeat}</span>` : '',
 		t.checks[1] ? `<span class="${t.checks[0] === t.checks[1] ? 'ok' : ''}">${SVG.check}${t.checks[0]}/${t.checks[1]}</span>` : '',
 		t.comments ? `<span>${SVG.chat}${t.comments}</span>` : '',
 		t.files ? `<span>${SVG.clip}${t.files}</span>` : '',
@@ -1050,6 +1052,8 @@ function kbEvent(e) {
 		priority   : () => `set priority to ${v(PRIO[+e.new] ?? e.new)}`,
 		due        : () => e.new ? `set the due date to ${v(e.new)}` : 'cleared the due date',
 		remind_at  : () => e.new ? `set a reminder for ${v(new Date(e.new).toLocaleString())}` : 'cleared the reminder',
+		repeat     : () => e.new ? `set it to repeat ${v(e.new)}` : 'stopped it repeating',
+		next       : () => `finished it; the next one is <a href="${taskHref(+e.new)}">#${+e.new}</a>`,
 		project    : () => `moved it from ${v(e.old)} to ${v(e.new)}`,
 		label      : () => e.new ? `added label ${v(e.new)}` : `removed label ${v(e.old)}`,
 		assignee   : () => e.new ? `assigned ${v(e.new)}` : `unassigned ${v(e.old)}`,
@@ -1075,6 +1079,7 @@ function kbDrawer() {
 				<label>Priority<select data-field="priority">${opts(PRIO.map((p, i) => [i, i ? `${i} · ${p}` : p]), t.priority)}</select></label>
 				<label>Due<input type="date" data-field="due" value="${esc((t.due || '').slice(0, 10))}"></label>
 				<label>Reminder<input type="datetime-local" data-field="remind_at" value="${esc((t.remind_at || '').slice(0, 16))}"></label>
+				<label title="daily, weekly, monthly, yearly, every 3 days, weekdays, mon wed fri; marking it done makes the next one">Repeat<input data-field="repeat" list="repeat-list" placeholder="never" value="${esc(t.repeat || '')}" spellcheck="false"><datalist id="repeat-list">${['daily', 'weekdays', 'weekly', 'every 2 weeks', 'monthly', 'yearly'].map((r) => `<option value="${r}">`).join('')}</datalist></label>
 			</div>`;
 	const labels = `<section>
 				<h4>Labels</h4>

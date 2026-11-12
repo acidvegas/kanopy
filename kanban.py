@@ -2,12 +2,13 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanban.py
 
+import calendar
 import contextvars
 import random
 import re
 import sqlite3
 
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -22,6 +23,8 @@ LABEL_RE = re.compile(r'^[a-z]+:[a-z0-9][a-z0-9._-]*$')
 STATUSES = ('todo', 'doing', 'done')
 COLORS   = ('#a78bfa', '#f472b6', '#f87171', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#22d3ee', '#60a5fa', '#94a3b8')
 COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
+DAYS     = ('monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday')
+REPEATS  = {'day': 'daily', 'week': 'weekly', 'month': 'monthly', 'year': 'yearly'} # repeat unit -> word for every 1
 CHECK_RE = re.compile(r'^\s*[-*] \[( |x|X)\]', re.M)
 ROLES    = {'viewer': 1, 'editor': 2, 'manager': 3} # project share roles; 4 = owner
 VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
@@ -82,7 +85,7 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 
 	:param db: Open database connection
 	:param task_id: Task id
-	:param data: Any of: title, description, project_id, status, priority, due, remind_at, labels, assignees (usernames)
+	:param data: Any of: title, description, project_id, status, priority, due, remind_at, repeat, labels, assignees (usernames)
 	:param log: Record changes in the task history (off while a task is being created)
 	'''
 
@@ -155,6 +158,12 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 			note('label', None, name)
 		for name in sorted(before - after):
 			note('label', name, None)
+
+	if 'repeat' in data:
+		spec = valid_repeat(data['repeat'])
+		db.execute('UPDATE tasks SET repeat = ? WHERE id = ?', (spec, task_id))
+		if spec != row['repeat']:
+			note('repeat', row['repeat'], spec)
 
 	if data.get('status') and data['status'] != row['status']:
 		set_status(db, task_id, data['status'], log)
@@ -334,7 +343,7 @@ def init():
 	with connect() as db:
 		db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(SCHEMA)
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''")):
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT')):
 			if column not in [row['name'] for row in db.execute(f'PRAGMA table_info({table})')]:
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
 		if 'owner_id' not in [row['name'] for row in db.execute('PRAGMA table_info(labels)')]: # labels were all global with unique names; type: stays global, the rest become the first admin's
@@ -826,7 +835,7 @@ def record(db: sqlite3.Connection, task_id: int, field: str, old: str = None, ne
 
 	:param db: Open database connection
 	:param task_id: Task id
-	:param field: What changed: created, title, description, status, priority, due, remind_at, project, label, assignee, link, attachment, comment
+	:param field: What changed: created, title, description, status, priority, due, remind_at, repeat, next (the repeat's new copy), project, label, assignee, link, attachment, comment
 	:param old: Value before, or None
 	:param new: Value after, or None
 	'''
@@ -868,6 +877,66 @@ def reorder(status: str, ids: list):
 			if row['status'] != status:
 				set_status(db, task_id, status)
 				touch(db, task_id)
+
+
+def repeat_next(spec: str, base: date, today: date) -> date:
+	'''
+	Return the next date of a repeat rule after base, never today or earlier.
+
+	:param spec: Repeat rule from valid_repeat
+	:param base: Date the finished occurrence was due
+	:param today: Today's local date
+	'''
+
+	if set(spec.split(',')) <= {d[:3] for d in DAYS}:
+		day = max(base, today) + timedelta(days=1)
+		while DAYS[day.weekday()][:3] not in spec.split(','):
+			day += timedelta(days=1)
+		return day
+
+	unit = next(u for u, word in REPEATS.items() if spec == word or spec.endswith(f' {u}s'))
+	n    = 1 if spec in REPEATS.values() else int(spec.split()[1])
+	k    = 1
+
+	while True:
+		if unit in ('day', 'week'):
+			day = base + timedelta(days=k * n * (7 if unit == 'week' else 1))
+		else:
+			months = base.month - 1 + k * n * (12 if unit == 'year' else 1)
+			year   = base.year + months // 12
+			day    = date(year, months % 12 + 1, min(base.day, calendar.monthrange(year, months % 12 + 1)[1])) # stepped from base each time, so the 31st stays the 31st where it exists
+		if day > today:
+			return day
+		k += 1
+
+
+def repeat_spawn(db: sqlite3.Connection, task_id: int):
+	'''
+	When a repeating task is done, make its next occurrence: a todo copy with checklist unticked, the same labels and assignees, and due/reminder moved to the next date. The rule moves to the copy.
+
+	:param db: Open database connection
+	:param task_id: The task just marked done
+	'''
+
+	row = db.execute('SELECT * FROM tasks WHERE id = ?', (task_id,)).fetchone()
+
+	if not row['repeat']:
+		return
+
+	today = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
+	base  = date.fromisoformat((row['due'] or row['remind_at'] or today.isoformat())[:10])
+	shift = repeat_next(row['repeat'], base, today) - base
+	moved = lambda value: (datetime.fromisoformat(value) + shift).isoformat()[:len(value)] if value else None
+	stamp = now()
+
+	new_id = db.execute('INSERT INTO tasks (project_id, title, description, priority, due, remind_at, repeat, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (row['project_id'], row['title'], re.sub(r'^(\s*[-*] )\[[xX]\]', r'\1[ ]', row['description'], flags=re.M), row['priority'], moved(row['due']), moved(row['remind_at']), row['repeat'], stamp, stamp)).lastrowid
+	set_status(db, new_id, 'todo', False)
+	db.execute('INSERT INTO task_labels SELECT ?, label_id FROM task_labels WHERE task_id = ?', (new_id, task_id))
+	db.execute('INSERT INTO task_assignees SELECT ?, user_id FROM task_assignees WHERE task_id = ?', (new_id, task_id))
+	db.executemany('INSERT INTO links VALUES (?, ?, ?)', [(new_id, 'follows', task_id), (task_id, 'precedes', new_id)])
+	db.execute('UPDATE tasks SET repeat = NULL WHERE id = ?', (task_id,))
+	record(db, new_id, 'created', None, row['title'])
+	record(db, task_id, 'next', None, str(new_id))
 
 
 def require(db: sqlite3.Connection, table: str, row_id: int) -> sqlite3.Row:
@@ -1028,6 +1097,9 @@ def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = Tr
 	bottom = db.execute('SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE status = ?', (status,)).fetchone()[0]
 	db.execute('UPDATE tasks SET status = ?, position = ?, done_at = ?, archived = 0 WHERE id = ?', (status, bottom, now() if status == 'done' else None, task_id))
 
+	if status == 'done' and old != 'done':
+		repeat_spawn(db, task_id)
+
 
 def setting_values() -> dict:
 	'''Return every stored setting as a dict.'''
@@ -1064,7 +1136,7 @@ def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict,
 	'''
 
 	checks = CHECK_RE.findall(row['description'])
-	data   = {key: row[key] for key in ('id', 'project_id', 'title', 'status', 'priority', 'due', 'remind_at', 'position', 'done_at', 'updated', 'archived')}
+	data   = {key: row[key] for key in ('id', 'project_id', 'title', 'status', 'priority', 'due', 'remind_at', 'repeat', 'position', 'done_at', 'updated', 'archived')}
 
 	return dict(data, project=names[row['project_id']], labels=tags.get(row['id'], []), checks=[sum(c != ' ' for c in checks), len(checks)], comments=notes.get(row['id'], 0), files=files.get(row['id'], 0), assignees=people.get(row['id'], []))
 
@@ -1199,3 +1271,36 @@ def valid_label(name: str) -> str:
 		raise ValueError(f'label "{name}" must look like namespace:value')
 
 	return name
+
+
+def valid_repeat(text: str) -> str:
+	'''
+	Normalize a repeat rule; returns None for no repeat. Takes daily/weekly/monthly/yearly, "every 2 weeks" or "2 weeks", "weekdays", or day names like "mon wed fri".
+
+	:param text: Rule as typed
+	'''
+
+	text = (text or '').strip().lower().removeprefix('every ').strip()
+
+	if not text:
+		return None
+
+	if text in REPEATS:
+		return REPEATS[text]
+
+	if text in REPEATS.values():
+		return text
+
+	if text == 'weekdays':
+		return 'mon,tue,wed,thu,fri'
+
+	if m := re.fullmatch(r'(\d+)\s*(day|week|month|year)s?', text):
+		if not 1 <= int(m[1]) <= 365:
+			raise ValueError('repeat every 1-365')
+		return REPEATS[m[2]] if int(m[1]) == 1 else f'every {int(m[1])} {m[2]}s'
+
+	words = [w for w in re.split(r'[\s,]+', text) if w]
+	if all(len(w) >= 3 and any(d.startswith(w) for d in DAYS) for w in words):
+		return ','.join(d[:3] for d in DAYS if any(d.startswith(w) for w in words))
+
+	raise ValueError('repeat must be daily, weekly, monthly, yearly, every N days/weeks/months/years, weekdays, or days like mon,wed,fri')
