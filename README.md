@@ -1,8 +1,20 @@
-# kanopy
+<h1 align="center">kanopy</h1>
 
-A small self-hosted kanban board for projects, todos and ideas, built to be shared between people and their AI agents *(Claude Code, opencode, anything that speaks MCP)*.
+<p align="center">A self-hosted kanban board shared by people and their AI agents.</p>
+
+<p align="center">
+	<a href="#quick-start">Quick start</a> ·
+	<a href="#features">Features</a> ·
+	<a href="#connecting-agents">Connecting agents</a> ·
+	<a href="#mcp-tools">MCP tools</a> ·
+	<a href="#configuration">Configuration</a>
+</p>
 
 ![Board](.screens/board.png)
+
+kanopy keeps your projects, todos and ideas on one board, and lets the agents you work with read and update it the same way you do. Claude Code, opencode or anything else that speaks [MCP](https://modelcontextprotocol.io) can file tasks, move them through To-Do, Doing and Done, leave progress notes and pick up where the last session left off. Every change is logged with who made it, person or agent.
+
+It is a single Python process with a SQLite database and a plain JavaScript frontend. No build step, no external services, nothing to sign up for.
 
 | Project board                    | Task page                  |
 |----------------------------------|----------------------------|
@@ -14,79 +26,95 @@ A small self-hosted kanban board for projects, todos and ideas, built to be shar
 
 *Screenshots use invented demo data.*
 
+## Quick start
+
+With Docker:
+
+```sh
+git clone https://github.com/acidvegas/kanopy && cd kanopy
+cp .env.example .env
+mkdir -p data
+docker compose up -d --build
+```
+
+Or with a virtual environment:
+
+```sh
+git clone https://github.com/acidvegas/kanopy && cd kanopy
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+cp .env.example .env
+venv/bin/python -m kanopy.app
+```
+
+Open `http://127.0.0.1:8000`. The first page asks you to create the admin account; everyone after that joins through an invite link.
+
+To run it as a service, copy `kanopy.service` to `/etc/systemd/system/`, set `YOUR_USER` and `/path/to/kanopy`, then `sudo systemctl enable --now kanopy`.
+
 ## Features
 
-- **Board:** To-Do, Doing and Done columns with drag and drop *(touch works too)*; a project's board includes its sub-projects
-- **Projects:** tree addressed by path *(`AI/hermes`)* with open task counts and colors *(sub-projects get a random one)*; drag in the sidebar to reorder, drop onto another project to nest it, drop onto "All tasks" to make it top-level *(desktop only; on a phone, move a project by renaming its path)*
-- **Project description:** markdown panel above the board, collapsible, edit in place; the project color and folder *(the local directory a repo project lives in, used by the agent session briefing)* are set in the same editor
-- **Task page:** `#/task/123` opens a task as a full page *(wide description and comments, details on the side, previous/next within its column)*; the expand button in the side panel or the corner button on a card *(new tab)* opens it, search results and notifications link to it
-- **Task panel:** title, project, status, priority, due date, reminder, `namespace:value` labels, markdown description with clickable checklists, links *(blocks, subtask, related, ...; type a number or title to pick the task)*, file attachments *(up to 25 MB each; drop files on the panel)* and comments; drag a card onto a sidebar project to move it
-- **Activity:** the activity button in a project's top bar opens a page of every task change across the project and its sub-projects, newest first, grouped by day, 100 at a time with Show more; each entry links its task
-- **History:** every change to a task is logged with who made it, plus the agent name for changes over MCP; shown newest first in a collapsible section on the task panel and page *(the newest 200 events per task are kept; description edits are noted without the text)*
-- **Bulk select:** the checkbox button on the board turns on selection; move the picked tasks to a status or project, add or remove a label, or delete them
-- **Auto-archive:** done tasks leave the board after a number of days set on the Settings page *(default 30, 0 turns it off)*; they stay in search and reopening one brings it back
-- **Markdown editor:** task descriptions, comments and project descriptions get Write/Preview tabs, a toolbar *(bold, italic, heading, code, link, lists, checklist, quote, task link)*, Ctrl+B/I/K, and Enter continues a list
-- **Repeat:** a task can repeat daily, weekly, monthly, yearly, every N days/weeks/months/years, or on chosen weekdays; marking it done makes the next one *(todo, checklist unticked, same labels and assignees, due date and reminder moved to the next date, linked to the one before)*
-- **Calendar:** month grid of due dates and reminders; drag to reschedule; upcoming dates of repeating tasks show faded
-- **Labels:** global *(shared with everyone, managed by the admin; a fresh install starts with a set of `type:` labels like bug, feature, docs, research, purchase, note)* or personal *(listed only for you, though people on a shared project see them on its tasks, faded)*; on the Settings page, grouped by namespace with counts; rename, merge *(rename onto an existing label)*, recolor, delete
-- **Search:** every word must match across titles, descriptions and comments; filter by project *(sub-projects included)*, label, minimum priority, due date and status, choose which fields to search, and sort; filters alone list matching tasks
-- **Notifications:** ntfy pushes at reminder time, on the morning a task is due, a daily overdue digest, and when an agent marks a task done; each one toggled on the Settings page *(the ntfy token is never shown back)*
-- `#123` in a description or comment links to that task; the filter box matches `#id`, text, project and labels
-- Stored in SQLite at `data/kanban.db`, attachments included; backed up daily to `data/backups`, newest 3 kept
+### Board and projects
 
-## Accounts
+Projects form a tree addressed by path, like `Code/weatherbox`, and a project's board includes its sub-projects. Cards drag between To-Do, Doing and Done, onto another project in the sidebar, or onto a date in the month calendar. Each project has a markdown description panel and an **activity page** listing every change across it.
 
-- Everyone signs in with a username and password *(scrypt hashes, 30-day session cookie)*; the admin creates single-use invite links *(7 days)* on the Settings page and new people sign up from the link
-- Projects are private to whoever created them; share one with users or teams as **viewer** *(read)*, **editor** *(work on tasks)* or **manager** *(also edit, archive and share)*; sub-projects come with it. Admins see everything
-- **Teams:** anyone can create one; owners add members by username and can promote other owners
-- **Assignees:** any number per task, shown on cards; `@me` in the filter box or "Assigned to me" in the sidebar, and an assignee filter on the search page
-- **Notifications:** `@username` mentions *(with autocomplete)*, assignments and activity on your tasks land in the inbox *(bell)* and on your own ntfy topic; each kind toggles on your account
-- Profile pictures: Settings, Account, Change picture *(cropped square and resized in the browser)*; shown wherever initials would be
-- Themes: Settings, Theme; ten to pick from *(the purple default, Dracula, Nord, Gruvbox, Catppuccin Mocha, Tokyo Night, One Dark, Monokai, GitHub Dark, GitHub Light)*, remembered per browser in the `kb_theme` cookie; the logo and favicon take the theme's colors
-- Labels: anyone can make personal labels; only the admin creates, renames or deletes global ones. Anyone who can edit a task can remove any label from it
-- On a fresh install the first page asks for the admin account; after that, people join by invite
+Done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once.
 
-## Keys
+### Tasks
 
-| Key   | Action                                          |
-|-------|-------------------------------------------------|
-| `/`   | Filter                                          |
-| `n`   | New task *(new label on Settings)*              |
-| `Esc` | Close the task panel or page, leave select mode |
+A task carries a markdown description with clickable checklists, a priority, due date, reminder, labels, assignees, file attachments, comments and links to other tasks *(blocks, subtask, related, duplicates, precedes)*. It opens in a side panel or as a full page at `#/task/123`, and `#123` anywhere in text links to it.
 
-## MCP
+Tasks can **repeat** daily, weekly, monthly, yearly, every N days or on chosen weekdays. Marking one done creates the next occurrence with its checklist reset and its dates moved forward; upcoming ones show faded on the calendar.
 
-The app serves an MCP endpoint at `/mcp` *(streamable HTTP, JSON responses, stateless)* for Claude Code and Hermes. The `X-Agent` header tags comments with the agent's name.
+Every task keeps a **history** of who changed what, including the agent's name for changes made over MCP.
 
-| Tool            | Does                                                                                                                                                                         |
-|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `list_projects` | Project tree with open task counts                                                                                                                                           |
-| `save_project`  | Rename/move, describe, set the folder, archive; new projects come from `save_task`                                                                                               |
-| `list_tasks`    | Grouped by project; filter by project *(recursive)*, labels, text *(titles, descriptions and comments)*, status, priority, due; `changed` lists recent activity newest first |
-| `get_task`      | One or more tasks: markdown description, relations, comment log; or the text of one attachment                                                                               |
-| `save_task`     | Create or update any field, including a repeat rule *(a description replace is refused unless the agent has read the current text with get_task)*, move, add/remove labels, set status, tick a checklist item, add a comment or text file; a new project path creates the project *(parents included)* with the task, so no project is ever empty; `ids` updates several tasks at once                      |
-| `comment`       | Progress note                                                                                                                                                                |
-| `link`          | Relate two tasks or remove the relation                                                                                                                                      |
-| `labels`        | List global and your own labels by namespace, create a global `type:` value *(admin)*, delete a label                                                                         |
-| `inbox`         | Unread notifications, optionally marking them read                                                                                                                           |
-| `delete`        | A task, or an empty project                                                                                                                                                  |
+### Search and labels
 
-Agent labels use two namespaces: `host:` *(any machine, created on demand as the token user's personal label)* and `type:` *(a fixed set of values)*; a new `host:` that squashes to an existing one *(host:web01 vs host:web-01)* is rejected. The instructions agents get on connect come from `agents/instructions.txt` if you create one *(untracked)*, otherwise `agents/instructions.example.txt`.
+Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type *(`#id`, text, `@me`, labels)*.
 
-`/mcp` takes a personal API token *(Settings, API tokens)* in the `X-Key` header; the agent acts as that user and sees only what they can. The `X-Agent` header names the agent on its comments. `KANOPY_KEY` in `.env` is the old shared key; on start it is stored as the admin's token so existing agent configs keep working.
+Labels use a `namespace:value` form. **Global** labels are shared and managed by the admin; a fresh install starts with a set of `type:` labels. Anyone can add **personal** labels for their own use.
 
-`GET /api/context?cwd=<dir>` returns a short plain-text briefing for a session: the project whose folder is the deepest one containing `dir` *(`~/code/myapp`)*, its doing and open tasks *(top 10)*, and the doing/comment/done rule. It is empty when no project matches. The hook and plugin below add it to each new session.
+### Notifications
 
-`/task <what>` files a task right away *(no proposal step)*; a bare `/task` files the work under discussion.
+Pushes go out through [ntfy](https://ntfy.sh) at reminder time, on the morning a task is due, as a daily overdue digest, and when an agent finishes a task. Mentions, assignments and activity on your tasks also land in an in-app inbox. Each kind can be turned on or off.
 
-### Claude Code
+### Everything else
 
-1. Add the MCP server:
+- Ten themes, from the purple default to Dracula, Nord, Gruvbox, Catppuccin and GitHub Light
+- Works on a phone, including drag and drop
+- Markdown editor with a toolbar, preview, shortcuts and `@mention` autocomplete
+- Daily database backups to `data/backups`, newest 3 kept
+
+## Accounts and sharing
+
+Everyone signs in with a username and password. The admin creates single-use invite links *(valid 7 days)* on the Settings page.
+
+Projects are private to whoever made them until shared with a user or a team. Sharing a project includes its sub-projects.
+
+| Role    | Can                                      |
+|---------|------------------------------------------|
+| Viewer  | Read the project and its tasks           |
+| Editor  | Create and work on tasks                 |
+| Manager | Also edit, archive and share the project |
+
+Anyone can create a team and add members by username. Admins see every project.
+
+## Connecting agents
+
+kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history.
+
+Agents get a short set of working rules on connect from `agents/instructions.example.txt`. Copy it to `agents/instructions.txt` *(untracked)* to describe your own project layout.
+
+<details>
+<summary><b>Claude Code</b></summary>
+
+Add the server:
+
 ```sh
 claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header "X-Agent: claude" --header "X-Key: $TOKEN"
 ```
 
-2. Add `agents/hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. It reads `KANOPY_KEY`, `KANOPY_HOST` and `KANOPY_PORT` from kanopy's `.env` and prints the briefing for `$PWD`:
+Add `agents/hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. Each new session then starts with a briefing on the project for the current directory and its open tasks:
+
 ```json
 {
 	"hooks": {
@@ -95,14 +123,19 @@ claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header "X-
 }
 ```
 
-3. Link the `/task` command:
+Link the `/task` command, which files a task without a proposal step:
+
 ```sh
 ln -s /path/to/kanopy/agents/task.md ~/.claude/commands/task.md
 ```
 
-### opencode
+</details>
 
-1. Add the MCP server to `~/.config/opencode/opencode.json`, with your token saved in `~/.config/opencode/secrets/kanopy.token`:
+<details>
+<summary><b>opencode</b></summary>
+
+Save your token to `~/.config/opencode/secrets/kanopy.token` and add the server to `~/.config/opencode/opencode.json`:
+
 ```json
 {
 	"mcp": {
@@ -115,40 +148,61 @@ ln -s /path/to/kanopy/agents/task.md ~/.claude/commands/task.md
 }
 ```
 
-2. Link the session briefing plugin. It reads the same token file and talks to `KANOPY_API` *(default `http://127.0.0.1:8000`)*:
+Link the session briefing plugin *(it reads `KANOPY_API`, default `http://127.0.0.1:8000`)* and the `/task` command:
+
 ```sh
 ln -s /path/to/kanopy/agents/opencode.ts ~/.config/opencode/plugins/kanopy.ts
-```
-
-3. Link the `/task` command:
-```sh
 ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 ```
 
-## Setup
+</details>
 
-```sh
-python3 -m venv venv
-venv/bin/pip install -r requirements.txt
-cp .env.example .env # host and port; KANOPY_KEY (optional) becomes the admin's API token; KANOPY_URL only behind a reverse proxy
-cp agents/instructions.example.txt agents/instructions.txt # optional: describe your own project layout for agents
-sudo cp kanopy.service /etc/systemd/system/ # set YOUR_USER and /path/to/kanopy first
-sudo systemctl enable --now kanopy # then open the board and create the admin account
-```
+<details>
+<summary><b>Anything else</b></summary>
 
-### Docker
+Any MCP client that supports streamable HTTP works: point it at `http://HOST:PORT/mcp` with the `X-Key` and `X-Agent` headers. For a session briefing without MCP, `GET /api/context?cwd=<dir>` with the `X-Key` header returns plain text for the project whose folder contains `dir`.
 
-```sh
-cp .env.example .env
-mkdir -p data # created first so it is owned by you, not root
-docker compose up -d --build # then open the board and create the admin account
-```
+</details>
 
-`data/` is bind-mounted, so the database, backups and attachments are the same files the venv setup uses. The container shares the host network and listens on `KANOPY_HOST:KANOPY_PORT` from `.env`. `agents/instructions.txt` is copied in at build time; rebuild after changing it.
+## MCP tools
 
-### Reverse proxy
+| Tool            | Does                                                                                                   |
+|-----------------|--------------------------------------------------------------------------------------------------------|
+| `list_projects` | Project tree with open task counts                                                                     |
+| `list_tasks`    | Tasks filtered by project, labels, text, status, priority or due date; `changed` lists recent activity |
+| `get_task`      | Full tasks with description, links and comments, or the text of an attachment                          |
+| `save_task`     | Create or update any field, set status, tick a checklist item, comment; `ids` updates many at once     |
+| `save_project`  | Rename or move, describe, set the local folder, archive                                                |
+| `comment`       | Add a progress note                                                                                    |
+| `link`          | Relate two tasks, or remove the relation                                                               |
+| `labels`        | List labels, create a global `type:` value *(admin)*, delete one                                       |
+| `inbox`         | Unread notifications                                                                                   |
+| `delete`        | A task, or an empty project                                                                            |
 
-To serve kanopy on a domain over HTTPS, keep `KANOPY_HOST=127.0.0.1` and set `KANOPY_URL` in `.env` to the public address *(`https://kanopy.example.com`)*. Notification and invite links then use it, the sign-in limit counts the real client address from `X-Forwarded-For`, and the session cookie is marked Secure. A matching nginx server block *(certificates from certbot)*:
+A few rules keep agents from making a mess:
+
+- A new project is created by filing its first task into it, so no project is ever empty
+- An agent must read a task before it can replace the description, so it never overwrites edits it has not seen
+- `host:` labels that differ only by punctuation *(`host:web01` and `host:web-01`)* are rejected
+
+## Configuration
+
+Settings live in `.env`:
+
+| Variable      | Default     | Purpose                                                                     |
+|---------------|-------------|-----------------------------------------------------------------------------|
+| `KANOPY_HOST` | `127.0.0.1` | Address to listen on                                                        |
+| `KANOPY_PORT` | `8000`      | Port to listen on                                                           |
+| `KANOPY_URL`  |             | Public address when behind a reverse proxy                                  |
+| `KANOPY_KEY`  |             | Optional; stored as the admin's API token on start, for older agent configs |
+
+Everything else *(ntfy, notification times, timezone, auto-archive)* is set on the Settings page. Data, attachments and backups live in `data/`.
+
+<details>
+<summary><b>Running behind a reverse proxy</b></summary>
+
+Keep `KANOPY_HOST=127.0.0.1` and set `KANOPY_URL` to the public address, like `https://kanopy.example.com`. Notification and invite links then use it, the sign-in limit sees the real client address, and the session cookie is marked Secure.
+
 ```nginx
 server {
 	listen 443 ssl;
@@ -166,4 +220,16 @@ server {
 }
 ```
 
-Host and port come from `.env` *(default 127.0.0.1:8000)*; notification links and the social preview follow them unless `KANOPY_URL` is set. The frontend libraries *(marked, DOMPurify, SortableJS)* are vendored in `static/vendor`.
+</details>
+
+## Keyboard shortcuts
+
+| Key   | Action                            |
+|-------|-----------------------------------|
+| `/`   | Focus the filter                  |
+| `n`   | New task                          |
+| `Esc` | Close the task, leave select mode |
+
+---
+
+###### Mirrors: [SuperNETs](https://git.supernets.org/acidvegas/) • [GitHub](https://github.com/acidvegas/) • [GitLab](https://gitlab.com/acidvegas/) • [Codeberg](https://codeberg.org/acidvegas/)
