@@ -1,5 +1,5 @@
 // kanopy - Developed by acidvegas in TypeScript (https://github.com/acidvegas)
-// opencode/kanopy.ts
+// agents/opencode.ts
 
 // Adds the kanopy project and open tasks for the session's directory to the system prompt, fetched once per session.
 import { Plugin } from "@opencode/plugin"

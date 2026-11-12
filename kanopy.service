@@ -7,7 +7,7 @@ Wants=network-online.target
 User=YOUR_USER
 WorkingDirectory=/path/to/kanopy
 EnvironmentFile=/path/to/kanopy/.env
-ExecStart=/path/to/kanopy/venv/bin/python app.py
+ExecStart=/path/to/kanopy/venv/bin/python -m kanopy.app
 Restart=always
 RestartSec=5
 

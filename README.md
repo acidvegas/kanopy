@@ -71,7 +71,7 @@ The app serves an MCP endpoint at `/mcp` *(streamable HTTP, JSON responses, stat
 | `inbox`         | Unread notifications, optionally marking them read                                                                                                                           |
 | `delete`        | A task, or an empty project                                                                                                                                                  |
 
-Agent labels use two namespaces: `host:` *(any machine, created on demand as the token user's personal label)* and `type:` *(a fixed set of values)*; a new `host:` that squashes to an existing one *(host:web01 vs host:web-01)* is rejected. The instructions agents get on connect come from `instructions.txt` if you create one *(untracked)*, otherwise `instructions.example.txt`.
+Agent labels use two namespaces: `host:` *(any machine, created on demand as the token user's personal label)* and `type:` *(a fixed set of values)*; a new `host:` that squashes to an existing one *(host:web01 vs host:web-01)* is rejected. The instructions agents get on connect come from `agents/instructions.txt` if you create one *(untracked)*, otherwise `agents/instructions.example.txt`.
 
 `/mcp` takes a personal API token *(Settings, API tokens)* in the `X-Key` header; the agent acts as that user and sees only what they can. The `X-Agent` header names the agent on its comments. `KANOPY_KEY` in `.env` is the old shared key; on start it is stored as the admin's token so existing agent configs keep working.
 
@@ -86,18 +86,18 @@ Agent labels use two namespaces: `host:` *(any machine, created on demand as the
 claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header "X-Agent: claude" --header "X-Key: $TOKEN"
 ```
 
-2. Add `hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. It reads `KANOPY_KEY`, `KANOPY_HOST` and `KANOPY_PORT` from kanopy's `.env` and prints the briefing for `$PWD`:
+2. Add `agents/hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. It reads `KANOPY_KEY`, `KANOPY_HOST` and `KANOPY_PORT` from kanopy's `.env` and prints the briefing for `$PWD`:
 ```json
 {
 	"hooks": {
-		"SessionStart": [{ "hooks": [{ "type": "command", "command": "/path/to/kanopy/hook.sh" }] }]
+		"SessionStart": [{ "hooks": [{ "type": "command", "command": "/path/to/kanopy/agents/hook.sh" }] }]
 	}
 }
 ```
 
 3. Link the `/task` command:
 ```sh
-ln -s /path/to/kanopy/commands/task.md ~/.claude/commands/task.md
+ln -s /path/to/kanopy/agents/task.md ~/.claude/commands/task.md
 ```
 
 ### opencode
@@ -117,12 +117,12 @@ ln -s /path/to/kanopy/commands/task.md ~/.claude/commands/task.md
 
 2. Link the session briefing plugin. It reads the same token file and talks to `KANOPY_URL` *(default `http://127.0.0.1:8000`)*:
 ```sh
-ln -s /path/to/kanopy/opencode/kanopy.ts ~/.config/opencode/plugins/kanopy.ts
+ln -s /path/to/kanopy/agents/opencode.ts ~/.config/opencode/plugins/kanopy.ts
 ```
 
 3. Link the `/task` command:
 ```sh
-ln -s /path/to/kanopy/commands/task.md ~/.config/opencode/command/task.md
+ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 ```
 
 ## Setup
@@ -131,7 +131,7 @@ ln -s /path/to/kanopy/commands/task.md ~/.config/opencode/command/task.md
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 cp .env.example .env # host and port; KANOPY_KEY (optional) becomes the admin's API token; KANOPY_URL only behind a reverse proxy
-cp instructions.example.txt instructions.txt # optional: describe your own project layout for agents
+cp agents/instructions.example.txt agents/instructions.txt # optional: describe your own project layout for agents
 sudo cp kanopy.service /etc/systemd/system/ # set YOUR_USER and /path/to/kanopy first
 sudo systemctl enable --now kanopy # then open the board and create the admin account
 ```
@@ -144,7 +144,7 @@ mkdir -p data # created first so it is owned by you, not root
 docker compose up -d --build # then open the board and create the admin account
 ```
 
-`data/` is bind-mounted, so the database, backups and attachments are the same files the venv setup uses. The container shares the host network and listens on `KANOPY_HOST:KANOPY_PORT` from `.env`. `instructions.txt` is copied in at build time; rebuild after changing it.
+`data/` is bind-mounted, so the database, backups and attachments are the same files the venv setup uses. The container shares the host network and listens on `KANOPY_HOST:KANOPY_PORT` from `.env`. `agents/instructions.txt` is copied in at build time; rebuild after changing it.
 
 ### Reverse proxy
 

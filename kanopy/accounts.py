@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
-# accounts.py
+# kanopy/accounts.py
 
 import hashlib
 import hmac
@@ -9,7 +9,7 @@ import secrets
 
 from datetime import datetime, timedelta, timezone
 
-import kanban
+from . import kanban
 
 
 INVITE_DAYS  = 7
