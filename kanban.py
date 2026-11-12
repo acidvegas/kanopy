@@ -79,6 +79,24 @@ CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEG
 '''
 
 
+def activity(project_id: int, limit: int = 30) -> list:
+	'''
+	Return the newest task history events across a project and the sub-projects the user can see, with each event's task id and title.
+
+	:param project_id: Project id
+	:param limit: Events returned
+	'''
+
+	with connect() as db:
+		require(db, 'projects', project_id)
+		need(db, project_id, VIEW)
+		names  = paths(db)
+		lv     = levels(db)
+		prefix = names[project_id] + '/'
+		scope  = [pid for pid, path in names.items() if (pid == project_id or path.startswith(prefix)) and (lv is None or lv.get(pid))]
+		return [dict(r) for r in db.execute(f'SELECT e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) ORDER BY e.id DESC LIMIT ?', (*scope, limit))]
+
+
 def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = True):
 	'''
 	Write any task fields present in data inside the caller's transaction.

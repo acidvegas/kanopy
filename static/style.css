@@ -238,10 +238,11 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 :is(#drawer, #taskpage) .history summary::-webkit-details-marker { display: none; }
 :is(#drawer, #taskpage) .history .chev { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.5; fill: none; transition: transform .15s; }
 :is(#drawer, #taskpage) .history[open] .chev { transform: rotate(90deg); }
-:is(#drawer, #taskpage) .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; }
-:is(#drawer, #taskpage) .events li { display: flex; justify-content: space-between; gap: .75rem; }
-:is(#drawer, #taskpage) .events .at { white-space: nowrap; font-size: .72rem; }
-:is(#drawer, #taskpage) .events a { color: var(--accent); }
+:is(#drawer, #taskpage, #kb-desc) .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; }
+:is(#drawer, #taskpage, #kb-desc) .events li { display: flex; justify-content: space-between; gap: .75rem; }
+:is(#drawer, #taskpage, #kb-desc) .events .at { white-space: nowrap; font-size: .72rem; }
+:is(#drawer, #taskpage, #kb-desc) .events a { color: var(--accent); }
+#kb-desc .activity { margin: .3rem 0 .2rem; }
 .dim { color: var(--muted); }
 
 @media (max-width: 800px) {

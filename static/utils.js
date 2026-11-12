@@ -447,8 +447,24 @@ function descRender(p, editing = false) {
 		input.style.height = Math.max(110, input.scrollHeight + 4) + 'px';
 		return input.focus();
 	}
+	const act = store('activityOpen');
 	box.innerHTML = `<div class="desc-head"><button class="desc-toggle${open ? ' open' : ''}" data-desc="toggle">${ICONS.chev}<b>Description</b></button>${p.folder ? `<code class="desc-path" title="Folder">${esc(p.folder)}</code>` : ''}<span class="spacer"></span><button class="icon small" data-desc="edit" title="Edit description and color" aria-label="Edit description and color">${SVG.edit}</button></div>` +
-		(open ? `<div class="markdown desc-body">${p.description.trim() ? mdHtml(p.description) : '<p class="dim">No description yet. Click the pencil to add one.</p>'}</div>` : '');
+		(open ? `<div class="markdown desc-body">${p.description.trim() ? mdHtml(p.description) : '<p class="dim">No description yet. Click the pencil to add one.</p>'}</div>` : '') +
+		`<div class="desc-head"><button class="desc-toggle${act ? ' open' : ''}" data-desc="activity">${ICONS.chev}<b>Activity</b></button></div>` +
+		(act ? `<ul class="events activity">${KB.activity?.pid === p.id ? activityHtml(KB.activity.events) : ''}</ul>` : '');
+	if (act && !(KB.activity?.pid === p.id && KB.activity.seq === KB.loadSeq)) activityLoad(p.id); // fetched again after each board load
+}
+
+function activityHtml(events) {
+	return events.map((e) => kbEvent(e, `<a href="${taskHref(e.task_id)}">#${e.task_id} ${esc(e.title)}</a> · `)).join('') || '<li class="dim">No activity yet</li>';
+}
+
+async function activityLoad(pid) {
+	const seq  = KB.loadSeq;
+	const data = await api('GET', `/api/projects/${pid}/activity`);
+	KB.activity = { pid, seq, events: data.events };
+	const list = $('#kb-desc .activity');
+	if (list && $('#kb-desc').dataset.pid === String(pid)) list.innerHTML = activityHtml(data.events);
 }
 
 
@@ -1040,7 +1056,7 @@ function mdTab(btn) {
 
 /* ---------- drawer ---------- */
 
-function kbEvent(e) {
+function kbEvent(e, task = '') {
 	const v = (x) => `<b>${esc(x)}</b>`;
 	const who = e.agent ? `${v(e.agent)} <span class="dim">(${esc(e.actor)})</span>` : v(e.actor);
 	const link = (x) => { const [k, id] = x.split(':'); return `${KINDS[k] || esc(k)} <a href="${taskHref(+id)}">#${+id}</a>`; };
@@ -1061,7 +1077,7 @@ function kbEvent(e) {
 		attachment : () => e.new ? `attached ${v(e.new)}` : `removed attachment ${v(e.old)}`,
 		comment    : () => 'commented'
 	}[e.field];
-	return `<li><span>${who} ${what ? what() : esc(e.field)}</span><span class="dim at">${new Date(e.at).toLocaleString()}</span></li>`;
+	return `<li><span>${task}${who} ${what ? what() : esc(e.field)}</span><span class="dim at">${new Date(e.at).toLocaleString()}</span></li>`;
 }
 
 function kbDrawer() {
@@ -1339,6 +1355,7 @@ function kbBind() {
 		const p   = project(KB.project);
 		if (!act || !p) return;
 		if (act === 'toggle') { store('descCollapsed', !store('descCollapsed')); return descRender(p); }
+		if (act === 'activity') { store('activityOpen', !store('activityOpen')); return descRender(p); }
 		if (act === 'edit') return descRender(p, true);
 		if (act === 'cancel') return descRender(p);
 		if (act === 'color') return box.querySelectorAll('.swatch').forEach((el) => el.classList.toggle('on', el === e.target.closest('.swatch')));
