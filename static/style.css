@@ -160,21 +160,12 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 /* board */
 #board { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 1rem; gap: .75rem; }
 #kb-desc { margin: 0; color: var(--muted); font-size: .88rem; }
-.columns { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(var(--cols, 3), minmax(250px, 1fr)); gap: 1rem; overflow-x: auto; }
+.columns { flex: 1; min-height: 0; display: grid; grid-template-columns: repeat(3, minmax(250px, 1fr)); gap: 1rem; }
 .column { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .column > header { display: flex; align-items: center; gap: .5rem; padding: .7rem .8rem; font-weight: 700; font-size: .85rem; letter-spacing: .04em; text-transform: uppercase; }
 .column > header .count { color: var(--muted); font-weight: 600; }
 .column > header .add { margin-left: auto; padding: .2rem; background: transparent; border-color: transparent; color: var(--muted); }
 .column > header .add:hover { color: var(--accent); }
-.column > header .add svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; }
-.desc-cols { display: flex; flex-direction: column; gap: .4rem; margin-top: .55rem; }
-.desc-cols > b { font-size: .72rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
-.col-rows { display: flex; flex-direction: column; gap: .35rem; }
-.col-row { display: flex; gap: .35rem; align-items: center; }
-.col-row .col-title { flex: 1; min-width: 0; }
-.col-row .icon.small { padding: .2rem; background: transparent; border-color: transparent; color: var(--muted); }
-.col-row .icon.small:hover { color: var(--text); }
-.col-row svg, .desc-cols button svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; stroke-linecap: round; stroke-linejoin: round; vertical-align: -2px; }
 .column[data-status="doing"] > header span { color: var(--warn); }
 .column[data-status="done"] > header span { color: var(--ok); }
 .cards { flex: 1; overflow-y: auto; padding: 0 .6rem .6rem; display: flex; flex-direction: column; gap: .5rem; min-height: 60px; }
@@ -252,7 +243,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 @media (max-width: 800px) {
 	#board { padding: .75rem 0; }
 	#kb-desc { margin: 0 .75rem; }
-	.columns { grid-template-columns: repeat(var(--cols, 3), 85vw); overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 .75rem; gap: .75rem; }
+	.columns { grid-template-columns: repeat(3, 85vw); overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 .75rem; gap: .75rem; }
 	.column { scroll-snap-align: center; }
 	#drawer { width: 100%; }
 	:is(#drawer, #taskpage) .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
