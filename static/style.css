@@ -618,7 +618,8 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .share-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-row select, .share-add select, .share-add input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: .4rem .5rem; font-size: .84rem; color: var(--text); outline: none; }
 .share-add { display: flex; gap: .4rem; flex-wrap: wrap; }
-.share-add input { flex: 1; min-width: 10rem; }
+.share-add input { flex: 1; min-width: 10rem; margin: 0; font-family: inherit; }
+.share-add > * { box-sizing: border-box; height: 2.2rem; font-size: .84rem; }
 .share .row { display: flex; justify-content: flex-end; }
 .share-row .icon.small { padding: .15rem; background: transparent; border-color: transparent; color: var(--muted); }
 .share-row .icon.small svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
