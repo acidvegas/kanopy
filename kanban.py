@@ -28,6 +28,7 @@ VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
 HISTORY  = 200 # events kept per task
+TYPES    = ('bug', 'ci', 'cleanup', 'credentials', 'decommission', 'dependency', 'deploy', 'design', 'docs', 'event', 'feature', 'finance', 'goal', 'habit', 'hardware', 'health', 'home', 'idea', 'learning', 'migration', 'note', 'performance', 'purchase', 'question', 'release', 'repo', 'research', 'review', 'security', 'support', 'test', 'travel') # global type: labels a fresh install starts with
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS projects (
@@ -326,7 +327,7 @@ def connect() -> sqlite3.Connection:
 
 
 def init():
-	'''Create the database and an Inbox project if there are no projects.'''
+	'''Create the database, and on a fresh one an Inbox project and the default type: labels.'''
 
 	DB.parent.mkdir(exist_ok=True)
 
@@ -350,6 +351,7 @@ def init():
 		db.execute('CREATE UNIQUE INDEX IF NOT EXISTS labels_name ON labels (name, COALESCE(owner_id, 0))')
 		if not db.execute('SELECT 1 FROM projects').fetchone():
 			db.execute("INSERT INTO projects (title) VALUES ('Inbox')")
+			db.executemany('INSERT INTO labels (name) VALUES (?)', [('type:' + t,) for t in TYPES])
 
 
 def absorb(db: sqlite3.Connection, label_id: int, name: str):
