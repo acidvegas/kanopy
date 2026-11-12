@@ -562,8 +562,8 @@ def save_task(args: dict, agent: str) -> str:
 
 	if args.get('id'):
 		t = kanban.task(int(args['id']))
-		if 'description' in args and SEEN.get(seen_key(t['id'], agent), hash(t['description'])) != hash(t['description']):
-			raise ValueError(f'#{t["id"]} description changed since you last read it; get_task it again and redo your edit on the new text')
+		if 'description' in args and SEEN.get(seen_key(t['id'], agent)) != hash(t['description']): # never read (or read before a restart) counts as stale
+			raise ValueError(f'#{t["id"]} description changed since you last read it, or you have not read it; get_task it first and make your edit on that text')
 		if add or remove:
 			fields['labels'] = [l for l in t['labels'] if l not in remove] + add
 		if assign or unassign:
