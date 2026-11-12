@@ -329,6 +329,33 @@ def shares(project_id: int) -> list:
 	return out
 
 
+def setup(username: str, password: str) -> str:
+	'''
+	Create the first account as admin on a board with no users, and sign in; returns the raw session token.
+
+	:param username: New username
+	:param password: New password
+	'''
+
+	username = valid_username(username)
+	valid_password(password)
+
+	with kanban.connect() as db:
+		db.execute('BEGIN IMMEDIATE') # the empty check and the insert happen under one write lock
+		if db.execute('SELECT 1 FROM users').fetchone():
+			raise PermissionError('this board already has an admin')
+		user_id = db.execute('INSERT INTO users (username, password, is_admin, created) VALUES (?, ?, 1, ?)', (username, password_hash(password), kanban.now())).lastrowid
+
+	return session_create(user_id)
+
+
+def setup_needed() -> bool:
+	'''Say whether the board has no accounts yet.'''
+
+	with kanban.connect() as db:
+		return not db.execute('SELECT 1 FROM users').fetchone()
+
+
 def signup(token: str, username: str, password: str) -> str:
 	'''
 	Create an account from an invite and sign in; returns the raw session token.

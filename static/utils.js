@@ -809,11 +809,12 @@ function authShow(mode, token) {
 	$('#auth').hidden = false;
 	$('#auth').dataset.mode = mode;
 	$('#auth').dataset.token = token || '';
-	$('#auth-title').textContent = mode === 'signup' ? 'Create your account' : 'Sign in';
-	$('#auth-submit').textContent = mode === 'signup' ? 'Create account' : 'Sign in';
-	$('#auth-text').textContent = mode === 'signup' ? 'You were invited to this board. Pick a username (lowercase) and a password of at least 8 characters.' : '';
-	$('#auth-confirm').hidden = mode !== 'signup';
-	f.elements.password.autocomplete = mode === 'signup' ? 'new-password' : 'current-password';
+	const fresh = mode !== 'login'; // signup and setup both make a new account
+	$('#auth-title').textContent = { signup: 'Create your account', setup: 'Create the admin account', login: 'Sign in' }[mode];
+	$('#auth-submit').textContent = fresh ? 'Create account' : 'Sign in';
+	$('#auth-text').textContent = { signup: 'You were invited to this board. Pick a username (lowercase) and a password of at least 8 characters.', setup: 'This board has no accounts yet. The first one is the admin: pick a username (lowercase) and a password of at least 8 characters.', login: '' }[mode];
+	$('#auth-confirm').hidden = !fresh;
+	f.elements.password.autocomplete = fresh ? 'new-password' : 'current-password';
 	$('#auth-error').hidden = true;
 	if (mode === 'signup') fetch(`/api/invites/check/${token}`).then((res) => { if (!res.ok) authError('This invite link is invalid, used or expired. Ask for a new one.'); });
 	f.elements.username.focus();
@@ -826,14 +827,14 @@ function authError(msg) {
 
 async function authSubmit() {
 	const f      = $('#auth-form').elements;
-	const signup = $('#auth').dataset.mode === 'signup';
-	if (signup && f.password.value !== f.confirm.value) return authError('The passwords do not match.');
-	const res  = await fetch(signup ? '/api/signup' : '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: f.username.value, password: f.password.value, token: $('#auth').dataset.token }) });
+	const mode   = $('#auth').dataset.mode;
+	if (mode !== 'login' && f.password.value !== f.confirm.value) return authError('The passwords do not match.');
+	const res  = await fetch(`/api/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: f.username.value, password: f.password.value, token: $('#auth').dataset.token }) });
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) return authError(data.error || 'Something went wrong.');
 	$('#auth-form').reset();
 	$('#auth').hidden = true;
-	if (signup) location.hash = '#/board/all';
+	if (mode !== 'login') location.hash = '#/board/all';
 	location.reload();
 }
 
@@ -1634,6 +1635,6 @@ document.addEventListener('DOMContentLoaded', () => {
 	fetch('/api/me').then((res) => res.ok ? res.json() : null).then((me) => {
 		KB.me = me;
 		if (me || /^#\/invite\//.test(location.hash)) return route();
-		authShow('login');
+		fetch('/api/setup').then((res) => res.json()).then((data) => authShow(data.needed ? 'setup' : 'login'), () => authShow('login'));
 	});
 });

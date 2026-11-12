@@ -42,7 +42,7 @@ A small self-hosted kanban board for projects, todos and ideas, built to be shar
 - Profile pictures: Settings, Account, Change picture *(cropped square and resized in the browser)*; shown wherever initials would be
 - Themes: Settings, Theme; ten to pick from *(the purple default, Dracula, Nord, Gruvbox, Catppuccin Mocha, Tokyo Night, One Dark, Monokai, GitHub Dark, GitHub Light)*, remembered per browser in the `kb_theme` cookie; the logo and favicon take the theme's colors
 - Labels: anyone can make personal labels; only the admin creates, renames or deletes global ones. Anyone who can edit a task can remove any label from it
-- Create the first admin with `venv/bin/python -c "import kanban, accounts; kanban.init(); accounts.user_create('name', 'password', True)"`
+- On a fresh install the first page asks for the admin account; after that, people join by invite
 
 ## Keys
 
@@ -131,8 +131,7 @@ venv/bin/pip install -r requirements.txt
 cp .env.example .env # host and port; KANOPY_KEY (optional) becomes the admin's API token; KANOPY_URL only behind a reverse proxy
 cp instructions.example.txt instructions.txt # optional: describe your own project layout for agents
 sudo cp kanopy.service /etc/systemd/system/ # set YOUR_USER and /path/to/kanopy first
-sudo systemctl enable --now kanopy
-venv/bin/python -c "import kanban, accounts; kanban.init(); accounts.user_create('name', 'password', True)" # first admin
+sudo systemctl enable --now kanopy # then open the board and create the admin account
 ```
 
 ### Docker
@@ -140,8 +139,7 @@ venv/bin/python -c "import kanban, accounts; kanban.init(); accounts.user_create
 ```sh
 cp .env.example .env
 mkdir -p data # created first so it is owned by you, not root
-docker compose up -d --build
-docker compose exec kanopy python -c "import accounts; accounts.user_create('name', 'password', True)" # first admin
+docker compose up -d --build # then open the board and create the admin account
 ```
 
 `data/` is bind-mounted, so the database, backups and attachments are the same files the venv setup uses. The container shares the host network and listens on `KANOPY_HOST:KANOPY_PORT` from `.env`. `instructions.txt` is copied in at build time; rebuild after changing it.
