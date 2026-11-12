@@ -26,7 +26,7 @@ A small self-hosted kanban board for projects, todos and ideas, built to be shar
 - **Auto-archive:** done tasks leave the board after a number of days set on the Settings page *(default 30, 0 turns it off)*; they stay in search and reopening one brings it back
 - **Markdown editor:** task descriptions, comments and project descriptions get Write/Preview tabs, a toolbar *(bold, italic, heading, code, link, lists, checklist, quote, task link)*, Ctrl+B/I/K, and Enter continues a list
 - **Calendar:** month grid of due dates and reminders; drag to reschedule
-- **Labels:** on the Settings page, grouped by namespace with counts; rename, merge *(rename onto an existing label)*, recolor, delete
+- **Labels:** global *(shared with everyone, managed by the admin)* or personal *(listed only for you, though people on a shared project see them on its tasks, faded)*; on the Settings page, grouped by namespace with counts; rename, merge *(rename onto an existing label)*, recolor, delete
 - **Search:** every word must match across titles, descriptions and comments; filter by project *(sub-projects included)*, label, minimum priority, due date and status, choose which fields to search, and sort; filters alone list matching tasks
 - **Notifications:** ntfy pushes at reminder time, on the morning a task is due, a daily overdue digest, and when an agent marks a task done; each one toggled on the Settings page *(the ntfy token is never shown back)*
 - `#123` in a description or comment links to that task; the filter box matches `#id`, text, project and labels
@@ -41,7 +41,7 @@ A small self-hosted kanban board for projects, todos and ideas, built to be shar
 - **Notifications:** `@username` mentions *(with autocomplete)*, assignments and activity on your tasks land in the inbox *(bell)* and on your own ntfy topic; each kind toggles on your account
 - Profile pictures: Settings, Account, Change picture *(cropped square and resized in the browser)*; shown wherever initials would be
 - Themes: Settings, Theme; ten to pick from *(the purple default, Dracula, Nord, Gruvbox, Catppuccin Mocha, Tokyo Night, One Dark, Monokai, GitHub Dark, GitHub Light)*, remembered per browser in the `kb_theme` cookie; the logo and favicon take the theme's colors
-- Labels stay global and anyone can manage them
+- Labels: anyone can make personal labels; only the admin creates, renames or deletes global ones. Anyone who can edit a task can remove any label from it
 - Create the first admin with `venv/bin/python -c "import kanban, accounts; kanban.init(); accounts.user_create('name', 'password', True)"`
 
 ## Keys
@@ -65,11 +65,11 @@ The app serves an MCP endpoint at `/mcp` *(streamable HTTP, JSON responses, stat
 | `save_task`     | Create or update any field, move, add/remove labels, set status, tick a checklist item, add a comment or text file; a new project path creates the project *(parents included)* with the task, so no project is ever empty; `ids` updates several tasks at once                      |
 | `comment`       | Progress note                                                                                                                                                                |
 | `link`          | Relate two tasks or remove the relation                                                                                                                                      |
-| `labels`        | List by namespace, create a `type:` value, delete a label                                                                                                                    |
+| `labels`        | List global and your own labels by namespace, create a global `type:` value *(admin)*, delete a label                                                                         |
 | `inbox`         | Unread notifications, optionally marking them read                                                                                                                           |
 | `delete`        | A task, or an empty project                                                                                                                                                  |
 
-Agent labels use two namespaces: `host:` *(any machine, created on demand)* and `type:` *(a fixed set of values)*; a new `host:` that squashes to an existing one *(host:web01 vs host:web-01)* is rejected. The instructions agents get on connect come from `instructions.txt` if you create one *(untracked)*, otherwise `instructions.example.txt`.
+Agent labels use two namespaces: `host:` *(any machine, created on demand as the token user's personal label)* and `type:` *(a fixed set of values)*; a new `host:` that squashes to an existing one *(host:web01 vs host:web-01)* is rejected. The instructions agents get on connect come from `instructions.txt` if you create one *(untracked)*, otherwise `instructions.example.txt`.
 
 `/mcp` takes a personal API token *(Settings, API tokens)* in the `X-Key` header; the agent acts as that user and sees only what they can. The `X-Agent` header names the agent on its comments. `KANOPY_KEY` in `.env` is the old shared key; on start it is stored as the admin's token so existing agent configs keep working.
 

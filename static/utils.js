@@ -143,7 +143,7 @@ const kbBase  = () => `#/${kbView()}/${KB.project ?? 'all'}`;
 const ymd     = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const project = (id) => KB.projects.find((p) => p.id === id);
 const tint    = (id) => { let p = project(id); while (p && !p.color) p = project(p.parent_id); return p?.color || ''; };
-const chip    = (l, extra = '') => { const c = KB.labels.find((x) => x.name === l)?.color; return `<span class="chip" data-ns="${esc(l.split(':')[0])}"${c ? ` style="--c:${c}"` : ''}>${esc(l)}${extra}</span>`; };
+const chip    = (l, extra = '') => { const m = KB.labels.find((x) => x.name === l); const c = m?.color; return `<span class="chip${m ? '' : ' foreign'}" data-ns="${esc(l.split(':')[0])}"${c ? ` style="--c:${c}"` : ''}>${esc(l)}${extra}</span>`; };
 const COLORS  = ['#a78bfa', '#f472b6', '#f87171', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#22d3ee', '#60a5fa', '#94a3b8'];
 const size    = (n) => n < 1024 ? `${n} B` : n < 1048576 ? `${(n / 1024).toFixed(0)} KB` : `${(n / 1048576).toFixed(1)} MB`;
 const inbox   = () => KB.projects.find((p) => p.title === 'Inbox' && !p.parent_id && p.role >= 2) || KB.projects.find((p) => p.role >= 2);
@@ -365,28 +365,34 @@ function kbMonth(delta) {
 
 /* ---------- labels ---------- */
 
-async function lblNew() {
-	const name = await ask({ title: 'New label', text: 'namespace:value, like host:pi', value: '', ok: 'Create' });
-	if (name) await guard(async () => { await api('POST', '/api/labels', { name }); await kbLoad(); toast(`Created ${name}`); });
+async function lblNew(glob) {
+	const name = await ask({ title: glob ? 'New global label' : 'New label', text: glob ? 'namespace:value; everyone sees it' : 'namespace:value, like host:pi; only you see it', value: '', ok: 'Create' });
+	if (name) await guard(async () => { await api('POST', '/api/labels', { name, global: glob }); await kbLoad(); toast(`Created ${name}`); });
 }
 
 function lblRender() {
-	const groups = {};
-	for (const l of KB.labels) (groups[l.name.split(':')[0]] ??= []).push(l);
-	$('#labels').innerHTML = Object.entries(groups).sort().map(([ns, list]) => `
+	$('#labels').innerHTML = [['Global', true], ['Mine', false]].map(([title, glob]) => {
+		const groups = {};
+		for (const l of KB.labels.filter((x) => x.global === glob)) (groups[l.name.split(':')[0]] ??= []).push(l);
+		return `<h3 class="lbl-scope">${title}</h3>` + (lblGroups(groups, !glob || KB.me?.is_admin) || '<p class="dim">No labels yet.</p>');
+	}).join('');
+}
+
+function lblGroups(groups, mine) {
+	return Object.entries(groups).sort().map(([ns, list]) => `
 		<section class="lbl-group">
 			<h3>${esc(ns)}: <span class="dim">${list.length}</span></h3>
 			<div class="lbl-list">${list.map((l) => `
 				<div class="lbl-row" data-name="${esc(l.name)}">
-					<button class="swatch${l.color ? '' : ' none'}" style="--c:${l.color || 'transparent'}" data-act="lcolor" title="Change color" aria-label="Change color"${KB.me?.is_admin ? '' : ' disabled'}></button>
+					<button class="swatch${l.color ? '' : ' none'}" style="--c:${l.color || 'transparent'}" data-act="lcolor" title="Change color" aria-label="Change color"${mine ? '' : ' disabled'}></button>
 					${chip(l.name)}
 					<a class="lbl-count" href="#/board/all" data-act="lfilter">${l.count} task${l.count === 1 ? '' : 's'}</a>
 					<span class="spacer"></span>
-					<button class="icon small admin-only" data-act="lrename" title="Rename / merge" aria-label="Rename / merge">${SVG.edit}</button>
-					<button class="icon small danger admin-only" data-act="ldelete" title="Delete label" aria-label="Delete label">${SVG.trash}</button>
+					${mine ? `<button class="icon small" data-act="lrename" title="Rename / merge" aria-label="Rename / merge">${SVG.edit}</button>
+					<button class="icon small danger" data-act="ldelete" title="Delete label" aria-label="Delete label">${SVG.trash}</button>` : ''}
 				</div>`).join('')}
 			</div>
-		</section>`).join('') || '<p class="dim">No labels yet.</p>';
+		</section>`).join('');
 }
 
 async function lblAction(act, el) {
@@ -1332,7 +1338,8 @@ function kbBind() {
 	$('#cal-prev').onclick  = () => kbMonth(-1);
 	$('#cal-next').onclick  = () => kbMonth(1);
 	$('#cal-today').onclick = () => kbMonth(0);
-	$('#lbl-new').onclick   = lblNew;
+	$('#lbl-new').onclick   = () => lblNew(false);
+	$('#lbl-new-global').onclick = () => lblNew(true);
 	$('#cal-grid').addEventListener('click', (e) => {
 		const ev = e.target.closest('.ev');
 		if (ev) location.hash = taskHref(ev.dataset.id);

@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE TABLE IF NOT EXISTS attachments (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings    (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS sent        (kind TEXT NOT NULL, key TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (kind, key));
-CREATE TABLE IF NOT EXISTS labels      (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, color TEXT);
+CREATE TABLE IF NOT EXISTS labels      (id INTEGER PRIMARY KEY, name TEXT NOT NULL, color TEXT, owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE); -- owner_id NULL = global, else that user's personal label
 CREATE TABLE IF NOT EXISTS task_labels (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE, PRIMARY KEY (task_id, label_id));
 CREATE TABLE IF NOT EXISTS comments    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, author TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS links       (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, other_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, PRIMARY KEY (task_id, kind, other_id));
@@ -336,16 +336,45 @@ def init():
 		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''")):
 			if column not in [row['name'] for row in db.execute(f'PRAGMA table_info({table})')]:
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
+		if 'owner_id' not in [row['name'] for row in db.execute('PRAGMA table_info(labels)')]: # labels were all global with unique names; type: stays global, the rest become the first admin's
+			db.execute('PRAGMA foreign_keys = OFF')
+			db.executescript('''
+				BEGIN;
+				CREATE TABLE labels_new (id INTEGER PRIMARY KEY, name TEXT NOT NULL, color TEXT, owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE);
+				INSERT INTO labels_new SELECT id, name, color, CASE WHEN name LIKE 'type:%' THEN NULL ELSE (SELECT MIN(id) FROM users WHERE is_admin) END FROM labels;
+				DROP TABLE labels;
+				ALTER TABLE labels_new RENAME TO labels;
+				COMMIT;
+			''')
+			db.execute('PRAGMA foreign_keys = ON')
+		db.execute('CREATE UNIQUE INDEX IF NOT EXISTS labels_name ON labels (name, COALESCE(owner_id, 0))')
 		if not db.execute('SELECT 1 FROM projects').fetchone():
 			db.execute("INSERT INTO projects (title) VALUES ('Inbox')")
 
 
-def label_create(name: str, color: str = None):
+def absorb(db: sqlite3.Connection, label_id: int, name: str):
 	'''
-	Create a label; without a color it takes its namespace's color.
+	Fold every personal label with this name into a global label, so no personal label shadows it.
+
+	:param db: Open database connection
+	:param label_id: Global label id
+	:param name: Its name
+	'''
+
+	ids = [r['id'] for r in db.execute('SELECT id FROM labels WHERE name = ? AND owner_id IS NOT NULL', (name,))]
+
+	for old in ids:
+		db.execute('INSERT OR IGNORE INTO task_labels SELECT task_id, ? FROM task_labels WHERE label_id = ?', (label_id, old))
+		db.execute('DELETE FROM labels WHERE id = ?', (old,))
+
+
+def label_create(name: str, color: str = None, glob: bool = False):
+	'''
+	Create a personal label, or a global one (admin only); without a color it takes its namespace's color.
 
 	:param name: Label like host:pi
 	:param color: #rrggbb or None
+	:param glob: Make it global
 	'''
 
 	name = valid_label(name)
@@ -353,24 +382,60 @@ def label_create(name: str, color: str = None):
 	if color and not COLOR_RE.match(color):
 		raise ValueError('color must look like #rrggbb')
 
+	if glob:
+		need_admin()
+
+	owner = None if glob else me()
+
 	with connect() as db:
-		if db.execute('SELECT 1 FROM labels WHERE name = ?', (name,)).fetchone():
+		row = label_find(db, name)
+		if row and (row['owner_id'] is None or not glob):
 			raise ValueError(f'label {name} already exists')
-		db.execute('INSERT INTO labels (name, color) VALUES (?, COALESCE(?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL LIMIT 1)))', (name, color or None, name.split(':')[0] + ':%'))
+		db.execute('INSERT INTO labels (name, color, owner_id) VALUES (?, COALESCE(?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL AND (owner_id IS NULL OR owner_id IS ?) LIMIT 1)), ?)', (name, color or None, name.split(':')[0] + ':%', me(), owner))
+		if glob:
+			absorb(db, db.execute('SELECT last_insert_rowid()').fetchone()[0], name)
 
 
 def label_delete(name: str):
 	'''
-	Delete a label and remove it from every task.
+	Delete a label and remove it from every task; global labels are admin only.
 
 	:param name: Label name
 	'''
 
-	need_admin()
-
 	with connect() as db:
-		if not db.execute('DELETE FROM labels WHERE name = ?', (name.strip().lower(),)).rowcount:
-			raise LookupError(f'label {name} not found')
+		row = label_owned(db, name)
+		db.execute('DELETE FROM labels WHERE id = ?', (row['id'],))
+
+
+def label_find(db: sqlite3.Connection, name: str) -> sqlite3.Row:
+	'''
+	Return the label with this name that the signed-in user can use: the global one, else their own.
+
+	:param db: Open database connection
+	:param name: Label name
+	'''
+
+	return db.execute('SELECT * FROM labels WHERE name = ? AND (owner_id IS NULL OR owner_id IS ?) ORDER BY owner_id IS NOT NULL LIMIT 1', (name.strip().lower(), me())).fetchone()
+
+
+def label_owned(db: sqlite3.Connection, name: str) -> sqlite3.Row:
+	'''
+	Return a label the signed-in user may change: their own, or a global one if they are an admin.
+
+	:param db: Open database connection
+	:param name: Label name
+	'''
+
+	row = label_find(db, name)
+
+	if not row:
+		raise LookupError(f'label {name} not found')
+
+	if row['owner_id'] is None:
+		need_admin()
+
+	return row
 
 
 def label_update(name: str, new_name: str = None, color: str = None):
@@ -382,37 +447,37 @@ def label_update(name: str, new_name: str = None, color: str = None):
 	:param color: #rrggbb, or an empty string to clear
 	'''
 
-	need_admin()
-
 	with connect() as db:
-		row = db.execute('SELECT id FROM labels WHERE name = ?', (name.strip().lower(),)).fetchone()
-
-		if not row:
-			raise LookupError(f'label {name} not found')
+		row = label_owned(db, name)
 
 		if color is not None:
 			if color and not COLOR_RE.match(color):
 				raise ValueError('color must look like #rrggbb')
 			db.execute('UPDATE labels SET color = ? WHERE id = ?', (color.lower() or None, row['id']))
 
-		if new_name and valid_label(new_name) != name.strip().lower():
+		if new_name and valid_label(new_name) != row['name']:
 			new_name = valid_label(new_name)
-			target   = db.execute('SELECT id FROM labels WHERE name = ?', (new_name,)).fetchone()
+			if row['owner_id'] is None:
+				target = db.execute('SELECT id FROM labels WHERE name = ? AND owner_id IS NULL', (new_name,)).fetchone()
+			else:
+				target = label_find(db, new_name)
 			if target:
 				db.execute('INSERT OR IGNORE INTO task_labels SELECT task_id, ? FROM task_labels WHERE label_id = ?', (target['id'], row['id']))
 				db.execute('DELETE FROM labels WHERE id = ?', (row['id'],))
 			else:
 				db.execute('UPDATE labels SET name = ? WHERE id = ?', (new_name, row['id']))
+			if row['owner_id'] is None:
+				absorb(db, target['id'] if target else row['id'], new_name)
 
 
 def labels() -> list:
-	'''Return every label with its color and the number of tasks using it that the signed-in user can see.'''
+	'''Return the global labels and the signed-in user's own, with color, scope and the number of tasks using each that the user can see.'''
 
 	with connect() as db:
 		lv  = levels(db)
-		out = {row['id']: {'name': row['name'], 'color': row['color'], 'count': 0} for row in db.execute('SELECT id, name, color FROM labels ORDER BY name')}
+		out = {row['id']: {'name': row['name'], 'color': row['color'], 'global': row['owner_id'] is None, 'count': 0} for row in db.execute('SELECT id, name, color, owner_id FROM labels WHERE owner_id IS NULL OR owner_id IS ? ORDER BY name', (me(),))}
 		for row in db.execute('SELECT tl.label_id, t.project_id FROM task_labels tl JOIN tasks t ON t.id = tl.task_id'):
-			if lv is None or lv.get(row['project_id']):
+			if row['label_id'] in out and (lv is None or lv.get(row['project_id'])):
 				out[row['label_id']]['count'] += 1
 
 	return list(out.values())
@@ -495,6 +560,14 @@ def levels(db: sqlite3.Connection, user: dict = None) -> dict:
 			out[pid] = level
 
 	return out
+
+
+def me() -> int:
+	'''Return the signed-in user's id, or None for the system.'''
+
+	user = ACTOR.get()
+
+	return user['id'] if user else None
 
 
 def need(db: sqlite3.Connection, project_id: int, level: int):
@@ -903,7 +976,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 
 def set_labels(db: sqlite3.Connection, task_id: int, names: list):
 	'''
-	Replace a task's labels, creating any new ones.
+	Replace a task's labels; names already on the task keep their label, others resolve to a global label, then the user's own, else a new personal one.
 
 	:param db: Open database connection
 	:param task_id: Task id
@@ -916,11 +989,21 @@ def set_labels(db: sqlite3.Connection, task_id: int, names: list):
 		if not LABEL_RE.match(name):
 			raise ValueError(f'label "{name}" must look like namespace:value')
 
-	db.execute('DELETE FROM task_labels WHERE task_id = ?', (task_id,))
+	on   = db.execute('SELECT l.id, l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?', (task_id,)).fetchall()
+	have = {r['name'] for r in on if r['name'] in names} # a label already on the task stays, whoever owns it
+
+	for r in on:
+		if r['name'] not in names:
+			db.execute('DELETE FROM task_labels WHERE task_id = ? AND label_id = ?', (task_id, r['id']))
 
 	for name in names:
-		db.execute('INSERT OR IGNORE INTO labels (name, color) VALUES (?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL LIMIT 1))', (name, name.split(':')[0] + ':%'))
-		db.execute('INSERT INTO task_labels SELECT ?, id FROM labels WHERE name = ?', (task_id, name))
+		if name in have:
+			continue
+		row = label_find(db, name)
+		if not row:
+			db.execute('INSERT INTO labels (name, color, owner_id) VALUES (?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL AND (owner_id IS NULL OR owner_id IS ?) LIMIT 1), ?)', (name, name.split(':')[0] + ':%', me(), me()))
+			row = label_find(db, name)
+		db.execute('INSERT INTO task_labels VALUES (?, ?)', (task_id, row['id']))
 
 
 def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = True):
