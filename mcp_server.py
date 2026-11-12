@@ -59,7 +59,6 @@ TOOLS = [
 		'due'           : {**STR, 'description': 'YYYY-MM-DD, "" clears'},
 		'remind_at'     : {**STR, 'description': 'YYYY-MM-DDTHH:MM local, "" clears'},
 		'status'        : {**STR, 'description': 'todo, doing, done'},
-		'column'        : {**STR, 'description': 'board column name, for projects with custom columns; sets the status too'},
 		'check'         : {**STR, 'description': 'tick checklist item by number or unique text'},
 		'checked'       : {**BOOL, 'description': 'false unticks'},
 		'comment'       : {**STR, 'description': 'markdown note added with the change'},
@@ -331,8 +330,6 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 
 	out = f'#{t["id"]} ' + {'doing': '▶ ', 'done': '✓ '}.get(t['status'], '') + (f'[{t["project"]}] ' if project else '') + t['title']
 
-	if t['column']:
-		out += f'  col:{t["column"]}'
 	if t['archived']:
 		out += '  archived'
 	if t['files']:
@@ -471,37 +468,6 @@ def norm_label(name: str) -> tuple:
 	return name, ns
 
 
-def place(fields: dict, args: dict, current: int = None) -> dict:
-	'''
-	Resolve the column argument against the board of the project the task lands on; returns fields.
-
-	:param fields: Task fields (project_id when moving or creating)
-	:param args: Tool arguments
-	:param current: The task's project when updating
-	'''
-
-	if not args.get('column'):
-		return fields
-
-	pid  = fields.get('project_id') or current
-	name = str(args['column']).strip().lower()
-
-	with kanban.connect() as db:
-		cols = kanban.board_columns(db, pid)
-
-	col = next((c for c in cols if c['title'].lower() == name), None)
-
-	if not col:
-		raise LookupError(f'no column "{args["column"]}" on this board; it has: {", ".join(c["title"] for c in cols)}')
-
-	if col['id']:
-		fields['column_id'] = col['id']
-	else:
-		fields['status'] = col['status'] # default columns are the statuses themselves
-
-	return fields
-
-
 def project_id(ref) -> int:
 	'''
 	Resolve a project path (case-insensitive) or id to an id.
@@ -596,7 +562,7 @@ def save_task(args: dict, agent: str) -> str:
 			fields['assignees'] = [a for a in t['assignees'] if a not in unassign] + assign
 		if args.get('check'):
 			fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
-		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], place(fields, args, t['project_id'])))
+		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
 		notify.task_event(t, saved)
 		out = task_line(t['id'])
 		if saved['status'] == 'done' and t['status'] != 'done':
@@ -613,7 +579,7 @@ def save_task(args: dict, agent: str) -> str:
 	fields['labels'] = add
 	if assign:
 		fields['assignees'] = assign
-	created = with_project(fields, new_path, lambda: kanban.task_create(place(fields, args)))
+	created = with_project(fields, new_path, lambda: kanban.task_create(fields))
 	notify.task_event(None, created)
 	extras(created['id'], args, agent)
 

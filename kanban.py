@@ -20,7 +20,6 @@ SAFE_MIME = ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif',
 INVERSE  = {'blocking': 'blocked', 'blocked': 'blocking', 'subtask': 'parenttask', 'parenttask': 'subtask', 'related': 'related', 'duplicates': 'duplicateof', 'duplicateof': 'duplicates', 'precedes': 'follows', 'follows': 'precedes'}
 LABEL_RE = re.compile(r'^[a-z]+:[a-z0-9][a-z0-9._-]*$')
 STATUSES = ('todo', 'doing', 'done')
-DEFAULT_COLUMNS = ({'id': None, 'title': 'To-Do', 'status': 'todo'}, {'id': None, 'title': 'Doing', 'status': 'doing'}, {'id': None, 'title': 'Done', 'status': 'done'}) # board columns for projects without their own
 COLORS   = ('#a78bfa', '#f472b6', '#f87171', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#22d3ee', '#60a5fa', '#94a3b8')
 COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
 CHECK_RE = re.compile(r'^\s*[-*] \[( |x|X)\]', re.M)
@@ -70,7 +69,6 @@ CREATE TABLE IF NOT EXISTS teams          (id INTEGER PRIMARY KEY, name TEXT NOT
 CREATE TABLE IF NOT EXISTS team_members   (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, owner INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team_id, user_id));
 CREATE TABLE IF NOT EXISTS shares         (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE, role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_assignees (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (task_id, user_id));
-CREATE TABLE IF NOT EXISTS columns        (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, title TEXT NOT NULL, status TEXT NOT NULL, position REAL NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS task_events    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, at TEXT NOT NULL, actor TEXT NOT NULL, agent TEXT, field TEXT NOT NULL, old TEXT, new TEXT);
 CREATE INDEX IF NOT EXISTS task_events_task ON task_events (task_id, id);
 CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
@@ -83,7 +81,7 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 
 	:param db: Open database connection
 	:param task_id: Task id
-	:param data: Any of: title, description, project_id, status, priority, due, remind_at, labels, assignees (usernames), column_id (also sets the status)
+	:param data: Any of: title, description, project_id, status, priority, due, remind_at, labels, assignees (usernames)
 	:param log: Record changes in the task history (off while a task is being created)
 	'''
 
@@ -159,9 +157,6 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 
 	if data.get('status') and data['status'] != row['status']:
 		set_status(db, task_id, data['status'], log)
-
-	if 'column_id' in data:
-		set_column(db, task_id, data['column_id'], log)
 
 	touch(db, task_id)
 
@@ -271,23 +266,6 @@ def backup():
 		side.unlink()
 
 
-def board_columns(db: sqlite3.Connection, project_id: int) -> list:
-	'''
-	Return the board columns a project uses: its own, else the nearest ancestor's, else the defaults.
-
-	:param db: Open database connection
-	:param project_id: Project id
-	'''
-
-	while project_id:
-		cols = [dict(row) for row in db.execute('SELECT id, title, status FROM columns WHERE project_id = ? ORDER BY position, id', (project_id,))]
-		if cols:
-			return cols
-		project_id = db.execute('SELECT parent_id FROM projects WHERE id = ?', (project_id,)).fetchone()['parent_id']
-
-	return [dict(col) for col in DEFAULT_COLUMNS]
-
-
 def bulk(ids: list, data: dict) -> int:
 	'''
 	Apply one change to many tasks in a single transaction; returns how many changed.
@@ -337,44 +315,6 @@ def comment_add(task_id: int, author: str, body: str) -> dict:
 	return task(task_id)
 
 
-def columns_save(project_id: int, columns: list):
-	'''
-	Replace a project's board columns (manager or owner). An empty list drops them, so the project inherits again.
-
-	:param project_id: Project id
-	:param columns: Ordered list of {id (existing column, optional), title, status}; every status needs at least one column
-	'''
-
-	cols = [{'id': col.get('id'), 'title': (col.get('title') or '').strip(), 'status': col.get('status')} for col in columns]
-
-	for col in cols:
-		if not col['title']:
-			raise ValueError('every column needs a name')
-		if col['status'] not in STATUSES:
-			raise ValueError(f'column status must be one of: {", ".join(STATUSES)}')
-
-	if cols and {col['status'] for col in cols} != set(STATUSES):
-		raise ValueError('keep at least one column for each of To-Do, Doing and Done')
-
-	with connect() as db:
-		require(db, 'projects', project_id)
-		need(db, project_id, MANAGE)
-		have = {row['id'] for row in db.execute('SELECT id FROM columns WHERE project_id = ?', (project_id,))}
-		keep = {int(col['id']) for col in cols if col['id']}
-		if keep - have:
-			raise ValueError('a column belongs to another project')
-		for col_id in have - keep: # its tasks fall back to the first column of their status
-			db.execute('DELETE FROM columns WHERE id = ?', (col_id,))
-		for pos, col in enumerate(cols):
-			if col['id']:
-				old = db.execute('SELECT status FROM columns WHERE id = ?', (int(col['id']),)).fetchone()['status']
-				db.execute('UPDATE columns SET title = ?, status = ?, position = ? WHERE id = ?', (col['title'], col['status'], pos, int(col['id'])))
-				if old != col['status']: # its tasks keep their status and fall back to the first column of it
-					db.execute('UPDATE tasks SET column_id = NULL WHERE column_id = ?', (int(col['id']),))
-			else:
-				db.execute('INSERT INTO columns (project_id, title, status, position) VALUES (?, ?, ?, ?)', (project_id, col['title'], col['status'], pos))
-
-
 def connect() -> sqlite3.Connection:
 	'''Open the database with foreign keys enforced and rows as mappings.'''
 
@@ -393,7 +333,7 @@ def init():
 	with connect() as db:
 		db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(SCHEMA)
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'column_id', 'INTEGER REFERENCES columns(id) ON DELETE SET NULL')):
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''")):
 			if column not in [row['name'] for row in db.execute(f'PRAGMA table_info({table})')]:
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
 		if not db.execute('SELECT 1 FROM projects').fetchone():
@@ -773,17 +713,14 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 
 def projects() -> list:
 	'''
-	Return the projects the signed-in user can see with path, open (todo + doing) task count, role (1 viewer .. 4 owner; 0 = a parent shown only for the tree) and own board columns (empty = inherited or default), in tree order (siblings by position, then title).
+	Return the projects the signed-in user can see with path, open (todo + doing) task count and role (1 viewer .. 4 owner; 0 = a parent shown only for the tree), in tree order (siblings by position, then title).
 	'''
 
 	with connect() as db:
 		names  = paths(db)
 		lv     = levels(db)
 		counts = dict(db.execute("SELECT project_id, COUNT(*) FROM tasks WHERE status != 'done' AND archived = 0 GROUP BY project_id").fetchall())
-		cols   = {}
-		for col in db.execute('SELECT id, project_id, title, status FROM columns ORDER BY position, id'):
-			cols.setdefault(col['project_id'], []).append({'id': col['id'], 'title': col['title'], 'status': col['status']})
-		rows   = [dict(row, path=names[row['id']], open=counts.get(row['id'], 0), role=OWN if lv is None else lv.get(row['id'], 0), columns=cols.get(row['id'], [])) for row in db.execute('SELECT * FROM projects')]
+		rows   = [dict(row, path=names[row['id']], open=counts.get(row['id'], 0), role=OWN if lv is None else lv.get(row['id'], 0)) for row in db.execute('SELECT * FROM projects')]
 
 	if lv is not None:
 		parent = {row['id']: row['parent_id'] for row in rows}
@@ -814,7 +751,7 @@ def record(db: sqlite3.Connection, task_id: int, field: str, old: str = None, ne
 
 	:param db: Open database connection
 	:param task_id: Task id
-	:param field: What changed: created, title, description, status, column, priority, due, remind_at, project, label, assignee, link, attachment, comment
+	:param field: What changed: created, title, description, status, priority, due, remind_at, project, label, assignee, link, attachment, comment
 	:param old: Value before, or None
 	:param new: Value after, or None
 	'''
@@ -825,13 +762,12 @@ def record(db: sqlite3.Connection, task_id: int, field: str, old: str = None, ne
 	db.execute('DELETE FROM task_events WHERE task_id = ? AND id NOT IN (SELECT id FROM task_events WHERE task_id = ? ORDER BY id DESC LIMIT ?)', (task_id, task_id, HISTORY))
 
 
-def reorder(status: str, ids: list, column_id: int = None):
+def reorder(status: str, ids: list):
 	'''
 	Put tasks into a status column in the given order.
 
 	:param status: Target status column
 	:param ids: The visible task ids in that column, top to bottom; cards not listed (filtered out, other projects) keep their place
-	:param column_id: Custom board column the tasks were dropped in, or None for a default column
 	'''
 
 	if status not in STATUSES:
@@ -854,10 +790,7 @@ def reorder(status: str, ids: list, column_id: int = None):
 		for pos, task_id in enumerate(order):
 			db.execute('UPDATE tasks SET position = ? WHERE id = ?', (pos, task_id))
 		for task_id, row in rows.items():
-			if column_id and row['column_id'] != column_id: # also sets the column's status
-				set_column(db, task_id, column_id)
-				touch(db, task_id)
-			elif row['status'] != status:
+			if row['status'] != status:
 				set_status(db, task_id, status)
 				touch(db, task_id)
 
@@ -990,38 +923,6 @@ def set_labels(db: sqlite3.Connection, task_id: int, names: list):
 		db.execute('INSERT INTO task_labels SELECT ?, id FROM labels WHERE name = ?', (task_id, name))
 
 
-def set_column(db: sqlite3.Connection, task_id: int, column_id: int, log: bool = True):
-	'''
-	Put a task in a board column of its project (or an ancestor's), taking that column's status; None goes back to the first column of its status.
-
-	:param db: Open database connection
-	:param task_id: Task id
-	:param column_id: Column id, or None
-	:param log: Record the change in the task history
-	'''
-
-	row = db.execute('SELECT t.project_id, t.column_id, c.title FROM tasks t LEFT JOIN columns c ON c.id = t.column_id WHERE t.id = ?', (task_id,)).fetchone()
-
-	if not column_id:
-		db.execute('UPDATE tasks SET column_id = NULL WHERE id = ?', (task_id,))
-		return
-
-	col  = require(db, 'columns', int(column_id))
-	pid  = row['project_id']
-	line = set()
-	while pid:
-		line.add(pid)
-		pid = db.execute('SELECT parent_id FROM projects WHERE id = ?', (pid,)).fetchone()['parent_id']
-	if col['project_id'] not in line:
-		raise ValueError('that column is not on this task\'s board')
-
-	set_status(db, task_id, col['status'], log)
-	db.execute('UPDATE tasks SET column_id = ? WHERE id = ?', (col['id'], task_id))
-
-	if log and row['column_id'] != col['id']:
-		record(db, task_id, 'column', row['title'], col['title'])
-
-
 def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = True):
 	'''
 	Change a task's status, moving it to the bottom of the new column and tracking done_at.
@@ -1038,8 +939,6 @@ def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = Tr
 	old = db.execute('SELECT status FROM tasks WHERE id = ?', (task_id,)).fetchone()['status']
 	if log and old != status:
 		record(db, task_id, 'status', old, status)
-	if old != status: # a column of the old status no longer fits; the board shows the first column of the new one
-		db.execute('UPDATE tasks SET column_id = NULL WHERE id = ? AND column_id IN (SELECT id FROM columns WHERE status != ?)', (task_id, status))
 
 	bottom = db.execute('SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE status = ?', (status,)).fetchone()[0]
 	db.execute('UPDATE tasks SET status = ?, position = ?, done_at = ?, archived = 0 WHERE id = ?', (status, bottom, now() if status == 'done' else None, task_id))
@@ -1067,7 +966,7 @@ def settings_save(values: dict):
 				db.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', (key, str(value)))
 
 
-def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict, people: dict, cols: dict) -> dict:
+def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict, people: dict) -> dict:
 	'''
 	Build the card-sized view of a task.
 
@@ -1077,13 +976,12 @@ def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict,
 	:param notes: Task id to comment count mapping
 	:param files: Task id to attachment count mapping
 	:param people: Task id to assignee usernames mapping
-	:param cols: Column id to title mapping
 	'''
 
 	checks = CHECK_RE.findall(row['description'])
-	data   = {key: row[key] for key in ('id', 'project_id', 'column_id', 'title', 'status', 'priority', 'due', 'remind_at', 'position', 'done_at', 'updated', 'archived')}
+	data   = {key: row[key] for key in ('id', 'project_id', 'title', 'status', 'priority', 'due', 'remind_at', 'position', 'done_at', 'updated', 'archived')}
 
-	return dict(data, project=names[row['project_id']], labels=tags.get(row['id'], []), checks=[sum(c != ' ' for c in checks), len(checks)], comments=notes.get(row['id'], 0), files=files.get(row['id'], 0), assignees=people.get(row['id'], []), column=cols.get(row['column_id']))
+	return dict(data, project=names[row['project_id']], labels=tags.get(row['id'], []), checks=[sum(c != ' ' for c in checks), len(checks)], comments=notes.get(row['id'], 0), files=files.get(row['id'], 0), assignees=people.get(row['id'], []))
 
 
 def task(task_id: int) -> dict:
@@ -1098,7 +996,7 @@ def task(task_id: int) -> dict:
 		lv    = levels(db)
 		names = paths(db)
 		tags  = [r['name'] for r in db.execute('SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ? ORDER BY l.name', (task_id,))]
-		data  = summary(row, names, {task_id: tags}, {}, {}, assignees_map(db, task_id), dict(db.execute('SELECT id, title FROM columns').fetchall()))
+		data  = summary(row, names, {task_id: tags}, {}, {}, assignees_map(db, task_id))
 		data['role']        = OWN if lv is None else lv.get(row['project_id'], 0)
 		data['description'] = row['description']
 		data['created']     = row['created']
@@ -1187,10 +1085,9 @@ def tasks(project_id: int = None, archived: bool = False) -> list:
 		notes = dict(db.execute('SELECT task_id, COUNT(*) FROM comments GROUP BY task_id').fetchall())
 		files = dict(db.execute('SELECT task_id, COUNT(*) FROM attachments GROUP BY task_id').fetchall())
 		people = assignees_map(db)
-		cols   = dict(db.execute('SELECT id, title FROM columns').fetchall())
 		rows  = db.execute('SELECT * FROM tasks' + ('' if archived else ' WHERE archived = 0') + ' ORDER BY position, id').fetchall()
 
-	return [summary(row, names, tags, notes, files, people, cols) for row in rows if (scope is None or row['project_id'] in scope) and (lv is None or lv.get(row['project_id']))]
+	return [summary(row, names, tags, notes, files, people) for row in rows if (scope is None or row['project_id'] in scope) and (lv is None or lv.get(row['project_id']))]
 
 
 def touch(db: sqlite3.Connection, task_id: int):
