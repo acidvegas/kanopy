@@ -816,7 +816,7 @@ function accountBind() {
 		if (sel) guard(async () => shareRender((await api('POST', `/api/projects/${KB.project}/shares`, { [sel.dataset.kind === 'team' ? 'team' : 'username']: sel.dataset.name, role: sel.value })).shares));
 	});
 	$('#kb-activity').onclick = () => location.hash = KB.view === 'activity' ? `#/board/${KB.project}` : `#/activity/${KB.project}`;
-	$('#activity').addEventListener('click', (e) => { if (e.target.closest('#activity-more')) guard(() => activityLoad(true)); });
+	$('#activity').addEventListener('click', (e) => { const btn = e.target.closest('#activity-more'); if (btn && !btn.disabled) { btn.disabled = true; guard(() => activityLoad(true)).finally(() => btn.disabled = false); } });
 	$('#inbox').addEventListener('click', (e) => {
 		if (e.target.closest('#inbox-read')) return guard(async () => { inboxRender(await api('POST', '/api/notifications/read', {})); KB.me.unread = 0; meRender(); });
 		const row = e.target.closest('.note[data-id]');

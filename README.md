@@ -115,7 +115,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.claude/commands/task.md
 }
 ```
 
-2. Link the session briefing plugin. It reads the same token file and talks to `KANOPY_URL` *(default `http://127.0.0.1:8000`)*:
+2. Link the session briefing plugin. It reads the same token file and talks to `KANOPY_API` *(default `http://127.0.0.1:8000`)*:
 ```sh
 ln -s /path/to/kanopy/agents/opencode.ts ~/.config/opencode/plugins/kanopy.ts
 ```

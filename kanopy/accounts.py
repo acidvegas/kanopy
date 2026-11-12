@@ -601,24 +601,6 @@ def user_by_token(token: str) -> dict:
 	return dict(user) if user else None
 
 
-def user_create(username: str, password: str, is_admin: bool = False) -> int:
-	'''
-	Create a user directly (setup and admin use).
-
-	:param username: Username
-	:param password: Password
-	:param is_admin: Admin flag
-	'''
-
-	username = valid_username(username)
-	valid_password(password)
-
-	with kanban.connect() as db:
-		if db.execute('SELECT 1 FROM users WHERE username = ?', (username,)).fetchone():
-			raise ValueError('that username is taken')
-		return db.execute('INSERT INTO users (username, password, is_admin, created) VALUES (?, ?, ?, ?)', (username, password_hash(password), int(is_admin), kanban.now())).lastrowid
-
-
 def user_delete(user: dict, user_id: int):
 	'''
 	Delete a user (admin only); their projects move to the admin.
