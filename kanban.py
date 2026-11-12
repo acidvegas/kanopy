@@ -28,7 +28,7 @@ VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
 HISTORY  = 200 # events kept per task
-TYPES    = ('bug', 'ci', 'cleanup', 'credentials', 'decommission', 'dependency', 'deploy', 'design', 'docs', 'event', 'feature', 'finance', 'goal', 'habit', 'hardware', 'health', 'home', 'idea', 'learning', 'migration', 'note', 'performance', 'purchase', 'question', 'release', 'repo', 'research', 'review', 'security', 'support', 'test', 'travel') # global type: labels a fresh install starts with
+TYPES    = ('bug', 'ci', 'cleanup', 'decommission', 'dependency', 'deploy', 'design', 'docs', 'event', 'feature', 'finance', 'goal', 'habit', 'hardware', 'health', 'home', 'idea', 'learning', 'migration', 'note', 'performance', 'purchase', 'question', 'release', 'repo', 'research', 'review', 'security', 'support', 'test', 'travel') # global type: labels a fresh install starts with
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS projects (
