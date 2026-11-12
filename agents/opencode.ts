@@ -6,7 +6,7 @@ import { Plugin } from "@opencode/plugin"
 import { readFileSync } from "node:fs"
 import { homedir } from "node:os"
 
-const BASE  = process.env.KANOPY_URL ?? "http://127.0.0.1:8000"
+const BASE  = process.env.KANOPY_API ?? "http://127.0.0.1:8000"
 const TOKEN = `${homedir()}/.config/opencode/secrets/kanopy.token`
 const UA    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
