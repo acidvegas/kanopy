@@ -107,6 +107,8 @@ const KB = {
 	view      : 'board',
 	month     : new Date(new Date().getFullYear(), new Date().getMonth(), 1),
 	calSort   : [],
+	colSort   : [],
+	colKey    : '',
 	collapsed : new Set(store('kbCollapsed') || [])
 };
 
@@ -142,6 +144,8 @@ const kbView  = () => KB.view === 'calendar' ? 'calendar' : 'board';
 const kbBase  = () => `#/${kbView()}/${KB.project ?? 'all'}`;
 const ymd     = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const project = (id) => KB.projects.find((p) => p.id === id);
+const boardCols = (pid) => { for (let p = project(pid); p; p = project(p.parent_id)) if (p.columns.length) return p.columns; return Object.entries(STATUS).map(([status, title]) => ({ id: null, title, status })); }; // a project's own columns, else the nearest ancestor's, else the statuses
+const colOf   = (t, cols) => cols.find((c) => c.id && c.id === t.column_id) || cols.find((c) => c.status === t.status); // a column from another board falls back to the first one of its status
 const tint    = (id) => { let p = project(id); while (p && !p.color) p = project(p.parent_id); return p?.color || ''; };
 const chip    = (l, extra = '') => { const c = KB.labels.find((x) => x.name === l)?.color; return `<span class="chip" data-ns="${esc(l.split(':')[0])}"${c ? ` style="--c:${c}"` : ''}>${esc(l)}${extra}</span>`; };
 const COLORS  = ['#a78bfa', '#f472b6', '#f87171', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#22d3ee', '#60a5fa', '#94a3b8'];
@@ -236,11 +240,46 @@ function kbCard(t) {
 	</div>`;
 }
 
+function kbColumns(cols) {
+	const key = JSON.stringify(cols);
+	if (KB.colKey === key) return;
+	KB.colKey = key;
+	KB.colSort.forEach((sortable) => sortable.destroy());
+	const box = $('#board .columns');
+	box.style.setProperty('--cols', cols.length);
+	box.innerHTML = cols.map((c) => `<div class="column" data-status="${c.status}" data-col="${c.id ?? ''}"><header><span>${esc(c.title)}</span><b class="count"></b><button class="icon add" title="Add to ${esc(c.title)}" aria-label="Add to ${esc(c.title)}">${SVG.plus}</button></header><div class="cards"></div>${c.status === 'done' ? '<button class="more link-btn" hidden>Show more</button>' : ''}</div>`).join('');
+	KB.colSort = [...box.querySelectorAll('.column')].map((col) => {
+		const status = col.dataset.status;
+		const colId  = +col.dataset.col || null;
+		col.querySelector('.add').onclick = () => kbNewTask(status, colId);
+		if (col.querySelector('.more')) col.querySelector('.more').onclick = () => { KB.doneLimit += 50; kbBoard(); };
+		return new Sortable(col.querySelector('.cards'), {
+			group: 'kb', animation: 150, sort: status !== 'done', delay: 150, delayOnTouchOnly: true, ghostClass: 'ghost',
+			onStart: (evt) => { KB.dragTask = +evt.item.dataset.id; },
+			onEnd: (evt) => {
+				setTimeout(() => { KB.dragTask = null; }, 0);
+				if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
+				const to = evt.to.closest('.column');
+				guard(async () => {
+					await api('POST', '/api/reorder', { status: to.dataset.status, column_id: +to.dataset.col || null, ids: [...evt.to.children].map((c) => +c.dataset.id) });
+					await kbLoad();
+					if (KB.task) {
+						KB.task = await api('GET', `/api/tasks/${KB.task.id}`);
+						kbDrawer();
+					}
+				});
+			}
+		});
+	});
+}
+
 function kbBoard() {
 	const visible = KB.tasks.filter(kbMatch);
-	for (const status of Object.keys(STATUS)) {
-		let list = visible.filter((t) => t.status === status);
-		const col = $(`.column[data-status="${status}"]`);
+	const cols    = boardCols(KB.project);
+	kbColumns(cols);
+	for (const [i, col] of [...document.querySelectorAll('#board .column')].entries()) {
+		const status = cols[i].status;
+		let list = visible.filter((t) => colOf(t, cols) === cols[i]);
 		col.querySelector('.count').textContent = list.length;
 		if (status === 'done') {
 			list = list.sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
@@ -284,13 +323,13 @@ function kbBar() {
 	$('#kb-archive').classList.toggle('on', !!p?.archived);
 }
 
-async function kbNewTask(status = 'todo') {
+async function kbNewTask(status = 'todo', column_id = null) {
 	const target = project(KB.project)?.role >= 2 ? project(KB.project) : inbox();
 	if (!target) return toast('Create a project first, or ask for editor access to one', true);
 	const title  = await ask({ title: 'New task', text: `In ${target.path}`, value: '', ok: 'Create' });
 	if (!title) return;
 	await guard(async () => {
-		const task = await api('POST', '/api/tasks', { project_id: target.id, title, status });
+		const task = await api('POST', '/api/tasks', { project_id: target.id, title, status, ...(column_id && target.id === KB.project ? { column_id } : {}) });
 		location.hash = taskHref(task.id);
 	});
 }
@@ -423,6 +462,11 @@ async function lblAction(act, el) {
 
 /* ---------- project description ---------- */
 
+function colRows(cols, fresh) {
+	const opts = (value) => Object.entries(STATUS).map(([v, label]) => `<option value="${v}"${v === value ? ' selected' : ''}>${label}</option>`).join('');
+	return cols.map((c) => `<div class="col-row" data-id="${fresh ? '' : c.id ?? ''}"><input class="col-title" value="${esc(c.title)}" placeholder="Column name" spellcheck="false"><select class="col-status" title="Counts as">${opts(c.status)}</select><button class="icon small" data-desc="col-up" title="Move left" aria-label="Move left">${SVG.prev}</button><button class="icon small" data-desc="col-down" title="Move right" aria-label="Move right">${SVG.next}</button><button class="icon small" data-desc="col-del" title="Remove column" aria-label="Remove column">${SVG.x}</button></div>`).join('');
+}
+
 function descRender(p, editing = false) {
 	const box = $('#kb-desc');
 	box.hidden = !p;
@@ -430,8 +474,9 @@ function descRender(p, editing = false) {
 	if (!p) return;
 	const open = !store('descCollapsed');
 	if (editing) {
+		box.dataset.cols = ''; // set to dirty or reset once the columns are touched
 		const swatches = COLORS.map((c) => `<button class="swatch${p.color === c ? ' on' : ''}" data-desc="color" data-color="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('') + `<button class="swatch none${p.color ? '' : ' on'}" data-desc="color" data-color="" title="No color" aria-label="No color"></button>`;
-		box.innerHTML = `<div class="desc-head"><b>Description</b></div>${mdEditor('desc-input', p.description, 'Markdown. One line on what this is.', 5)}<label class="desc-folder"><b>Folder</b><input class="folder-input" value="${esc(p.folder)}" placeholder="~/code/... for repo projects" spellcheck="false" autocomplete="off"></label><div class="desc-colors"><b>Color</b>${swatches}</div><div class="row end"><button data-desc="cancel">Cancel</button><button class="primary" data-desc="save">Save</button></div>`;
+		box.innerHTML = `<div class="desc-head"><b>Description</b></div>${mdEditor('desc-input', p.description, 'Markdown. One line on what this is.', 5)}<label class="desc-folder"><b>Folder</b><input class="folder-input" value="${esc(p.folder)}" placeholder="~/code/... for repo projects" spellcheck="false" autocomplete="off"></label><div class="desc-colors"><b>Color</b>${swatches}</div><div class="desc-cols"><b>Columns</b><div class="col-rows">${colRows(p.columns.length ? p.columns : boardCols(p.parent_id), !p.columns.length)}</div><div class="row"><button data-desc="col-add">${SVG.plus} Add column</button>${p.columns.length ? '<button data-desc="col-reset" title="Drop this project\'s columns and use its parent\'s or the defaults">Use default columns</button>' : '<span class="dim">Inherited; editing gives this project its own</span>'}</div></div><div class="row end"><button data-desc="cancel">Cancel</button><button class="primary" data-desc="save">Save</button></div>`;
 		const input = box.querySelector('textarea');
 		input.style.height = Math.max(110, input.scrollHeight + 4) + 'px';
 		return input.focus();
@@ -1037,6 +1082,7 @@ function kbEvent(e) {
 		title      : () => `renamed it to ${v(e.new)}`,
 		description: () => 'edited the description',
 		status     : () => `moved it from ${v(STATUS[e.old] || e.old)} to ${v(STATUS[e.new] || e.new)}`,
+		column     : () => e.old ? `moved it from column ${v(e.old)} to ${v(e.new)}` : `moved it to column ${v(e.new)}`,
 		priority   : () => `set priority to ${v(PRIO[+e.new] ?? e.new)}`,
 		due        : () => e.new ? `set the due date to ${v(e.new)}` : 'cleared the due date',
 		remind_at  : () => e.new ? `set a reminder for ${v(new Date(e.new).toLocaleString())}` : 'cleared the reminder',
@@ -1059,9 +1105,11 @@ function kbDrawer() {
 	const page  = KB.view === 'task';
 	const opts  = (items, value) => items.map(([v, label]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(label)}</option>`).join('');
 	const title = `<textarea class="title" rows="1" data-field="title" spellcheck="false">${esc(t.title)}</textarea>`;
+	const tcols = boardCols(t.project_id);
 	const fields = `<div class="fields">
 				<label>Project<select data-field="project_id">${opts(KB.projects.filter((p) => !p.archived || p.id === t.project_id).map((p) => [p.id, p.path]), t.project_id)}</select></label>
 				<label>Status<select data-field="status">${opts(Object.entries(STATUS), t.status)}</select></label>
+				${tcols.some((c) => c.id) ? `<label>Column<select data-field="column_id">${opts(tcols.map((c) => [c.id, c.title]), colOf(t, tcols).id)}</select></label>` : ''}
 				<label>Priority<select data-field="priority">${opts(PRIO.map((p, i) => [i, i ? `${i} · ${p}` : p]), t.priority)}</select></label>
 				<label>Due<input type="date" data-field="due" value="${esc((t.due || '').slice(0, 10))}"></label>
 				<label>Reminder<input type="datetime-local" data-field="remind_at" value="${esc((t.remind_at || '').slice(0, 16))}"></label>
@@ -1318,6 +1366,7 @@ function kbBind() {
 	$('#settings-form').addEventListener('submit', (e) => { e.preventDefault(); guard(setSave); });
 	$('#set-clear').onclick = () => { const f = $('#settings-form'); f.elements.clear_token.value = '1'; f.elements.ntfy_token.value = ''; f.elements.ntfy_token.placeholder = 'cleared on save'; $('#set-clear').hidden = true; };
 	$('#settings-test').onclick = () => guard(async () => { await api('POST', '/api/settings/test'); toast('Test push sent'); });
+	$('#kb-desc').addEventListener('input', (e) => { if (e.target.closest('.col-row')) $('#kb-desc').dataset.cols = 'dirty'; });
 	$('#kb-desc').addEventListener('click', (e) => {
 		const box = $('#kb-desc');
 		const act = e.target.closest('[data-desc]')?.dataset.desc;
@@ -1327,7 +1376,15 @@ function kbBind() {
 		if (act === 'edit') return descRender(p, true);
 		if (act === 'cancel') return descRender(p);
 		if (act === 'color') return box.querySelectorAll('.swatch').forEach((el) => el.classList.toggle('on', el === e.target.closest('.swatch')));
-		if (act === 'save') guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { description: box.querySelector('textarea').value, folder: box.querySelector('.folder-input').value, color: box.querySelector('.swatch.on')?.dataset.color ?? p.color ?? '' }); await kbLoad(); toast('Project saved'); });
+		const row = e.target.closest('.col-row');
+		if (act.startsWith('col-')) box.dataset.cols = 'dirty';
+		if (act === 'col-add') return box.querySelector('.col-rows').insertAdjacentHTML('beforeend', colRows([{ id: null, title: '', status: 'todo' }], true));
+		if (act === 'col-del') return row.remove();
+		if (act === 'col-up') return row.previousElementSibling?.before(row);
+		if (act === 'col-down') return row.nextElementSibling?.after(row);
+		if (act === 'col-reset') { box.dataset.cols = 'reset'; box.querySelector('.col-rows').innerHTML = colRows(boardCols(p.parent_id), true); return; }
+		const cols = box.dataset.cols === 'reset' ? { columns: [] } : box.dataset.cols === 'dirty' ? { columns: [...box.querySelectorAll('.col-row')].map((r) => ({ id: +r.dataset.id || null, title: r.querySelector('.col-title').value, status: r.querySelector('.col-status').value })) } : {};
+		if (act === 'save') guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { description: box.querySelector('textarea').value, folder: box.querySelector('.folder-input').value, color: box.querySelector('.swatch.on')?.dataset.color ?? p.color ?? '', ...cols }); await kbLoad(); descRender(project(p.id)); toast('Project saved'); }); // close the editor so a second save cannot resend stale columns
 	});
 	$('#cal-prev').onclick  = () => kbMonth(-1);
 	$('#cal-next').onclick  = () => kbMonth(1);
@@ -1382,28 +1439,6 @@ function kbBind() {
 		kbTree();
 	});
 
-	document.querySelectorAll('.column').forEach((col) => {
-		const status = col.dataset.status;
-		col.querySelector('.add').onclick = () => kbNewTask(status);
-		new Sortable(col.querySelector('.cards'), {
-			group: 'kb', animation: 150, sort: status !== 'done', delay: 150, delayOnTouchOnly: true, ghostClass: 'ghost',
-			onStart: (evt) => { KB.dragTask = +evt.item.dataset.id; },
-			onEnd: (evt) => {
-				setTimeout(() => { KB.dragTask = null; }, 0);
-				if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
-				const to = evt.to.closest('.column').dataset.status;
-				guard(async () => {
-					await api('POST', '/api/reorder', { status: to, ids: [...evt.to.children].map((c) => +c.dataset.id) });
-					await kbLoad();
-					if (KB.task) {
-						KB.task = await api('GET', `/api/tasks/${KB.task.id}`);
-						kbDrawer();
-					}
-				});
-			}
-		});
-	});
-	$('.column[data-status="done"] .more').onclick = () => { KB.doneLimit += 50; kbBoard(); };
 	$('#board').addEventListener('click', (e) => {
 		const card = e.target.closest('.card');
 		if (!card || e.target.closest('.open-new')) return;
@@ -1482,7 +1517,7 @@ function paneBind(drawer) {
 		}
 		const field = el.dataset.field;
 		if (!field) return;
-		const value = ['project_id', 'priority'].includes(field) ? parseInt(el.value, 10) : el.value;
+		const value = ['project_id', 'priority', 'column_id'].includes(field) ? parseInt(el.value, 10) : el.value;
 		if (field === 'title' && !value.trim()) return kbDrawer();
 		kbPatch({ [field]: value });
 	});

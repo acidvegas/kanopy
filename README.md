@@ -17,6 +17,7 @@ A small self-hosted kanban board for projects, todos and ideas, built to be shar
 ## Features
 
 - **Board:** To-Do, Doing and Done columns with drag and drop *(touch works too)*; a project's board includes its sub-projects
+- **Columns:** each project can rename, add, remove and reorder its board columns in the project editor; every column counts as To-Do, Doing or Done, so archiving, notifications and agents keep working. Sub-projects use their parent's columns unless they have their own, and All tasks always shows the three statuses. Agents can pass `column` by name
 - **Projects:** tree addressed by path *(`AI/hermes`)* with open task counts and colors *(sub-projects get a random one)*; drag in the sidebar to reorder, drop onto another project to nest it, drop onto "All tasks" to make it top-level *(desktop only; on a phone, move a project by renaming its path)*
 - **Project description:** markdown panel above the board, collapsible, edit in place; the project color and folder *(the local directory a repo project lives in, used by the agent session briefing)* are set in the same editor
 - **Task page:** `#/task/123` opens a task as a full page *(wide description and comments, details on the side, previous/next within its column)*; the expand button in the side panel or the corner button on a card *(new tab)* opens it, search results and notifications link to it

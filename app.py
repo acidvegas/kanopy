@@ -432,9 +432,12 @@ def api_project_order() -> dict:
 
 @app.patch('/api/projects/<int:project_id>')
 def api_project_update(project_id: int) -> dict:
-	'''Rename/move, describe, archive or color a project.'''
+	'''Rename/move, describe, archive, color a project or replace its board columns.'''
 
 	body = request.get_json(force=True) or {}
+
+	if 'columns' in body:
+		kanban.columns_save(project_id, body['columns'] or [])
 
 	return kanban.project_save(body.get('path'), project_id, body.get('description'), body.get('archived'), body.get('color'), body.get('folder'))
 
@@ -451,7 +454,7 @@ def api_reorder() -> dict:
 	'''Set the status and order of the tasks in one column.'''
 
 	body = request.get_json(force=True) or {}
-	kanban.reorder(body.get('status'), [int(i) for i in body.get('ids', [])])
+	kanban.reorder(body.get('status'), [int(i) for i in body.get('ids', [])], body.get('column_id'))
 
 	return {'ok': True}
 
