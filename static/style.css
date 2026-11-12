@@ -238,11 +238,10 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 :is(#drawer, #taskpage) .history summary::-webkit-details-marker { display: none; }
 :is(#drawer, #taskpage) .history .chev { width: 12px; height: 12px; stroke: currentColor; stroke-width: 2.5; fill: none; transition: transform .15s; }
 :is(#drawer, #taskpage) .history[open] .chev { transform: rotate(90deg); }
-:is(#drawer, #taskpage, #kb-desc) .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; }
-:is(#drawer, #taskpage, #kb-desc) .events li { display: flex; justify-content: space-between; gap: .75rem; }
-:is(#drawer, #taskpage, #kb-desc) .events .at { white-space: nowrap; font-size: .72rem; }
-:is(#drawer, #taskpage, #kb-desc) .events a { color: var(--accent); }
-#kb-desc .activity { margin: .3rem 0 .2rem; }
+:is(#drawer, #taskpage, #activity) .events { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .3rem; font-size: .8rem; }
+:is(#drawer, #taskpage, #activity) .events li { display: flex; justify-content: space-between; gap: .75rem; }
+:is(#drawer, #taskpage, #activity) .events .at { white-space: nowrap; font-size: .72rem; }
+:is(#drawer, #taskpage, #activity) .events a { color: var(--accent); }
 .dim { color: var(--muted); }
 
 @media (max-width: 800px) {
@@ -481,7 +480,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 #drawer.drop-files, #taskpage.drop-files { outline: 2px dashed var(--accent); outline-offset: -6px; }
 
 /* bulk select */
-#kb-select.on { color: var(--text); background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
+#kb-select.on, #kb-activity.on { color: var(--text); background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
 .selecting .card { cursor: pointer; }
 .selecting .card { position: relative; }
 .selecting .card::before { content: ''; position: absolute; top: .75rem; right: .75rem; width: 16px; height: 16px; border-radius: 5px; border: 2px solid var(--muted); }
@@ -625,7 +624,13 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .share .row { display: flex; justify-content: flex-end; }
 .share-row .icon.small { padding: .15rem; background: transparent; border-color: transparent; color: var(--muted); }
 .share-row .icon.small svg { width: 14px; height: 14px; stroke: currentColor; stroke-width: 2; fill: none; }
-#inbox { flex: 1; overflow-y: auto; padding: 1.25rem; }
+#inbox, #activity { flex: 1; overflow-y: auto; padding: 1.25rem; }
+.activity-wrap { max-width: 860px; margin: 0 auto; }
+.activity-wrap h3 { margin: 1.2rem 0 .5rem; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+#activity .events { font-size: .86rem; gap: 0; background: var(--raised); border: 1px solid var(--line); border-radius: 10px; }
+#activity .events li { padding: .55rem .8rem; border-top: 1px solid var(--line); align-items: baseline; }
+#activity .events li:first-child { border-top: 0; }
+#activity .more { display: block; margin: 1rem auto; }
 .inbox-wrap { max-width: 860px; margin: 0 auto; display: flex; flex-direction: column; gap: .4rem; }
 .inbox-head { display: flex; align-items: center; gap: .6rem; margin-bottom: .4rem; }
 .inbox-head h2 { margin: 0; font-size: 1.1rem; }

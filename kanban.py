@@ -79,11 +79,12 @@ CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEG
 '''
 
 
-def activity(project_id: int, limit: int = 30) -> list:
+def activity(project_id: int, before: int = 0, limit: int = 100) -> list:
 	'''
-	Return the newest task history events across a project and the sub-projects the user can see, with each event's task id and title.
+	Return the newest task history events across a project and the sub-projects the user can see, with each event's id, task id and title.
 
 	:param project_id: Project id
+	:param before: Only events older than this event id (0 for the newest)
 	:param limit: Events returned
 	'''
 
@@ -94,7 +95,7 @@ def activity(project_id: int, limit: int = 30) -> list:
 		lv     = levels(db)
 		prefix = names[project_id] + '/'
 		scope  = [pid for pid, path in names.items() if (pid == project_id or path.startswith(prefix)) and (lv is None or lv.get(pid))]
-		return [dict(r) for r in db.execute(f'SELECT e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) ORDER BY e.id DESC LIMIT ?', (*scope, limit))]
+		return [dict(r) for r in db.execute(f'SELECT e.id, e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) AND (? = 0 OR e.id < ?) ORDER BY e.id DESC LIMIT ?', (*scope, before, before, limit))]
 
 
 def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = True):
