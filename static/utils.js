@@ -194,10 +194,13 @@ function kbTree() {
 	const hidden = (p) => p.path.split('/').slice(0, -1).some((_, i, a) => KB.collapsed.has(p.path.split('/').slice(0, i + 1).join('/')));
 	const parent = (p) => KB.projects.some((c) => c.parent_id === p.id && (KB.archived || !c.archived));
 	const mine   = $('#kb-filter').value.trim() === '@me';
+	const words  = $('#kb-filter').value.toLowerCase().split(/\s+/).filter((w) => w && !/^[#@]|:/.test(w)); // plain words; #id, @user and labels leave the tree alone
+	const hit    = (p) => words.every((w) => p.path.toLowerCase().includes(w));
+	const keep   = words.length && KB.projects.some(hit) ? new Set(KB.projects.filter(hit).flatMap((p) => p.path.split('/').map((_, i, a) => a.slice(0, i + 1).join('/')))) : null; // matches plus their parents; no match = text is about tasks, show every project
 	nav.innerHTML = `<a class="item${KB.project === null && !mine ? ' active' : ''}" href="#/${kbView()}/all" data-all="1" style="--depth:0">${SVG.proj}<span>All tasks</span><b class="count">${open}</b></a>` +
 		`<a class="item${KB.project === null && mine ? ' active' : ''}" href="#/${kbView()}/all" data-mine="1" style="--depth:0">${avatar(KB.me?.username || '?')}<span>Assigned to me</span></a>`;
 	for (const p of KB.projects) {
-		if ((p.archived && !KB.archived && p.id !== KB.project) || hidden(p)) continue;
+		if ((p.archived && !KB.archived && p.id !== KB.project) || (keep ? !keep.has(p.path) : hidden(p))) continue;
 		const depth = p.path.split('/').length - 1;
 		const chev  = parent(p) ? `<i class="chev-btn" data-path="${esc(p.path)}">${ICONS.chev}</i>` : '<i class="chev-pad"></i>';
 		const dot   = p.color ? `<i class="dot" style="--c:${p.color}"></i>` : '';
@@ -1315,7 +1318,7 @@ async function kbRoute(hash) {
 /* ---------- events ---------- */
 
 function kbBind() {
-	$('#kb-filter').addEventListener('input', kbRender);
+	$('#kb-filter').addEventListener('input', () => { kbTree(); kbRender(); });
 	dndBind();
 	$('#search-q').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => guard(searchRun), 200); });
 	$('#search-filters').addEventListener('change', () => guard(searchRun));
@@ -1357,7 +1360,7 @@ function kbBind() {
 		await guard(async () => { await api('PATCH', '/api/labels', { name: $('#lbl-palette').dataset.name, color: sw.dataset.color }); await kbLoad(); });
 	};
 	document.addEventListener('click', (e) => { if (!e.target.closest('#lbl-palette')) $('#lbl-palette').hidden = true; });
-	$('#kb-filter').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; kbRender(); e.target.blur(); } });
+	$('#kb-filter').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; kbTree(); kbRender(); e.target.blur(); } });
 	$('#kb-new-task').onclick = () => kbNewTask();
 	$('#kb-new-project').onclick = async () => {
 		const base = project(KB.project);

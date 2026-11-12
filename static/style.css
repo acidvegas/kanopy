@@ -144,7 +144,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 
 #kb-filter { width: 100%; padding: .5rem .75rem; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); outline: none; }
 #kb-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
-#sidebar .credit { padding-top: .6rem; border-top: 1px solid var(--line); }
+#sidebar .credit { margin: 0 -.75rem -1rem; padding: .75rem; border-top: 1px solid var(--line); display: flex; justify-content: center; }
 #sidebar .credit a { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .78rem; text-decoration: none; }
 #sidebar .credit a:hover { color: var(--text); }
 #sidebar .credit svg { width: 15px; height: 15px; fill: currentColor; stroke: none; }
