@@ -28,7 +28,7 @@ VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
 HISTORY  = 200 # events kept per task
-TYPES    = ('bug', 'ci', 'cleanup', 'decommission', 'dependency', 'deploy', 'design', 'docs', 'event', 'feature', 'finance', 'goal', 'habit', 'hardware', 'health', 'home', 'idea', 'learning', 'migration', 'note', 'performance', 'purchase', 'question', 'release', 'repo', 'research', 'review', 'security', 'support', 'test', 'travel') # global type: labels a fresh install starts with
+TYPES    = {'bug': '#f87171', 'ci': None, 'cleanup': None, 'decommission': None, 'dependency': None, 'deploy': None, 'design': None, 'docs': None, 'event': '#22d3ee', 'feature': None, 'finance': '#22d3ee', 'goal': '#22d3ee', 'habit': '#22d3ee', 'hardware': None, 'health': '#22d3ee', 'home': '#22d3ee', 'idea': None, 'learning': '#22d3ee', 'migration': None, 'note': '#22d3ee', 'performance': None, 'purchase': '#22d3ee', 'question': '#22d3ee', 'release': None, 'repo': None, 'research': None, 'review': None, 'security': '#f87171', 'support': None, 'test': None, 'travel': '#22d3ee'} # global type: labels a fresh install starts with; red flags trouble, cyan is life and thoughts
 
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS projects (
@@ -351,7 +351,7 @@ def init():
 		db.execute('CREATE UNIQUE INDEX IF NOT EXISTS labels_name ON labels (name, COALESCE(owner_id, 0))')
 		if not db.execute('SELECT 1 FROM projects').fetchone():
 			db.execute("INSERT INTO projects (title) VALUES ('Inbox')")
-			db.executemany('INSERT INTO labels (name) VALUES (?)', [('type:' + t,) for t in TYPES])
+			db.executemany('INSERT INTO labels (name, color) VALUES (?, ?)', [('type:' + t, c) for t, c in TYPES.items()])
 
 
 def absorb(db: sqlite3.Connection, label_id: int, name: str):
