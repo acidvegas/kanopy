@@ -16,6 +16,7 @@ INSTRUCTIONS = next(p for p in (Path(__file__).parent / 'instructions.txt', Path
 NAMESPACES   = {'host': True, 'type': False} # namespace -> new values allowed without create
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
+SEEN         = {} # (user id, agent, task id) -> hash of the description that agent last read or wrote, for the stale-write check
 REL_NAMES    = (('blocking', 'blocks'), ('blocked', 'blocked-by'), ('parenttask', 'parent'), ('subtask', 'subtasks'), ('related', 'related'), ('precedes', 'precedes'), ('follows', 'follows'), ('duplicateof', 'duplicate-of'), ('duplicates', 'duplicates'))
 
 STR  = {'type': 'string'}
@@ -123,7 +124,7 @@ def call(name: str, args: dict, agent: str) -> str:
 			return read_file(int(args['file']))
 		if not (args.get('ids') or args.get('id')):
 			raise ValueError('give ids or file')
-		return '\n\n---\n\n'.join(get_task(int(i)) for i in args.get('ids') or [args['id']])
+		return '\n\n---\n\n'.join(get_task(int(i), agent) for i in args.get('ids') or [args['id']])
 
 	if name == 'save_task':
 		return save_task(args, agent)
@@ -223,15 +224,17 @@ def context(cwd: str) -> str:
 	return '\n'.join(lines)
 
 
-def get_task(task_id: int) -> str:
+def get_task(task_id: int, agent: str) -> str:
 	'''
 	Render a full task: line, description, relations and comments.
 
 	:param task_id: Task id
+	:param agent: Agent tag, remembered as having read this description
 	'''
 
 	t   = kanban.task(task_id)
 	out = [task_line(task_id)]
+	seen(task_id, agent, t['description'])
 
 	if t['description'].strip():
 		out += ['', t['description'].strip()]
@@ -556,6 +559,8 @@ def save_task(args: dict, agent: str) -> str:
 
 	if args.get('id'):
 		t = kanban.task(int(args['id']))
+		if 'description' in args and SEEN.get(seen_key(t['id'], agent), hash(t['description'])) != hash(t['description']):
+			raise ValueError(f'#{t["id"]} description changed since you last read it; get_task it again and redo your edit on the new text')
 		if add or remove:
 			fields['labels'] = [l for l in t['labels'] if l not in remove] + add
 		if assign or unassign:
@@ -563,6 +568,7 @@ def save_task(args: dict, agent: str) -> str:
 		if args.get('check'):
 			fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
 		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
+		seen(t['id'], agent, saved['description'])
 		notify.task_event(t, saved)
 		out = task_line(t['id'])
 		if saved['status'] == 'done' and t['status'] != 'done':
@@ -580,6 +586,7 @@ def save_task(args: dict, agent: str) -> str:
 	if assign:
 		fields['assignees'] = assign
 	created = with_project(fields, new_path, lambda: kanban.task_create(fields))
+	seen(created['id'], agent, created['description'])
 	notify.task_event(None, created)
 	extras(created['id'], args, agent)
 
@@ -611,6 +618,31 @@ def with_project(fields: dict, new_path: str, write):
 		for pid in sorted({p['id'] for p in kanban.projects()} - before, reverse=True): # children were created after their parents
 			kanban.project_delete(pid)
 		raise
+
+
+def seen(task_id: int, agent: str, description: str):
+	'''
+	Remember the description an agent has read or written.
+
+	:param task_id: Task id
+	:param agent: Agent tag
+	:param description: Description text
+	'''
+
+	SEEN[seen_key(task_id, agent)] = hash(description)
+
+
+def seen_key(task_id: int, agent: str) -> tuple:
+	'''
+	Key for SEEN: the token's user, the agent name and the task.
+
+	:param task_id: Task id
+	:param agent: Agent tag
+	'''
+
+	user = kanban.ACTOR.get()
+
+	return (user['id'] if user else 0, agent, task_id)
 
 
 def task_line(task_id: int) -> str:
