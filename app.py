@@ -17,6 +17,11 @@ except ImportError:
 	raise ImportError('missing flask library (pip install flask)')
 
 try:
+	from werkzeug.middleware.proxy_fix import ProxyFix
+except ImportError:
+	raise ImportError('missing werkzeug library (pip install flask)')
+
+try:
 	from waitress import serve
 except ImportError:
 	raise ImportError('missing waitress library (pip install waitress)')
@@ -37,11 +42,15 @@ KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admi
 OPEN   = ('/api/login', '/api/logout', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 STATIC = Path(__file__).parent / 'static'
+URL    = os.environ.get('KANOPY_URL', '').rstrip('/') # public address when behind a reverse proxy
 
-notify.BASE_URL = f'http://{HOST}:{PORT}'
+notify.BASE_URL = URL or f'http://{HOST}:{PORT}'
 
 app = Flask(__name__, static_folder=None)
 app.config['MAX_CONTENT_LENGTH'] = 4 * kanban.MAX_FILE
+
+if URL:
+	app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1) # the proxy's X-Forwarded-For/-Proto give the real client ip (sign-in limit) and https (Secure cookie)
 
 
 @app.get('/api/invites')
@@ -636,7 +645,7 @@ def session_response(token: str) -> Response:
 	'''
 
 	resp = Response('{"ok": true}', mimetype='application/json')
-	resp.set_cookie(COOKIE, token, max_age=accounts.SESSION_DAYS * 86400, httponly=True, samesite='Lax')
+	resp.set_cookie(COOKIE, token, max_age=accounts.SESSION_DAYS * 86400, httponly=True, samesite='Lax', secure=request.is_secure)
 
 	return resp
 

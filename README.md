@@ -128,7 +128,7 @@ ln -s /path/to/kanopy/commands/task.md ~/.config/opencode/command/task.md
 ```sh
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
-cp .env.example .env # host and port; KANOPY_KEY (optional) becomes the admin's API token
+cp .env.example .env # host and port; KANOPY_KEY (optional) becomes the admin's API token; KANOPY_URL only behind a reverse proxy
 cp instructions.example.txt instructions.txt # optional: describe your own project layout for agents
 sudo cp kanopy.service /etc/systemd/system/ # set YOUR_USER and /path/to/kanopy first
 sudo systemctl enable --now kanopy
@@ -146,4 +146,24 @@ docker compose exec kanopy python -c "import accounts; accounts.user_create('nam
 
 `data/` is bind-mounted, so the database, backups and attachments are the same files the venv setup uses. The container shares the host network and listens on `KANOPY_HOST:KANOPY_PORT` from `.env`. `instructions.txt` is copied in at build time; rebuild after changing it.
 
-Host and port come from `.env` *(default 127.0.0.1:8000)*; notification links and the social preview follow them.. The frontend libraries *(marked, DOMPurify, SortableJS)* are vendored in `static/vendor`.
+### Reverse proxy
+
+To serve kanopy on a domain over HTTPS, keep `KANOPY_HOST=127.0.0.1` and set `KANOPY_URL` in `.env` to the public address *(`https://kanopy.example.com`)*. Notification and invite links then use it, the sign-in limit counts the real client address from `X-Forwarded-For`, and the session cookie is marked Secure. A matching nginx server block *(certificates from certbot)*:
+```nginx
+server {
+	listen 443 ssl;
+	server_name kanopy.example.com;
+	ssl_certificate     /etc/letsencrypt/live/kanopy.example.com/fullchain.pem;
+	ssl_certificate_key /etc/letsencrypt/live/kanopy.example.com/privkey.pem;
+	client_max_body_size 100m;
+
+	location / {
+		proxy_pass http://127.0.0.1:8000;
+		proxy_set_header Host $host;
+		proxy_set_header X-Forwarded-For $remote_addr;
+		proxy_set_header X-Forwarded-Proto $scheme;
+	}
+}
+```
+
+Host and port come from `.env` *(default 127.0.0.1:8000)*; notification links and the social preview follow them unless `KANOPY_URL` is set. The frontend libraries *(marked, DOMPurify, SortableJS)* are vendored in `static/vendor`.
