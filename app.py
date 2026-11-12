@@ -431,6 +431,13 @@ def api_link_remove(task_id: int) -> dict:
 	return kanban.link_remove(task_id, request.args.get('kind'), int(request.args.get('other') or 0))
 
 
+@app.get('/api/projects/<int:project_id>/activity')
+def api_project_activity(project_id: int) -> dict:
+	'''Return recent task history across a project and its sub-projects.'''
+
+	return {'events': kanban.activity(project_id)}
+
+
 @app.post('/api/projects')
 def api_project_create() -> dict:
 	'''Create a project by path.'''
