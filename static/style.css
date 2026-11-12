@@ -390,7 +390,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 :is(#settings-form, #profile-form) input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .field-row .link-btn { color: var(--danger); font-size: .8rem; width: auto; flex: none; }
 .toggles { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-.toggle { display: flex; align-items: center; gap: .9rem; padding: .75rem .9rem; cursor: pointer; background: var(--bg); }
+.toggle { position: relative; display: flex; align-items: center; gap: .9rem; padding: .75rem .9rem; cursor: pointer; background: var(--bg); }
 .toggle + .toggle { border-top: 1px solid var(--line); }
 .toggle:hover { background: var(--hover); }
 .toggle > input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; }
