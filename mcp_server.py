@@ -59,6 +59,7 @@ TOOLS = [
 		'priority'      : {**INT, 'description': '1-5, 0 clears'},
 		'due'           : {**STR, 'description': 'YYYY-MM-DD, "" clears'},
 		'remind_at'     : {**STR, 'description': 'YYYY-MM-DDTHH:MM local, "" clears'},
+		'repeat'        : {**STR, 'description': 'daily, weekly, monthly, yearly, every N days/weeks/months/years, weekdays, or mon,wed,fri; done makes the next copy; "" stops'},
 		'status'        : {**STR, 'description': 'todo, doing, done'},
 		'check'         : {**STR, 'description': 'tick checklist item by number or unique text'},
 		'checked'       : {**BOOL, 'description': 'false unticks'},
@@ -344,6 +345,8 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 		out += f'  due:{t["due"][:10]}'
 	if t['remind_at']:
 		out += f'  remind:{t["remind_at"][:16]}'
+	if t['repeat']:
+		out += f'  repeat:{t["repeat"].replace(" ", "-")}'
 	if t['checks'][1]:
 		out += f'  ☐{t["checks"][0]}/{t["checks"][1]}'
 	if t['labels']:
@@ -539,7 +542,7 @@ def save_task(args: dict, agent: str) -> str:
 				out.append(f'#{task_id} error: {exc}')
 		return '\n'.join(out)
 
-	fields = {key: args[key] for key in ('title', 'description', 'priority', 'due', 'remind_at', 'status') if key in args}
+	fields = {key: args[key] for key in ('title', 'description', 'priority', 'due', 'remind_at', 'repeat', 'status') if key in args}
 
 	new_path = None
 	if args.get('project'):
