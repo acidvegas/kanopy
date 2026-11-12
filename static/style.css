@@ -302,6 +302,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 .ev.done span { text-decoration: line-through; color: var(--muted); }
 .ev:hover { border-color: var(--accent); }
 .ev.ghost { opacity: .35; }
+.ev.future { opacity: .5; border-style: dotted; cursor: default; }
 
 /* labels page */
 .lbl-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: .5rem; }
