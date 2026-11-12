@@ -199,6 +199,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 #drawer > header .id { font-family: var(--mono); color: var(--accent); font-weight: 600; }
 :is(#drawer, #taskpage) .spacer { flex: 1; }
 :is(#drawer, #taskpage) .body { flex: 1; overflow-y: auto; padding: 1rem 1.25rem 2rem; display: flex; flex-direction: column; gap: 1.1rem; }
+:is(#drawer, #taskpage):focus { outline: none; } /* focused on open so the keyboard starts inside the task; no ring around the whole panel */
 :is(#drawer, #taskpage) textarea.title { width: 100%; resize: none; border: 1px solid transparent; background: transparent; font-size: 1.3rem; font-weight: 700; line-height: 1.35; padding: .2rem .35rem; margin: 0 -.35rem; border-radius: 8px; outline: none; overflow: hidden; field-sizing: content; min-height: 2.3em; flex: none; }
 :is(#drawer, #taskpage) textarea.title:hover { border-color: var(--line); }
 :is(#drawer, #taskpage) textarea.title:focus { border-color: var(--accent); background: var(--bg); }
