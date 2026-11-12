@@ -327,26 +327,29 @@ function kbCalendar() {
 	const start  = new Date(m.getFullYear(), m.getMonth(), 1 - new Date(m.getFullYear(), m.getMonth(), 1).getDay());
 	const today  = ymd(new Date());
 	const events = {};
+	const range  = `${ymd(start)}:${ymd(new Date(start.getFullYear(), start.getMonth(), start.getDate() + 41))}`;
 	for (const t of KB.tasks.filter(kbMatch)) {
 		if (t.due) (events[t.due.slice(0, 10)] ??= []).push({ t, kind: 'due' });
 		if (t.remind_at) (events[t.remind_at.slice(0, 10)] ??= []).push({ t, kind: 'remind' });
+		if (KB.repeats?.range === range) for (const day of KB.repeats.dates[t.id] || []) (events[day] ??= []).push({ t, kind: t.due ? 'due' : 'remind', future: true });
 	}
+	if (KB.repeats?.range !== range || KB.repeats.seq !== KB.loadSeq) repeatsLoad(range); // upcoming repeats, fetched per month and board load
 	$('#cal-title').textContent = m.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 	let html = [0, 1, 2, 3, 4, 5, 6].map((i) => `<div class="dow">${new Date(2026, 1, i + 1).toLocaleDateString(undefined, { weekday: 'short' })}</div>`).join('');
 	for (let i = 0; i < 42; i++) {
 		const d    = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
 		const key  = ymd(d);
-		const evs  = (events[key] || []).map(({ t, kind }) => {
+		const evs  = (events[key] || []).map(({ t, kind, future }) => {
 			const c    = tint(t.project_id);
-			const late = kind === 'due' && t.status !== 'done' && key < today ? ' late' : '';
-			return `<div class="ev ${kind} ${t.status}${late}" data-id="${t.id}" data-kind="${kind}" title="#${t.id} ${esc(t.title)} (${esc(t.project)})">${c ? `<i class="dot" style="--c:${c}"></i>` : ''}${kind === 'remind' ? `<b>${t.remind_at.slice(11, 16)}</b>` : ''}<span>${esc(t.title)}</span></div>`;
+			const late = kind === 'due' && t.status !== 'done' && key < today && !future ? ' late' : '';
+			return `<div class="ev ${kind} ${t.status}${late}${future ? ' future' : ''}" data-id="${t.id}" data-kind="${kind}" title="#${t.id} ${esc(t.title)} (${esc(t.project)})${future ? `, repeats ${esc(t.repeat)}` : ''}">${c ? `<i class="dot" style="--c:${c}"></i>` : ''}${kind === 'remind' ? `<b>${t.remind_at.slice(11, 16)}</b>` : ''}<span>${esc(t.title)}</span></div>`;
 		}).join('');
 		html += `<div class="day${d.getMonth() !== m.getMonth() ? ' other' : ''}${key === today ? ' today' : ''}"><span class="num">${d.getDate()}</span><div class="evs" data-date="${key}">${evs}</div></div>`;
 	}
 	$('#cal-grid').innerHTML = html;
 	KB.calSort.forEach((s) => s.destroy());
 	KB.calSort = [...document.querySelectorAll('#cal-grid .evs')].map((el) => new Sortable(el, {
-		group: 'cal', sort: false, animation: 150, delay: 150, delayOnTouchOnly: true, ghostClass: 'ghost',
+		group: 'cal', sort: false, filter: '.future', animation: 150, delay: 150, delayOnTouchOnly: true, ghostClass: 'ghost',
 		onEnd: (evt) => {
 			const date = evt.to.dataset.date;
 			if (evt.from === evt.to) return;
@@ -360,6 +363,14 @@ function kbCalendar() {
 			});
 		}
 	}));
+}
+
+async function repeatsLoad(range) {
+	const seq  = KB.loadSeq;
+	const [from, to] = range.split(':');
+	const data = await api('GET', `/api/repeats?from=${from}&to=${to}`);
+	KB.repeats = { range, seq, dates: data.dates };
+	if (KB.view === 'calendar') kbCalendar();
 }
 
 function kbMonth(delta) {

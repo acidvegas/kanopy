@@ -492,6 +492,13 @@ def api_reorder() -> dict:
 	return {'ok': True}
 
 
+@app.get('/api/repeats')
+def api_repeats() -> dict:
+	'''Return future dates of repeating tasks between from and to (YYYY-MM-DD), for the calendar.'''
+
+	return {'dates': kanban.repeat_dates(request.args.get('from', ''), request.args.get('to', ''))}
+
+
 @app.get('/api/search')
 def api_search() -> dict:
 	'''Search task titles, descriptions and comments.'''

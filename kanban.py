@@ -897,6 +897,36 @@ def reorder(status: str, ids: list):
 				touch(db, task_id)
 
 
+def repeat_dates(start: str, end: str) -> dict:
+	'''
+	Return task id -> upcoming dates (YYYY-MM-DD) between start and end for every open repeating task the user can see, projected from its due date (or reminder).
+
+	:param start: First day, YYYY-MM-DD
+	:param end: Last day, YYYY-MM-DD
+	'''
+
+	try:
+		start, end = date.fromisoformat(start), date.fromisoformat(end)
+	except ValueError:
+		raise ValueError('from and to must look like YYYY-MM-DD') from None
+
+	if (end - start).days > 62:
+		raise ValueError('ask for at most 62 days')
+
+	with connect() as db:
+		lv   = levels(db)
+		rows = [r for r in db.execute("SELECT id, project_id, due, remind_at, repeat FROM tasks WHERE repeat IS NOT NULL AND status != 'done' AND archived = 0 AND COALESCE(due, remind_at) IS NOT NULL") if lv is None or lv.get(r['project_id'])]
+
+	out = {}
+	for r in rows:
+		base = day = date.fromisoformat((r['due'] or r['remind_at'])[:10])
+		while (day := repeat_next(r['repeat'], base, day)) <= end:
+			if day >= start:
+				out.setdefault(r['id'], []).append(day.isoformat())
+
+	return out
+
+
 def repeat_next(spec: str, base: date, today: date) -> date:
 	'''
 	Return the next date of a repeat rule after base, never today or earlier.
