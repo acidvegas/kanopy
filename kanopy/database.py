@@ -80,7 +80,7 @@ class Connection:
 
 		if not self.postgres:
 			cur = self.raw.execute(sql, params)
-			return Cursor(cur, cur.lastrowid)
+			return Cursor(cur, cur.lastrowid, self)
 
 		sql, returning = translate(sql)
 		cur            = self.raw.cursor()
@@ -88,7 +88,7 @@ class Connection:
 		row  = cur.fetchone() if returning and cur.description else None # no row when ON CONFLICT DO NOTHING skipped the insert
 		last = row[0] if row else None
 
-		return Cursor(cur, last)
+		return Cursor(cur, last, self)
 
 
 	def executemany(self, sql: str, rows: list) -> 'Cursor':
@@ -100,13 +100,13 @@ class Connection:
 		'''
 
 		if not self.postgres:
-			return Cursor(self.raw.executemany(sql, rows), None)
+			return Cursor(self.raw.executemany(sql, rows), None, self)
 
 		sql, returning = translate(sql)
 		cur            = self.raw.cursor()
 		cur.executemany(re.sub(r' RETURNING id$', '', sql) if returning else sql, list(rows))
 
-		return Cursor(cur, None)
+		return Cursor(cur, None, self)
 
 
 	def executescript(self, script: str):
@@ -131,9 +131,10 @@ class Connection:
 class Cursor:
 	'''The parts of a sqlite3 cursor kanban.py uses, for either backend.'''
 
-	def __init__(self, cur, lastrowid: int):
+	def __init__(self, cur, lastrowid: int, owner: Connection):
 		self.cur       = cur
 		self.lastrowid = lastrowid
+		self.owner     = owner # keeps the connection open while its results are read
 
 
 	def __iter__(self):
