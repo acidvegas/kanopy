@@ -177,6 +177,18 @@ class TestPushes(Base):
 		self.assertEqual(calls, [1])
 
 
+	def test_sent_purge(self):
+		'''Old sent-push records are forgotten, recent ones kept.'''
+
+		notify.once('due', 'old', lambda: None)
+		notify.once('due', 'new', lambda: None)
+		with kanban.connect() as db:
+			db.execute("UPDATE sent SET at = '2000-01-01T00:00:00+00:00' WHERE key = 'old'")
+		notify.sent_purge()
+		with kanban.connect() as db:
+			self.assertEqual([r[0] for r in db.execute('SELECT key FROM sent')], ['new'])
+
+
 	def test_agent_done_toggle(self):
 		'''The agent-done push follows its setting.'''
 

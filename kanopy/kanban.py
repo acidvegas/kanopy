@@ -1048,7 +1048,7 @@ def require(db: sqlite3.Connection, table: str, row_id: int) -> sqlite3.Row:
 	return row
 
 
-def search(query: str, project: int = None, statuses: list = None, label: str = None, priority: int = 0, due: str = '', fields: list = None, sort: str = 'updated', assignee: str = None) -> list:
+def search(query: str, project: int = None, statuses: list = None, label: str = None, priority: int = 0, due: str = '', fields: list = None, sort: str = 'updated', assignee: str = None, limit: int = None) -> list:
 	'''
 	Find tasks whose chosen fields contain every word of the query (case-insensitive), narrowed by filters. An empty query lists every task the filters allow.
 
@@ -1061,6 +1061,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 	:param fields: Any of title, description, comments; default all three
 	:param sort: updated, created, priority, due or id
 	:param assignee: Username every result must be assigned to
+	:param limit: Return only the first this many, after sorting
 	'''
 
 	words  = [w.lower() for w in query.split() if w.strip()]
@@ -1109,6 +1110,16 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 			params += [pattern] * len(parts)
 		cond  = (' WHERE ' + ' AND '.join(where)) if where else ''
 		rows  = db.execute(f'SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.due, t.created, t.updated, t.archived FROM tasks t{cond}', params).fetchall()
+		if sort == 'priority':
+			rows.sort(key=lambda r: -r['priority'])
+		elif sort == 'due':
+			rows.sort(key=lambda r: (not (r['due'] or '')[:10], (r['due'] or '')[:10]))
+		elif sort == 'id':
+			rows.sort(key=lambda r: r['id'], reverse=True)
+		else:
+			rows.sort(key=lambda r: r[sort], reverse=True)
+			rows.sort(key=lambda r: r['status'] == 'done')
+		rows  = rows[:limit] if limit else rows # labels, people and snippets only for the results returned
 		ids   = [r['id'] for r in rows]
 		tags, people, notes = {}, {}, {}
 		for chunk in range(0, len(ids), 900):
@@ -1133,16 +1144,6 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 					where, snippet = kind, hit[:220]
 					break
 		out.append({'id': row['id'], 'title': row['title'], 'project': names[row['project_id']], 'project_id': row['project_id'], 'status': row['status'], 'priority': row['priority'], 'due': d or None, 'labels': tags.get(row['id'], []), 'assignees': people.get(row['id'], []), 'archived': row['archived'], 'where': where, 'snippet': snippet, 'created': row['created'], 'updated': row['updated']})
-
-	if sort == 'priority':
-		out.sort(key=lambda r: -r['priority'])
-	elif sort == 'due':
-		out.sort(key=lambda r: (r['due'] is None, r['due'] or ''))
-	elif sort == 'id':
-		out.sort(key=lambda r: r['id'], reverse=True)
-	else:
-		out.sort(key=lambda r: r[sort], reverse=True)
-		out.sort(key=lambda r: r['status'] == 'done')
 
 	return out
 

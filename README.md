@@ -14,7 +14,7 @@
 
 kanopy keeps your projects, todos and ideas on one board, and lets the agents you work with read and update it the same way you do. Claude Code, opencode or anything else that speaks [MCP](https://modelcontextprotocol.io) can file tasks, move them through To-Do, Doing and Done, leave progress notes and pick up where the last session left off. Every change is logged with who made it, person or agent.
 
-It is a single Python process with a SQLite database and a plain JavaScript frontend. No build step, no external services, nothing to sign up for.
+It is a single Python process with a SQLite database *(or PostgreSQL for bigger teams)* and a plain JavaScript frontend. No build step, no external services, nothing to sign up for.
 
 | Project board                    | Task page                  |
 |----------------------------------|----------------------------|
@@ -189,14 +189,32 @@ A few rules keep agents from making a mess:
 
 Settings live in `.env`:
 
-| Variable      | Default     | Purpose                                                                     |
-|---------------|-------------|-----------------------------------------------------------------------------|
-| `KANOPY_HOST` | `127.0.0.1` | Address to listen on                                                        |
-| `KANOPY_PORT` | `8000`      | Port to listen on                                                           |
-| `KANOPY_URL`  |             | Public address when behind a reverse proxy                                  |
-| `KANOPY_KEY`  |             | Optional; stored as the admin's API token on start, for older agent configs |
+| Variable          | Default          | Purpose                                                                     |
+|-------------------|------------------|-----------------------------------------------------------------------------|
+| `KANOPY_HOST`     | `127.0.0.1`      | Address to listen on                                                        |
+| `KANOPY_PORT`     | `8000`           | Port to listen on                                                           |
+| `KANOPY_URL`      |                  | Public address when behind a reverse proxy                                  |
+| `KANOPY_KEY`      |                  | Optional; stored as the admin's API token on start, for older agent configs |
+| `KANOPY_DATABASE` | `data/kanban.db` | A `postgresql://user:pass@host/db` URL to use PostgreSQL instead of SQLite  |
 
 Everything else *(ntfy, notification times, timezone, auto-archive)* is set on the Settings page. Data, attachments and backups live in `data/`.
+
+### SQLite or PostgreSQL
+
+SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with `venv/bin/pip install "psycopg[binary]"` *(add it to the image for Docker)*, set `KANOPY_DATABASE` and restart. Daily backups to `data/backups` cover SQLite only; back PostgreSQL up with `pg_dump`.
+
+A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:
+
+```sh
+venv/bin/python -m kanopy.migrate data/kanban.db postgresql://kanopy:secret@localhost/kanopy
+venv/bin/python -m kanopy.migrate postgresql://kanopy:secret@localhost/kanopy data/new.db
+```
+
+Stop kanopy while copying, then point `KANOPY_DATABASE` at the new database.
+
+### Live updates
+
+Open pages check for changes every 15 seconds and reload the board when someone else changed it, unless you are in the middle of an edit. If someone changes a description while you are editing it, saving shows their version and asks before overwriting it.
 
 <details>
 <summary><b>Running behind a reverse proxy</b></summary>
@@ -236,6 +254,13 @@ The suite in `tests/` covers the data layer, permissions, the MCP tools, account
 
 ```sh
 venv/bin/python -m unittest
+```
+
+To run the same suite against PostgreSQL, point `KANOPY_TEST_DATABASE` at a throwaway database. It is wiped before every test, so never use a real one:
+
+```sh
+docker run -d --name kanopy-pg-test -e POSTGRES_PASSWORD=test -p 127.0.0.1:55432:5432 postgres:17-alpine
+KANOPY_TEST_DATABASE=postgresql://postgres:test@127.0.0.1:55432/postgres venv/bin/python -m unittest
 ```
 
 ---
