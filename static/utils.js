@@ -1099,7 +1099,7 @@ function kbEvent(e, task = '') {
 	const what = {
 		created    : () => 'created the task',
 		title      : () => `renamed it to ${v(e.new)}`,
-		description: () => 'edited the description',
+		description: () => 'edited the description' + (e.old != null && !task && KB.task?.role >= 2 ? ` <button type="button" class="link-btn" data-act="restore-desc" data-event="${e.id}" title="${esc(e.old.slice(0, 300))}">restore the text before this</button>` : ''),
 		status     : () => `moved it from ${v(STATUS[e.old] || e.old)} to ${v(STATUS[e.new] || e.new)}`,
 		priority   : () => `set priority to ${v(PRIO[+e.new] ?? e.new)}`,
 		due        : () => e.new ? `set the due date to ${v(e.new)}` : 'cleared the due date',
@@ -1172,7 +1172,7 @@ function kbDrawer() {
 	const history = t.history.length ? `<section>
 				<details class="history"${same && old.querySelector('.history')?.open ? ' open' : ''}>
 					<summary><h4>${ICONS.chev}History <span class="dim">${t.history.length}</span></h4></summary>
-					<ul class="events">${t.history.map(kbEvent).join('')}</ul>
+					<ul class="events">${t.history.map((e) => kbEvent(e)).join('')}</ul>
 				</details>
 			</section>` : '';
 	const stamps = `<p class="stamps dim">Created ${new Date(t.created).toLocaleString()} · updated ${new Date(t.updated).toLocaleString()}${t.done_at ? ` · done ${new Date(t.done_at).toLocaleString()}` : ''}${t.archived ? ' · archived' : ''}</p>`;
@@ -1315,6 +1315,7 @@ async function kbAction(act, el) {
 		return guard(async () => kbTaskSaved(await api('DELETE', `/api/attachments/${li.dataset.id}`)));
 	}
 	if (act === 'cancel-desc') return kbDrawer();
+	if (act === 'restore-desc') { const e = t.history.find((h) => h.id === +el.dataset.event); await kbPatch({ description: e.old }); return toast('Description restored'); }
 	if (act === 'save-desc') return kbPatch({ description: pane().querySelector('.desc-input').value });
 }
 

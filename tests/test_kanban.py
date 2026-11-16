@@ -135,6 +135,22 @@ class TestHistory(Base):
 		self.assertEqual(len(kanban.task(t['id'])['history']), before)
 
 
+	def test_description_versions(self):
+		'''Each description change keeps the text it replaced, for the newest VERSIONS changes only.'''
+
+		old, kanban.VERSIONS = kanban.VERSIONS, 2
+		try:
+			t = self.task(description='v0')
+			for v in range(1, 5):
+				kanban.task_update(t['id'], {'description': f'v{v}'})
+			kanban.task_update(t['id'], {'title': 'renamed'})
+			olds = [h['old'] for h in kanban.task(t['id'])['history'] if h['field'] == 'description']
+			self.assertEqual(olds, ['v3', 'v2', None, None])
+			self.assertTrue(all(h['id'] for h in kanban.task(t['id'])['history']))
+		finally:
+			kanban.VERSIONS = old
+
+
 	def test_history_is_capped(self):
 		'''Only the newest HISTORY events are kept per task.'''
 

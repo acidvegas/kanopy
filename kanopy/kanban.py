@@ -33,6 +33,7 @@ VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
 HISTORY  = 200 # events kept per task
+VERSIONS = 10 # earlier descriptions kept per task, as the old value of its newest description events
 TRASH_DAYS = 30 # days a deleted task can be restored
 TYPES    = {'bug': '#f87171', 'ci': None, 'cleanup': None, 'decommission': None, 'dependency': None, 'deploy': None, 'design': None, 'docs': None, 'event': '#22d3ee', 'feature': None, 'goal': '#22d3ee', 'habit': '#22d3ee', 'hardware': None, 'idea': None, 'learning': '#22d3ee', 'migration': None, 'note': '#22d3ee', 'performance': None, 'purchase': '#22d3ee', 'question': '#22d3ee', 'release': None, 'repo': None, 'research': None, 'review': None, 'security': '#f87171', 'support': None, 'test': None} # global type: labels a fresh install starts with; red flags trouble, cyan is life and thoughts
 
@@ -131,7 +132,8 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 	if 'description' in data:
 		db.execute('UPDATE tasks SET description = ? WHERE id = ?', (data['description'] or '', task_id))
 		if (data['description'] or '') != row['description']:
-			note('description') # text not kept, so the table stays small
+			note('description', row['description'])
+			db.execute("UPDATE task_events SET old = NULL WHERE task_id = ? AND field = 'description' AND old IS NOT NULL AND id NOT IN (SELECT id FROM task_events WHERE task_id = ? AND field = 'description' ORDER BY id DESC LIMIT ?)", (task_id, task_id, VERSIONS))
 
 	if 'project_id' in data:
 		require(db, 'projects', data['project_id'])
@@ -1220,7 +1222,7 @@ def task(task_id: int) -> dict:
 		data['attachments'] = [dict(r) for r in db.execute('SELECT id, name, mime, size, created FROM attachments WHERE task_id = ? ORDER BY id', (task_id,))]
 		data['links']       = [{k: r[k] for k in ('kind', 'id', 'title', 'status')} for r in db.execute('SELECT k.kind, t.id, t.title, t.status, t.project_id FROM links k JOIN tasks t ON t.id = k.other_id WHERE k.task_id = ? ORDER BY k.kind, t.id', (task_id,)) if lv is None or lv.get(r['project_id'])] # hide tasks the user cannot see
 		data['comments']    = [dict(r) for r in db.execute('SELECT id, author, body, created FROM comments WHERE task_id = ? ORDER BY id', (task_id,))]
-		data['history']     = [dict(r) for r in db.execute('SELECT at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id DESC', (task_id,))]
+		data['history']     = [dict(r) for r in db.execute('SELECT id, at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id DESC', (task_id,))]
 
 	return data
 
