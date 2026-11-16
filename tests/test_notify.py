@@ -7,6 +7,7 @@ import json
 import queue
 import threading
 import unittest
+import urllib.error
 
 from datetime import datetime, timedelta, timezone
 
@@ -305,7 +306,9 @@ class TestWebhooks(Base):
 		self.act(self.ann)
 		accounts.team_create(self.ann, 'crew')
 		team = accounts.teams(self.ann)[0]['id']
+		real, notify.webhook_public = notify.webhook_public, lambda host: True # no DNS in tests
 		accounts.team_webhook(self.ann, team, 'https://chat.example.com/hook')
+		notify.webhook_public = real
 		self.nt = kanban.project_save('Work')['id']
 		accounts.share_add(self.nt, 'editor', team='crew')
 
@@ -359,10 +362,59 @@ class TestWebhooks(Base):
 
 		server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
 		threading.Thread(target=server.handle_request, daemon=True).start()
-		self.old_post([f'http://127.0.0.1:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
-		path, auth, body = got.get(timeout=5)
-		server.server_close()
+		real, notify.webhook_public = notify.webhook_public, lambda host: True # the test server is on loopback
+		try:
+			self.old_post([f'http://127.0.0.1:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
+			path, auth, body = got.get(timeout=5)
+		finally:
+			notify.webhook_public = real
+			server.server_close()
 		self.assertEqual((path, auth, body['event']), ('/hook?channel=dev&topic=kanopy', 'Bearer secret123', 'created'))
+
+
+	def test_public_only_and_no_redirects(self):
+		'''Loopback, LAN, tailnet, link-local and metadata addresses are refused, and a redirect is never followed.'''
+
+		for host in ('127.0.0.1', '10.0.0.5', '192.168.1.1', '100.64.0.1', '169.254.169.254', '::1', 'fd00::1'):
+			self.assertFalse(notify.webhook_public(host), host)
+		self.assertTrue(notify.webhook_public('1.1.1.1'))
+		with self.assertRaises(ValueError):
+			notify.webhook_send('http://127.0.0.1:9/hook', {'event': 'created'})
+
+		class Redirect(http.server.BaseHTTPRequestHandler):
+			def do_POST(self):
+				self.send_response(302)
+				self.send_header('Location', 'http://example.com/steal')
+				self.end_headers()
+
+			def log_message(self, *args):
+				pass
+
+		server = http.server.HTTPServer(('127.0.0.1', 0), Redirect)
+		threading.Thread(target=server.handle_request, daemon=True).start()
+		real, notify.webhook_public = notify.webhook_public, lambda host: True
+		try:
+			with self.assertRaises(urllib.error.HTTPError):
+				notify.webhook_send(f'http://127.0.0.1:{server.server_port}/hook?key=secret123', {'event': 'created'})
+		finally:
+			notify.webhook_public = real
+			server.server_close()
+
+
+	def test_bulk_is_one_summary(self):
+		'''A bulk change posts one message per webhook listing the changed tasks, and skips tasks with no tracked change.'''
+
+		a, b = self.task('Work', 'one'), self.task('Work/api', 'two')
+		before = {t['id']: kanban.task(t['id']) for t in (a, b)}
+		kanban.bulk([a['id'], b['id']], {'status': 'done'})
+		notify.webhook_bulk('updated', before, {t: kanban.task(t) for t in before})
+		self.assertEqual(len(self.hits), 1)
+		urls, payload = self.hits[0]
+		self.assertEqual((payload['event'], payload['action'], payload['fields'], [t['id'] for t in payload['tasks']]), ('bulk', 'updated', ['status'], [a['id'], b['id']]))
+		notify.webhook_bulk('updated', {a['id']: kanban.task(a['id'])}, {a['id']: kanban.task(a['id'])})
+		self.assertEqual(len(self.hits), 1)
+		notify.webhook_bulk('deleted', before, {})
+		self.assertEqual(self.hits[-1][1]['action'], 'deleted')
 
 
 	def test_skipped(self):
