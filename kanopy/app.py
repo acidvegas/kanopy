@@ -509,7 +509,9 @@ def api_search() -> dict:
 	statuses = [v for v in args.get('status', '').split(',') if v]
 	fields   = [v for v in args.get('fields', '').split(',') if v]
 
-	return {'results': kanban.search(args.get('q', ''), args.get('project', type=int), statuses, args.get('label') or None, args.get('priority', 0, type=int), args.get('due', ''), fields, args.get('sort', 'updated'), args.get('assignee') or None, limit=300)}
+	results, total = kanban.search(args.get('q', ''), args.get('project', type=int), statuses, args.get('label') or None, args.get('priority', 0, type=int), args.get('due', ''), fields, args.get('sort', 'updated'), args.get('assignee') or None, limit=300)
+
+	return {'results': results, 'total': total}
 
 
 @app.get('/api/revision')
@@ -599,9 +601,15 @@ def api_task_update(task_id: int) -> dict:
 
 @app.get('/api/tasks')
 def api_tasks() -> dict:
-	'''Return task cards for all projects or one project subtree.'''
+	'''Return task cards for all projects or one project subtree; done_limit keeps only that many finished tasks, newest first, and reports how many there are.'''
 
-	return {'tasks': kanban.tasks(request.args.get('project', type=int))}
+	project = request.args.get('project', type=int)
+	limit   = request.args.get('done_limit', type=int)
+
+	if limit is None:
+		return {'tasks': kanban.tasks(project)}
+
+	return {'tasks': kanban.tasks(project, done_limit=limit), 'done_total': len(kanban.tasks(project, statuses=['done'], brief=True))}
 
 
 @app.get('/api/trash')

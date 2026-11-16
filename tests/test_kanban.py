@@ -91,6 +91,20 @@ class TestBulkAndReorder(Base):
 			kanban.bulk([], {'status': 'done'})
 
 
+	def test_done_limit(self):
+		'''done_limit keeps every open task and only the newest finished ones.'''
+
+		open_ = self.task(title='open')
+		done  = [self.task(title=f'd{i}') for i in range(3)]
+		for i, t in enumerate(done):
+			kanban.task_update(t['id'], {'status': 'done'})
+			with kanban.connect() as db:
+				db.execute('UPDATE tasks SET done_at = ? WHERE id = ?', (f'2030-01-0{i + 1}', t['id']))
+		got = {t['id'] for t in kanban.tasks(done_limit=2)}
+		self.assertEqual(got, {open_['id'], done[2]['id'], done[1]['id']})
+		self.assertEqual(len(kanban.tasks(done_limit=0)), 1)
+
+
 	def test_reorder(self):
 		'''Reorder sets column order and moves cards into the column.'''
 
@@ -645,7 +659,8 @@ class TestSearch(Base):
 		self.assertEqual([h['id'] for h in kanban.search('x', sort='due')], [c['id'], a['id'], b['id']])
 		self.assertEqual([h['id'] for h in kanban.search('x', sort='id')], [c['id'], b['id'], a['id']])
 		self.assertEqual(kanban.search('x')[-1]['id'], c['id'])
-		self.assertEqual([h['id'] for h in kanban.search('x', sort='id', limit=2)], [c['id'], b['id']])
+		results, total = kanban.search('x', sort='id', limit=2)
+		self.assertEqual(([h['id'] for h in results], total), ([c['id'], b['id']], 3))
 
 
 	def test_filters(self):
