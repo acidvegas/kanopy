@@ -134,7 +134,7 @@ Projects are private to whoever made them until shared with a user or a team. Sh
 
 Anyone can create a team and add members by username. Admins see every project.
 
-A team owner can give the team a **webhook URL**. Every change made on a project shared with the team *(new tasks, field changes, comments and deletes, on its sub-projects too)* is then POSTed there as JSON: `event` *(created, updated, commented or deleted)*, `actor`, `agent`, `task` *(id, title, project, status, priority, due, assignees, labels, url)*, `changes` *(field, old, new)* and `comment`. A bulk change sends one `bulk` event listing its `tasks` instead. The URL must resolve to a public address *(no loopback, LAN or tailnet)*, redirects are refused, and a `key=` parameter is sent as an `Authorization: Bearer` header.
+A team owner can give the team a **webhook URL**. Every change made on a project shared with the team *(new tasks, field changes, comments and deletes, on its sub-projects too)* is then POSTed there as JSON: `event` *(created, updated, commented or deleted)*, `actor`, `agent`, `task` *(id, title, project, status, priority, due, assignees, labels, url)*, `changes` *(field, old, new)* and `comment`. A bulk change sends one `bulk` event listing its `tasks` instead. The URL must resolve only to public addresses *(no loopback, LAN or tailnet)* and kanopy connects to the exact address it checked, so DNS rebinding cannot redirect it; redirects are refused, and a `key=` parameter is sent as an `Authorization: Bearer` header.
 
 ## Connecting agents
 

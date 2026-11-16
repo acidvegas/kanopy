@@ -7,7 +7,6 @@ import json
 import queue
 import threading
 import unittest
-import urllib.error
 
 from datetime import datetime, timedelta, timezone
 
@@ -346,14 +345,14 @@ class TestWebhooks(Base):
 		self.assertEqual(self.events()[-1], 'deleted')
 
 
-	def test_post_moves_key_to_header(self):
-		'''The real poster sends JSON, and a key= URL parameter goes out as a Bearer header instead.'''
+	def test_post_pins_address_and_moves_key(self):
+		'''The real poster connects to the address webhook_address checked without looking the host up again, keeps the hostname in the Host header, and sends key= as a Bearer header.'''
 
 		got = queue.Queue()
 
 		class Handler(http.server.BaseHTTPRequestHandler):
 			def do_POST(self):
-				got.put((self.path, self.headers.get('Authorization'), json.loads(self.rfile.read(int(self.headers['Content-Length'])))))
+				got.put((self.path, self.headers.get('Host'), self.headers.get('Authorization'), json.loads(self.rfile.read(int(self.headers['Content-Length'])))))
 				self.send_response(200)
 				self.end_headers()
 
@@ -362,14 +361,17 @@ class TestWebhooks(Base):
 
 		server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
 		threading.Thread(target=server.handle_request, daemon=True).start()
-		real, notify.webhook_public = notify.webhook_public, lambda host: True # the test server is on loopback
+		lookups = []
+		real    = notify.webhook_address
+		notify.webhook_address = lambda host: lookups.append(host) or '127.0.0.1' # hook.test never resolves, so the send must use this pinned address
 		try:
-			self.old_post([f'http://127.0.0.1:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
-			path, auth, body = got.get(timeout=5)
+			self.old_post([f'http://hook.test:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
+			path, host, auth, body = got.get(timeout=5)
 		finally:
-			notify.webhook_public = real
+			notify.webhook_address = real
 			server.server_close()
-		self.assertEqual((path, auth, body['event']), ('/hook?channel=dev&topic=kanopy', 'Bearer secret123', 'created'))
+		self.assertEqual(lookups, ['hook.test'])
+		self.assertEqual((path, host, auth, body['event']), ('/hook?channel=dev&topic=kanopy', f'hook.test:{server.server_port}', 'Bearer secret123', 'created'))
 
 
 	def test_public_only_and_no_redirects(self):
@@ -392,13 +394,25 @@ class TestWebhooks(Base):
 
 		server = http.server.HTTPServer(('127.0.0.1', 0), Redirect)
 		threading.Thread(target=server.handle_request, daemon=True).start()
-		real, notify.webhook_public = notify.webhook_public, lambda host: True
+		real, notify.webhook_address = notify.webhook_address, lambda host: '127.0.0.1'
 		try:
-			with self.assertRaises(urllib.error.HTTPError):
-				notify.webhook_send(f'http://127.0.0.1:{server.server_port}/hook?key=secret123', {'event': 'created'})
+			with self.assertRaises(OSError):
+				notify.webhook_send(f'http://hook.test:{server.server_port}/hook?key=secret123', {'event': 'created'})
 		finally:
-			notify.webhook_public = real
+			notify.webhook_address = real
 			server.server_close()
+
+
+	def test_mixed_answers_refused(self):
+		'''A host is refused if any address it resolves to is private, even when another one is public.'''
+
+		real = notify.socket.getaddrinfo
+		notify.socket.getaddrinfo = lambda host, port, **kwargs: [(None, None, None, '', ('1.1.1.1', 0)), (None, None, None, '', ('127.0.0.1', 0))]
+		try:
+			with self.assertRaises(ValueError):
+				notify.webhook_address('rebind.test')
+		finally:
+			notify.socket.getaddrinfo = real
 
 
 	def test_bulk_is_one_summary(self):
