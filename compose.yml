@@ -3,7 +3,8 @@
 
 services:
   kanopy:
-    build: .
+    image: ghcr.io/acidvegas/kanopy:latest
+    build: . # used when building from this checkout: docker compose up --build
     env_file: .env
     network_mode: host # binds KANOPY_HOST:KANOPY_PORT from .env, which also builds the links in notifications
     user: "${UID:-1000}:${GID:-1000}" # data/ stays owned by you
