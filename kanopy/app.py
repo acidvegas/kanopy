@@ -564,7 +564,7 @@ def api_task_create() -> dict:
 
 @app.delete('/api/tasks/<int:task_id>')
 def api_task_delete(task_id: int) -> dict:
-	'''Delete a task.'''
+	'''Move a task to the trash.'''
 
 	kanban.task_delete(task_id)
 
@@ -587,6 +587,20 @@ def api_tasks() -> dict:
 	'''Return task cards for all projects or one project subtree.'''
 
 	return {'tasks': kanban.tasks(request.args.get('project', type=int))}
+
+
+@app.get('/api/trash')
+def api_trash() -> dict:
+	'''Return the deleted tasks the user can restore.'''
+
+	return {'trash': kanban.trash_list(), 'days': kanban.TRASH_DAYS}
+
+
+@app.post('/api/trash/<int:trash_id>/restore')
+def api_trash_restore(trash_id: int) -> dict:
+	'''Restore a deleted task.'''
+
+	return kanban.trash_restore(trash_id)
 
 
 @app.before_request
@@ -623,9 +637,10 @@ def auth_end(exc: Exception = None):
 
 
 def housekeep():
-	'''Write the daily database backup and archive tasks done longer than the archive_days setting.'''
+	'''Write the daily database backup, archive tasks done longer than the archive_days setting and empty old trash.'''
 
 	kanban.backup()
+	kanban.trash_purge()
 	days = int(notify.settings()['archive_days'])
 
 	if days:

@@ -78,7 +78,7 @@ TOOLS = [
 	}, ['id', 'other', 'kind']),
 	('labels', 'List global labels and your own. create: add a global type: value (admin, only when asked). delete: remove one of your labels everywhere (global ones: admin).', {'create': STR, 'delete': STR}, []),
 	('inbox', 'Your unread notifications; read=true marks them all read.', {'read': BOOL}, []),
-	('delete', 'Delete a task or an empty project. Confirm first.', {'task': INT, 'project': {**STR, 'description': 'path or id'}}, [])
+	('delete', 'Delete a task (kept in the trash 30 days) or an empty project. Confirm first. restore= brings a deleted task back.', {'task': INT, 'project': {**STR, 'description': 'path or id'}, 'restore': {**INT, 'description': 'id of a deleted task'}}, [])
 ]
 
 
@@ -149,16 +149,22 @@ def call(name: str, args: dict, agent: str) -> str:
 		return inbox(args)
 
 	if name == 'delete':
+		if args.get('restore'):
+			entry = next((r for r in kanban.trash_list() if r['task_id'] == int(args['restore'])), None)
+			if not entry:
+				raise LookupError(f'#{args["restore"]} is not in the trash')
+			task = kanban.trash_restore(entry['id'])
+			return task_line(task['id']) + ('' if task['id'] == entry['task_id'] else f'\nrestored as #{task["id"]}, #{entry["task_id"]} was taken')
 		if args.get('task'):
 			title = kanban.task(int(args['task']))['title']
 			kanban.task_delete(int(args['task']))
-			return f'deleted #{args["task"]} {title}'
+			return f'deleted #{args["task"]} {title} (restore= within {kanban.TRASH_DAYS} days)'
 		if args.get('project'):
 			pid  = project_id(args['project'])
 			path = project_path(pid)
 			kanban.project_delete(pid)
 			return f'deleted {path}'
-		raise ValueError('give task or project')
+		raise ValueError('give task, project or restore')
 
 	raise LookupError(f'unknown tool {name}')
 
