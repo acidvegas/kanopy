@@ -1,18 +1,29 @@
+<p align="center"><img src="static/icons/favicon.svg" width="96" alt=""></p>
+
 <h1 align="center">kanopy</h1>
 
-<p align="center">A self-hosted kanban board shared by people and their AI agents.</p>
+<p align="center">The self-hosted kanban board built for AI agents and the people they work with.</p>
+
+<p align="center">
+	<a href="https://github.com/acidvegas/kanopy/releases/latest"><img src="https://img.shields.io/github/v/release/acidvegas/kanopy?color=a78bfa" alt="Release"></a>
+	<a href="https://github.com/acidvegas/kanopy/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/acidvegas/kanopy/tests.yml?label=tests" alt="Tests"></a>
+	<a href="https://github.com/acidvegas/kanopy/pkgs/container/kanopy"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ed?logo=docker&logoColor=white" alt="Docker"></a>
+	<img src="https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white" alt="Python 3.12+">
+	<a href="LICENSE"><img src="https://img.shields.io/github/license/acidvegas/kanopy?color=f472b6" alt="License"></a>
+</p>
 
 <p align="center">
 	<a href="#quick-start">Quick start</a> ·
+	<a href="#why-kanopy">Why kanopy</a> ·
 	<a href="#features">Features</a> ·
 	<a href="#connecting-agents">Connecting agents</a> ·
 	<a href="#mcp-tools">MCP tools</a> ·
 	<a href="#configuration">Configuration</a>
 </p>
 
-![Board](.screens/board.png)
+![An agent filing, claiming and finishing a task](.screens/agent.gif)
 
-kanopy keeps your projects, todos and ideas on one board, and lets the agents you work with read and update it the same way you do. Claude Code, opencode or anything else that speaks [MCP](https://modelcontextprotocol.io) can file tasks, move them through To-Do, Doing and Done, leave progress notes and pick up where the last session left off. Every change is logged with who made it, person or agent.
+kanopy keeps your projects, todos and ideas on one board, and lets the agents you work with read and update it the same way you do. Claude Code, opencode or anything else that speaks [MCP](https://modelcontextprotocol.io) can file tasks, claim them, move them through To-Do, Doing and Done, leave progress notes and pick up where the last session left off. Every change is logged with who made it, person or agent.
 
 It is a single Python process with a SQLite database *(or PostgreSQL for bigger teams)* and a plain JavaScript frontend. No build step, no external services, nothing to sign up for.
 
@@ -28,13 +39,20 @@ It is a single Python process with a SQLite database *(or PostgreSQL for bigger 
 
 ## Quick start
 
-With Docker:
+With Docker, from the published image:
+
+```sh
+mkdir -p kanopy/data && cd kanopy
+docker run -d --name kanopy -p 8000:8000 -e KANOPY_HOST=0.0.0.0 -v "$PWD/data:/app/data" --user "$(id -u):$(id -g)" ghcr.io/acidvegas/kanopy
+```
+
+Or with Docker Compose from a checkout:
 
 ```sh
 git clone https://github.com/acidvegas/kanopy && cd kanopy
 cp .env.example .env
 mkdir -p data
-docker compose up -d --build
+docker compose up -d
 ```
 
 Or with a virtual environment:
@@ -50,6 +68,24 @@ venv/bin/python -m kanopy.app
 Open `http://127.0.0.1:8000`. The first page asks you to create the admin account; everyone after that joins through an invite link.
 
 To run it as a service, copy `kanopy.service` to `/etc/systemd/system/`, set `YOUR_USER` and `/path/to/kanopy`, then `sudo systemctl enable --now kanopy`.
+
+## Why kanopy
+
+kanopy was made for working with AI agents first. Before writing it we looked at the boards people already run: Vikunja, Planka and Jira. They are good boards built for people, and agents can reach all three today. Connecting an agent to a board is no longer the hard part. Working alongside several agents at once, without them clobbering each other or your edits, is.
+
+|             | kanopy   | Vikunja                                                                        | Planka            | Jira                      |
+|-------------|----------|--------------------------------------------------------------------------------|-------------------|---------------------------|
+| Self-hosted | Yes      | Yes                                                                            | Yes               | Data Center only *(paid)* |
+| MCP         | Built in | Built in since [2.7](https://vikunja.io/changelog/vikunja-2.7.0-was-released/) | Community servers | Atlassian's cloud server  |
+
+What kanopy does for agents on top of that:
+
+- **Every change names its agent.** Comments and history show the agent and the person whose token it used, like `claude (alex)`, so you always know who did what.
+- **Claims.** Moving a task to Doing claims it for that agent session. A second session that tries to start it is told who has it instead of doing the same work twice.
+- **No lost edits.** An agent cannot replace a description it has not read, and `edit` and `append` change one line without resending the rest. If an agent does make a mess, the last 10 versions of a description can be restored, and deleted tasks sit in a 30-day trash.
+- **Cheap on tokens.** Tools answer in compact text with one line per task instead of JSON. Fifty tasks come back in about 1,200 tokens.
+- **Context at session start.** A Claude Code hook briefs each new session on the project for the current directory and its open tasks, flagging work left in Doing.
+- **Rules and limits.** Agents get your working rules when they connect, can be given read-only tokens, and you get a push when one finishes a task.
 
 ## Features
 
@@ -202,7 +238,7 @@ Everything else *(ntfy, notification times, timezone, auto-archive)* is set on t
 
 ### SQLite or PostgreSQL
 
-SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with `venv/bin/pip install "psycopg[binary]"` *(add it to the image for Docker)*, set `KANOPY_DATABASE` and restart. Daily backups to `data/backups` cover SQLite only; back PostgreSQL up with `pg_dump`.
+SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with `venv/bin/pip install "psycopg[binary]"` *(the Docker image already has it)*, set `KANOPY_DATABASE` and restart. Daily backups to `data/backups` cover SQLite only; back PostgreSQL up with `pg_dump`.
 
 A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:
 
