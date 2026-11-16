@@ -4,3 +4,6 @@
 __pycache__
 data
 venv
+.ruff_cache
+agents/instructions.txt
+tests
