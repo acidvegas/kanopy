@@ -230,6 +230,14 @@ server {
 | `n`   | New task                          |
 | `Esc` | Close the task, leave select mode |
 
+## Tests
+
+The suite in `tests/` covers the data layer, permissions, the MCP tools, accounts, notifications and every HTTP route. Each test runs against a fresh database in a temporary directory, and ntfy pushes are recorded instead of sent, so it never touches `data/` or the network.
+
+```sh
+venv/bin/python -m unittest
+```
+
 ---
 
 ###### Mirrors: [SuperNETs](https://git.supernets.org/acidvegas/) • [GitHub](https://github.com/acidvegas/) • [GitLab](https://gitlab.com/acidvegas/) • [Codeberg](https://codeberg.org/acidvegas/)
