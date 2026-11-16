@@ -1225,6 +1225,24 @@ def settings_save(values: dict):
 				db.execute('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value', (key, str(value)))
 
 
+def revision() -> int:
+	'''Return the board's change counter, which every write bumps so open pages know to reload.'''
+
+	with connect() as db:
+		row = db.execute("SELECT value FROM settings WHERE key = 'revision'").fetchone()
+
+	return int(row['value']) if row else 0
+
+
+def revision_bump() -> int:
+	'''Count one change to the board; returns the new revision.'''
+
+	with connect() as db:
+		db.execute("INSERT INTO settings (key, value) VALUES ('revision', '1') ON CONFLICT (key) DO UPDATE SET value = CAST(CAST(settings.value AS INTEGER) + 1 AS TEXT)")
+
+	return revision()
+
+
 def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict, people: dict) -> dict:
 	'''
 	Build the card-sized view of a task.

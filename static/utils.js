@@ -11,6 +11,7 @@ const ICONS = { chev: '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6
 async function api(method, url, body) {
 	const headers = body ? { 'Content-Type': 'application/json' } : {};
 	const res     = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
+	if (res.headers.get('X-Revision')) KB.revision = +res.headers.get('X-Revision'); // our own changes are already on screen
 	if (res.status === 401 && !url.startsWith('/api/login')) {
 		KB.me = null;
 		authShow('login');
@@ -90,6 +91,7 @@ function toast(msg, error = false) {
 
 
 const KB = {
+	revision  : 0,
 	projects  : [],
 	tasks     : [],
 	labels    : [],
@@ -172,6 +174,18 @@ async function kbLoad() {
 	meRender();
 	kbTree();
 	kbRender();
+}
+
+async function kbPoll() {
+	if (!KB.me || document.hidden) return;
+	const { revision } = await fetch('/api/revision').then((res) => res.json()).catch(() => ({})); // not api(): its header would mark this revision as already loaded
+	if (!revision || revision === KB.revision) return;
+	const typing = document.activeElement?.matches('input, textarea, select') && document.activeElement.closest('#drawer, #taskpage, #settings'); // the board filter does not count
+	const busy   = $('#dialog').open || pane()?.querySelector('.desc-edit') || typing || document.querySelector('.sortable-chosen');
+	if (busy) return; // try again next round, after the edit or drag
+	KB.revision = revision;
+	await kbLoad();
+	if (KB.task) await kbRefreshTask(KB.task.id).catch(() => kbLost());
 }
 
 async function kbRefreshTask(id) {
@@ -1295,6 +1309,7 @@ async function kbAction(act, el) {
 		const box = pane().querySelector('.desc');
 		if (!box) return pane().querySelector('.desc-input')?.focus(); // already editing
 		box.outerHTML = `<div class="desc-edit">${mdEditor('desc-input', t.description, 'Markdown. Steps as "- [ ] ".', 8)}<div class="row end"><button data-act="cancel-desc">Cancel</button><button class="primary" data-act="save-desc">Save</button></div></div>`;
+		KB.descBase = t.description;
 		const input = pane().querySelector('.desc-input');
 		input.style.height = Math.max(160, input.scrollHeight + 4) + 'px';
 		return input.focus();
@@ -1316,7 +1331,19 @@ async function kbAction(act, el) {
 	}
 	if (act === 'cancel-desc') return kbDrawer();
 	if (act === 'restore-desc') { const e = t.history.find((h) => h.id === +el.dataset.event); await kbPatch({ description: e.old }); return toast('Description restored'); }
-	if (act === 'save-desc') return kbPatch({ description: pane().querySelector('.desc-input').value });
+	if (act === 'save-desc') {
+		const draft = pane().querySelector('.desc-input').value;
+		return guard(async () => {
+			try {
+				await kbTaskSaved(await api('PATCH', `/api/tasks/${t.id}`, { description: draft, description_was: KB.descBase }));
+			} catch (err) {
+				if (err.status !== 409) throw err;
+				KB.task = await api('GET', `/api/tasks/${t.id}`);
+				kbDrawer(); // shows the newer text
+				if (await ask({ title: 'Description changed', text: 'Someone changed this description while you were editing it. Their version is showing now.\nSave yours over it anyway? Theirs stays in the history.', ok: 'Save mine' })) await kbPatch({ description: draft });
+			}
+		});
+	}
 }
 
 
@@ -1691,6 +1718,7 @@ document.addEventListener('DOMContentLoaded', () => {
 	};
 	window.addEventListener('hashchange', route);
 	KB.route = route;
+	setInterval(() => kbPoll().catch(() => {}), 15_000);
 	fetch('/api/me').then((res) => res.ok ? res.json() : null).then((me) => {
 		KB.me = me;
 		if (me || /^#\/invite\//.test(location.hash)) return route();

@@ -33,6 +33,7 @@ from . import notify
 
 
 COOKIE = 'kb_session'
+READ_TOOLS  = ('list_projects', 'list_tasks', 'get_task') # MCP tools that change nothing, so they do not bump the revision
 FAILS       = {} # client ip -> monotonic times of recent failed sign-ins
 FAILS_LOCK  = threading.Lock()
 FAIL_LIMIT  = 5
@@ -510,6 +511,13 @@ def api_search() -> dict:
 	return {'results': kanban.search(args.get('q', ''), args.get('project', type=int), statuses, args.get('label') or None, args.get('priority', 0, type=int), args.get('due', ''), fields, args.get('sort', 'updated'), args.get('assignee') or None)[:300]}
 
 
+@app.get('/api/revision')
+def api_revision() -> dict:
+	'''Return the board's change counter; open pages poll it and reload when it moves.'''
+
+	return {'revision': kanban.revision()}
+
+
 @app.get('/api/settings')
 def api_settings() -> dict:
 	'''Return notification settings; the ntfy token is never sent back, only whether one is set.'''
@@ -576,7 +584,13 @@ def api_task_update(task_id: int) -> dict:
 	'''Update task fields.'''
 
 	before = kanban.task(task_id)
-	after  = kanban.task_update(task_id, request.get_json(force=True) or {})
+	body   = request.get_json(force=True) or {}
+	was    = body.pop('description_was', None) # the text the web editor started from
+
+	if was is not None and 'description' in body and was != before['description']:
+		return {'error': 'the description changed while you were editing it', 'description': before['description']}, 409
+
+	after = kanban.task_update(task_id, body)
 	notify.task_event(before, after)
 
 	return after
@@ -628,6 +642,22 @@ def auth():
 	kanban.ACTOR.set(g.user)
 
 
+@app.after_request
+def count_change(resp: Response) -> Response:
+	'''Bump the revision after any successful write, and tell every API response the current one.'''
+
+	path = request.path
+
+	if path.startswith('/api/') or path == '/mcp':
+		write = request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400 and path not in ('/api/login', '/api/logout', '/api/notifications/read')
+		if path == '/mcp':
+			msg   = request.get_json(silent=True) or {}
+			write = resp.status_code < 400 and msg.get('method') == 'tools/call' and (msg.get('params') or {}).get('name') not in READ_TOOLS
+		resp.headers['X-Revision'] = str(kanban.revision_bump() if write else kanban.revision())
+
+	return resp
+
+
 @app.teardown_request
 def auth_end(exc: Exception = None):
 	'''Forget the signed-in user and agent once the request is done.'''
@@ -643,8 +673,8 @@ def housekeep():
 	kanban.trash_purge()
 	days = int(notify.settings()['archive_days'])
 
-	if days:
-		kanban.archive_done(days)
+	if days and kanban.archive_done(days):
+		kanban.revision_bump()
 
 
 def housekeep_loop():
