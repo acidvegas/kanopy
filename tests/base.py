@@ -51,6 +51,7 @@ class Base(unittest.TestCase):
 		kanban.DB, kanban.DATABASE, kanban.BACKUPS, notify.send = self.old
 		kanban.ACTOR.set(None)
 		kanban.AGENT.set(None)
+		kanban.SESSION.set(None)
 		self.dir.cleanup()
 
 

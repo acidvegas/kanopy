@@ -248,7 +248,8 @@ function kbCard(t) {
 		t.checks[1] ? `<span class="${t.checks[0] === t.checks[1] ? 'ok' : ''}">${SVG.check}${t.checks[0]}/${t.checks[1]}</span>` : '',
 		t.comments ? `<span>${SVG.chat}${t.comments}</span>` : '',
 		t.files ? `<span>${SVG.clip}${t.files}</span>` : '',
-		t.assignees.length ? `<span class="avs">${t.assignees.map(avatar).join('')}</span>` : ''
+		t.assignees.length ? `<span class="avs">${t.assignees.map(avatar).join('')}</span>` : '',
+		t.status === 'doing' && t.claimed_by ? `<span class="claim" title="Being worked on by ${esc(t.claimed_by)}">${esc(t.claimed_by.split(' #')[0])}</span>` : ''
 	].join('');
 	return `<div class="card${t.id === KB.task?.id ? ' active' : ''}${KB.picked.has(t.id) ? ' picked' : ''}" data-id="${t.id}">
 		<div class="meta"><span class="id">#${t.id}</span>${proj}${t.priority ? `<span class="prio p${t.priority}">${PRIO[t.priority]}</span>` : ''}<a class="open-new" href="#/task/${t.id}" target="_blank" rel="noopener" draggable="false" title="Open in a new tab" aria-label="Open #${t.id} in a new tab">${SVG.expand}</a></div>
@@ -791,7 +792,7 @@ function accountBind() {
 	$('#token-new').addEventListener('submit', (e) => {
 		e.preventDefault();
 		guard(async () => {
-			const t = await api('POST', '/api/tokens', { name: e.target.elements.name.value });
+			const t = await api('POST', '/api/tokens', { name: e.target.elements.name.value, read_only: e.target.elements.read_only.checked });
 			e.target.reset();
 			secretShow($('#token-shown'), 'Copy this token now; it is not shown again.', t.token, `claude mcp add --transport http -s user kanopy ${location.origin}/mcp --header "X-Agent: claude" --header "X-Key: ${t.token}"`);
 			tokensRender((await api('GET', '/api/tokens')).tokens);
@@ -996,7 +997,7 @@ function teamsRender() {
 }
 
 function tokensRender(tokens) {
-	$('#tokens').innerHTML = tokens.map((t) => `<div class="row-item"><b>${esc(t.name)}</b><span class="dim">created ${new Date(t.created).toLocaleDateString()} · ${t.used ? `last used ${new Date(t.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-token="${t.id}">Revoke</button></div>`).join('') || '<p class="dim">No tokens yet.</p>';
+	$('#tokens').innerHTML = tokens.map((t) => `<div class="row-item"><b>${esc(t.name)}</b>${t.read_only ? '<small class="pill">read-only</small>' : ''}<span class="dim">created ${new Date(t.created).toLocaleDateString()} · ${t.used ? `last used ${new Date(t.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-token="${t.id}">Revoke</button></div>`).join('') || '<p class="dim">No tokens yet.</p>';
 }
 
 async function trashLoad() {

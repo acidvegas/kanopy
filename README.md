@@ -100,7 +100,7 @@ Anyone can create a team and add members by username. Admins see every project.
 
 ## Connecting agents
 
-kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history.
+kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history. A token can be made **read-only**: the agent then sees only the reading tools and every change is refused, over MCP and the REST API alike.
 
 Agents get a short set of working rules on connect from `agents/instructions.example.txt`. Copy it to `agents/instructions.txt` *(untracked)* to describe your own project layout.
 
@@ -184,6 +184,7 @@ A few rules keep agents from making a mess:
 - A new project is created by filing its first task into it, so no project is ever empty
 - An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; `edit` *(exact text, must match once)* and `append` need no read
 - `host:` labels that differ only by punctuation *(`host:web01` and `host:web-01`)* are rejected
+- Moving a task to doing **claims** it for that agent session *(`by:claude#a1b2c3` on its line, the agent's name on its card)*. Another session that tries to start it is told who has it, and takes over only with `take=true`. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own
 
 ## Configuration
 
