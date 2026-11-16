@@ -216,10 +216,10 @@ def context(cwd: str) -> str:
 		return ''
 
 	proj  = best[0]
-	open_ = sorted((t for t in kanban.tasks(proj['id']) if t['status'] != 'done'), key=lambda t: (t['status'] != 'doing', -t['priority'], t['id']))
+	open_ = sorted(kanban.tasks(proj['id'], statuses=['todo', 'doing']), key=lambda t: (t['status'] != 'doing', -t['priority'], t['id']))
 
 	with kanban.connect() as db:
-		rels = links_map(db)
+		rels = links_map(db, [t['id'] for t in open_[:10]])
 
 	now   = datetime.now(timezone.utc)
 	idle  = lambda t: (now - datetime.fromisoformat(t['updated'])).days if t['status'] == 'doing' else 0 # days a doing task has gone without an update
@@ -394,17 +394,17 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 	return out
 
 
-def links_map(db, task_id: int = None) -> dict:
+def links_map(db, ids: list) -> dict:
 	'''
-	Return task id -> {kind: [other ids]} for one task's links or every link.
+	Return task id -> {kind: [other ids]} for the links of the given tasks.
 
 	:param db: Open database connection
-	:param task_id: Limit to one task
+	:param ids: Task ids
 	'''
 
 	out = {}
 
-	for row in db.execute('SELECT task_id, kind, other_id FROM links' + (' WHERE task_id = ?' if task_id else '') + ' ORDER BY other_id', (task_id,) if task_id else ()):
+	for row in db.execute(f'SELECT task_id, kind, other_id FROM links WHERE task_id IN ({kanban.marks(ids)}) ORDER BY other_id', list(ids)) if ids else ():
 		out.setdefault(row['task_id'], {}).setdefault(row['kind'], []).append(row['other_id'])
 
 	return out
@@ -433,30 +433,12 @@ def list_tasks(args: dict) -> str:
 	want  = [norm_label(l)[0] for l in args.get('labels') or []]
 	text  = (args.get('text') or '').strip()
 	due   = args.get('due') or ''
-	rows  = kanban.tasks(project_id(args['project']) if args.get('project') else None, archived=bool(text) or status in ('done', 'all'))
-	hits  = {r['id']: r for r in kanban.search(text, due=due)} if text or due else None
-	match = set(hits) if hits is not None else None
+	pid   = project_id(args['project']) if args.get('project') else None
+	hits  = {r['id']: r for r in kanban.search(text, project=pid, due=due)} if text or due else None
 	found = lambda t: f'\n    {hits[t["id"]]["where"]}: {hits[t["id"]]["snippet"]}' if text and hits[t['id']]['snippet'] else '' # the line that matched, when it was not the title
 	who   = (args.get('assignee') or '').strip().lower().lstrip('@')
 	who   = kanban.ACTOR.get()['username'] if who == 'me' and kanban.ACTOR.get() else who
-
-	out = []
-	for t in rows:
-		if status == 'open' and t['status'] == 'done' or status not in ('open', 'all') and t['status'] != status:
-			continue
-		if t['priority'] < (args.get('priority_min') or 0):
-			continue
-		if args.get('due_before') and not (t['due'] and t['due'][:10] < args['due_before']):
-			continue
-		if match is not None and t['id'] not in match:
-			continue
-		if not all(w in t['labels'] for w in want):
-			continue
-		if who and who not in t['assignees']:
-			continue
-		if cutoff and t['updated'] < cutoff:
-			continue
-		out.append(t)
+	out   = kanban.tasks(pid, archived=bool(text) or status in ('done', 'all'), statuses={'open': ['todo', 'doing'], 'all': None}.get(status, [status]), ids=list(hits) if hits is not None else None, labels=want, assignee=who or None, priority_min=args.get('priority_min') or 0, due_before=args.get('due_before'), updated_since=cutoff, brief=True)
 
 	if not out:
 		return 'no matching tasks'
@@ -464,25 +446,33 @@ def list_tasks(args: dict) -> str:
 	out.sort(key=lambda t: (t['project'].lower(), t['status'] == 'done', -t['priority'], t['id']))
 	limit = args.get('limit') or 50
 
-	with kanban.connect() as db:
-		rels = links_map(db)
-
 	if cutoff: # newest first, one flat list
 		out.sort(key=lambda t: t['updated'], reverse=True)
-		lines = [line(t, rels.get(t['id'], {})) + f'  changed:{t["updated"][:10]}' + (found(t) if hits else '') for t in out[:limit]]
-		if len(out) > limit:
-			lines.append(f'... {len(out) - limit} more (raise limit)')
+
+	more = len(out) - limit
+	full = {t['id']: t for t in kanban.tasks(ids=[t['id'] for t in out[:limit]], archived=True)} # whole cards only for the lines shown
+	out  = [full[t['id']] for t in out[:limit]]
+
+	if cutoff:
+		with kanban.connect() as db:
+			rels = links_map(db, [t['id'] for t in out])
+		lines = [line(t, rels.get(t['id'], {})) + f'  changed:{t["updated"][:10]}' + (found(t) if hits else '') for t in out]
+		if more > 0:
+			lines.append(f'... {more} more (raise limit)')
 		return '\n'.join(lines)
 
+	with kanban.connect() as db:
+		rels = links_map(db, [t['id'] for t in out])
+
 	lines, group = [], None
-	for t in out[:limit]:
+	for t in out:
 		if t['project'] != group:
 			group = t['project']
 			lines.append(f'[{group}]')
 		lines.append(line(t, rels.get(t['id'], {}), project=False) + (found(t) if hits else ''))
 
-	if len(out) > limit:
-		lines.append(f'... {len(out) - limit} more (raise limit)')
+	if more > 0:
+		lines.append(f'... {more} more (raise limit)')
 
 	return '\n'.join(lines)
 
@@ -697,7 +687,7 @@ def task_line(task_id: int) -> str:
 	'''
 
 	with kanban.connect() as db:
-		rels = links_map(db, task_id).get(task_id, {})
+		rels = links_map(db, [task_id]).get(task_id, {})
 
 	return line(kanban.task(task_id), rels)
 
@@ -709,8 +699,13 @@ def validate_labels(names: list):
 	:param names: Normalized label names
 	'''
 
-	existing = {l['name'] for l in kanban.labels()}
-	squash   = lambda s: re.sub(r'[-_. ]', '', s)
+	if not names:
+		return
+
+	with kanban.connect() as db:
+		existing = {r['name'] for r in db.execute('SELECT name FROM labels WHERE owner_id IS NULL OR owner_id IS ?', (kanban.me(),))}
+
+	squash = lambda s: re.sub(r'[-_. ]', '', s)
 
 	for name in names:
 		if name in existing:

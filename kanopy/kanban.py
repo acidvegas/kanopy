@@ -95,6 +95,7 @@ CREATE INDEX IF NOT EXISTS task_labels_label ON task_labels (label_id);
 CREATE INDEX IF NOT EXISTS links_other ON links (other_id);
 CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees (user_id);
 CREATE INDEX IF NOT EXISTS notifications_user ON notifications (user_id, id);
+CREATE INDEX IF NOT EXISTS tasks_open ON tasks (archived, status, project_id);
 '''
 
 
@@ -535,11 +536,12 @@ def labels() -> list:
 	'''Return the global labels and the signed-in user's own, with color, scope and the number of tasks using each that the user can see.'''
 
 	with connect() as db:
-		lv  = levels(db)
+		where, params = visible_where(db, None, 't.project_id')
 		out = {row['id']: {'name': row['name'], 'color': row['color'], 'global': row['owner_id'] is None, 'count': 0} for row in db.execute('SELECT id, name, color, owner_id FROM labels WHERE owner_id IS NULL OR owner_id IS ? ORDER BY name', (me(),))}
-		for row in db.execute('SELECT tl.label_id, t.project_id FROM task_labels tl JOIN tasks t ON t.id = tl.task_id'):
-			if row['label_id'] in out and (lv is None or lv.get(row['project_id'])):
-				out[row['label_id']]['count'] += 1
+		if where is not None:
+			for label_id, count in db.execute(('SELECT tl.label_id, COUNT(*) FROM task_labels tl JOIN tasks t ON t.id = tl.task_id WHERE ' + ' AND '.join(where) if where else 'SELECT label_id, COUNT(*) FROM task_labels') + ' GROUP BY 1', params):
+				if label_id in out:
+					out[label_id]['count'] = count
 
 	return list(out.values())
 
@@ -621,6 +623,16 @@ def levels(db: sqlite3.Connection, user: dict = None) -> dict:
 			out[pid] = level
 
 	return out
+
+
+def marks(values) -> str:
+	'''
+	Return "?, ?, ..." with one placeholder per value.
+
+	:param values: Values to bind
+	'''
+
+	return ', '.join('?' * len(values))
 
 
 def me() -> int:
@@ -1066,43 +1078,53 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 	local = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC'))
 	today = local.strftime('%Y-%m-%d')
 	week  = (local + timedelta(days=7)).strftime('%Y-%m-%d')
+	day   = "SUBSTR(COALESCE(due, ''), 1, 10)"
 
 	with connect() as db:
-		names = paths(db)
-		scope = None
-		if project:
-			require(db, 'projects', project)
-			prefix = names[project] + '/'
-			scope  = {pid for pid, path in names.items() if pid == project or path.startswith(prefix)}
-		notes = {}
-		if 'comments' in fields:
-			for row in db.execute('SELECT task_id, body FROM comments ORDER BY id'):
-				notes.setdefault(row['task_id'], []).append(row['body'])
-		tags = {}
-		for row in db.execute('SELECT tl.task_id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id ORDER BY l.name'):
-			tags.setdefault(row['task_id'], []).append(row['name'])
-		people = assignees_map(db)
-		lv     = levels(db)
-		rows   = [row for row in db.execute('SELECT id, project_id, title, description, status, priority, due, created, updated, archived FROM tasks') if lv is None or lv.get(row['project_id'])]
+		names         = paths(db)
+		where, params = visible_where(db, project, 't.project_id')
+		if where is None:
+			return []
+		if statuses:
+			where.append(f't.status IN ({marks(statuses)})')
+			params += list(statuses)
+		if label:
+			where.append('EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = t.id AND l.name = ?)')
+			params.append(label)
+		if assignee:
+			where.append('EXISTS (SELECT 1 FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE a.task_id = t.id AND u.username = ?)')
+			params.append(assignee)
+		if priority:
+			where.append('t.priority >= ?')
+			params.append(int(priority))
+		if due:
+			where.append({'overdue': f"{day} != '' AND {day} < ? AND t.status != 'done'", 'today': f'{day} = ?', 'week': f'{day} >= ? AND {day} <= ?', 'any': f"{day} != ''", 'none': f"{day} = ''"}[due])
+			params += {'overdue': [today], 'today': [today], 'week': [today, week]}.get(due, [])
+		for word in words:
+			pattern = '%' + word.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+			parts   = [f"LOWER(t.{f}) LIKE ? ESCAPE '\\'" for f in ('title', 'description') if f in fields]
+			if 'comments' in fields:
+				parts.append("EXISTS (SELECT 1 FROM comments c WHERE c.task_id = t.id AND LOWER(c.body) LIKE ? ESCAPE '\\')")
+			where.append('(' + ' OR '.join(parts) + ')')
+			params += [pattern] * len(parts)
+		cond  = (' WHERE ' + ' AND '.join(where)) if where else ''
+		rows  = db.execute(f'SELECT t.id, t.project_id, t.title, t.description, t.status, t.priority, t.due, t.created, t.updated, t.archived FROM tasks t{cond}', params).fetchall()
+		ids   = [r['id'] for r in rows]
+		tags, people, notes = {}, {}, {}
+		for chunk in range(0, len(ids), 900):
+			part = ids[chunk:chunk + 900]
+			for row in db.execute(f'SELECT tl.task_id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id IN ({marks(part)}) ORDER BY l.name', part):
+				tags.setdefault(row['task_id'], []).append(row['name'])
+			for row in db.execute(f'SELECT a.task_id, u.username FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE a.task_id IN ({marks(part)}) ORDER BY u.username', part):
+				people.setdefault(row['task_id'], []).append(row['username'])
+			if words and 'comments' in fields:
+				for row in db.execute(f'SELECT task_id, body FROM comments WHERE task_id IN ({marks(part)}) ORDER BY id', part):
+					notes.setdefault(row['task_id'], []).append(row['body'])
 
 	out = []
 	for row in rows:
-		d = (row['due'] or '')[:10]
-		if scope is not None and row['project_id'] not in scope:
-			continue
-		if statuses and row['status'] not in statuses:
-			continue
-		if label and label not in tags.get(row['id'], []):
-			continue
-		if assignee and assignee not in people.get(row['id'], []):
-			continue
-		if row['priority'] < (priority or 0):
-			continue
-		if (due == 'overdue' and not (d and d < today and row['status'] != 'done')) or (due == 'today' and d != today) or (due == 'week' and not (d and today <= d <= week)) or (due == 'any' and not d) or (due == 'none' and d):
-			continue
+		d     = (row['due'] or '')[:10]
 		texts = [('title', row['title'])] * ('title' in fields) + [('description', row['description'])] * ('description' in fields) + [('comment', n) for n in notes.get(row['id'], [])]
-		if not all(any(w in text.lower() for _, text in texts) for w in words):
-			continue
 		where, snippet = 'title', ''
 		if words and not ('title' in fields and any(w in row['title'].lower() for w in words)):
 			for kind, text in texts[1 if 'title' in fields else 0:]:
@@ -1297,35 +1319,72 @@ def task_update(task_id: int, data: dict) -> dict:
 	return task(task_id)
 
 
-def tasks(project_id: int = None, archived: bool = False) -> list:
+def tasks(project_id: int = None, archived: bool = False, statuses: list = None, ids: list = None, labels: list = None, assignee: str = None, priority_min: int = 0, due_before: str = None, updated_since: str = None, scheduled: bool = False, brief: bool = False) -> list:
 	'''
-	Return card summaries for every task, or for one project and its sub-projects.
+	Return card summaries for the tasks the user can see, filtered in SQL.
 
-	:param project_id: Project id, or None for all tasks
+	:param project_id: Project id, its sub-projects included; None for every project
 	:param archived: Include archived tasks
+	:param statuses: Only these statuses
+	:param ids: Only these task ids
+	:param labels: Must have every one of these labels
+	:param assignee: Must be assigned to this username
+	:param priority_min: Minimum priority
+	:param due_before: Due before this YYYY-MM-DD
+	:param updated_since: Changed at or after this ISO time
+	:param scheduled: Only tasks with a due date, a reminder, or in doing (what notifications look at)
+	:param brief: Return only id, project, status, priority and updated, for sorting before loading whole cards
 	'''
 
 	with connect() as db:
-		names = paths(db)
-		scope = None
+		names         = paths(db)
+		where, params = visible_where(db, project_id)
 
-		lv = levels(db)
-		if project_id:
-			require(db, 'projects', project_id)
-			need(db, project_id, VIEW)
-			prefix = names[project_id] + '/'
-			scope  = {pid for pid, path in names.items() if pid == project_id or path.startswith(prefix)}
+		if where is None:
+			return []
+		if not archived:
+			where.append('archived = 0')
+		if statuses:
+			where.append(f'status IN ({marks(statuses)})')
+			params += list(statuses)
+		if ids is not None:
+			if not ids:
+				return []
+			where.append(f'id IN ({marks(ids)})')
+			params += [int(i) for i in ids]
+		if priority_min:
+			where.append('priority >= ?')
+			params.append(int(priority_min))
+		if due_before:
+			where.append('due IS NOT NULL AND SUBSTR(due, 1, 10) < ?')
+			params.append(due_before)
+		if updated_since:
+			where.append('updated >= ?')
+			params.append(updated_since)
+		if scheduled:
+			where.append("(due IS NOT NULL OR remind_at IS NOT NULL OR status = 'doing')")
+		for name in labels or []:
+			where.append('EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = tasks.id AND l.name = ?)')
+			params.append(name)
+		if assignee:
+			where.append('EXISTS (SELECT 1 FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE a.task_id = tasks.id AND u.username = ?)')
+			params.append(assignee)
 
-		tags = {}
-		for row in db.execute('SELECT tl.task_id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id ORDER BY l.name'):
+		cond  = (' WHERE ' + ' AND '.join(where)) if where else ''
+		if brief:
+			return [dict(r, project=names[r['project_id']]) for r in db.execute(f'SELECT id, project_id, status, priority, updated FROM tasks{cond}', params)]
+		chose = f' AND {{}} IN (SELECT id FROM tasks{cond})' if where else '' # no filter at all: the side tables are read whole
+		rows  = db.execute(f'SELECT * FROM tasks{cond} ORDER BY position, id', params).fetchall()
+		tags  = {}
+		for row in db.execute('SELECT tl.task_id, l.name FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE 1 = 1' + chose.format('tl.task_id') + ' ORDER BY l.name', params):
 			tags.setdefault(row['task_id'], []).append(row['name'])
+		notes  = dict(db.execute('SELECT task_id, COUNT(*) FROM comments WHERE 1 = 1' + chose.format('task_id') + ' GROUP BY task_id', params).fetchall())
+		files  = dict(db.execute('SELECT task_id, COUNT(*) FROM attachments WHERE 1 = 1' + chose.format('task_id') + ' GROUP BY task_id', params).fetchall())
+		people = {}
+		for row in db.execute('SELECT a.task_id, u.username FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE 1 = 1' + chose.format('a.task_id') + ' ORDER BY u.username', params):
+			people.setdefault(row['task_id'], []).append(row['username'])
 
-		notes = dict(db.execute('SELECT task_id, COUNT(*) FROM comments GROUP BY task_id').fetchall())
-		files = dict(db.execute('SELECT task_id, COUNT(*) FROM attachments GROUP BY task_id').fetchall())
-		people = assignees_map(db)
-		rows  = db.execute('SELECT * FROM tasks' + ('' if archived else ' WHERE archived = 0') + ' ORDER BY position, id').fetchall()
-
-	return [summary(row, names, tags, notes, files, people) for row in rows if (scope is None or row['project_id'] in scope) and (lv is None or lv.get(row['project_id']))]
+	return [summary(row, names, tags, notes, files, people) for row in rows]
 
 
 def touch(db: sqlite3.Connection, task_id: int):
@@ -1465,3 +1524,32 @@ def valid_repeat(text: str) -> str:
 		return ','.join(d[:3] for d in DAYS if any(d.startswith(w) for w in words))
 
 	raise ValueError('repeat must be daily, weekly, monthly, yearly, every N days/weeks/months/years, weekdays, or days like mon,wed,fri')
+
+
+def visible_where(db: database.Connection, project_id: int = None, column: str = 'project_id') -> tuple:
+	'''
+	Return (conditions, params) limiting a task query to the projects the user can see, optionally one project and its sub-projects; conditions is None when nothing can match.
+
+	:param db: Open database connection
+	:param project_id: Project id, or None for every visible project
+	:param column: Column holding the task's project id
+	'''
+
+	lv      = levels(db)
+	allowed = None if lv is None else set(lv)
+
+	if project_id:
+		require(db, 'projects', project_id)
+		need(db, project_id, VIEW)
+		names   = paths(db)
+		prefix  = names[project_id] + '/'
+		scope   = {pid for pid, path in names.items() if pid == project_id or path.startswith(prefix)}
+		allowed = scope if allowed is None else allowed & scope
+
+	if allowed is None:
+		return [], []
+
+	if not allowed:
+		return None, []
+
+	return [f'{column} IN ({marks(allowed)})'], sorted(allowed)

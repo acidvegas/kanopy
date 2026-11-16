@@ -59,7 +59,7 @@ def check():
 	today = now.strftime('%Y-%m-%d')
 	clock = now.strftime('%H:%M')
 	floor = (now - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
-	open_ = [t for t in kanban.tasks() if t['status'] != 'done']
+	open_ = kanban.tasks(statuses=['todo', 'doing'], scheduled=True)
 
 	if board and conf['notify_remind'] == '1':
 		for t in open_:

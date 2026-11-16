@@ -176,12 +176,13 @@ def notifications(user: dict) -> dict:
 	'''
 
 	with kanban.connect() as db:
-		lv   = kanban.levels(db, user)
-		rows = [dict(row) for row in db.execute('SELECT n.*, t.title, t.project_id FROM notifications n LEFT JOIN tasks t ON t.id = n.task_id WHERE n.user_id = ? ORDER BY n.id DESC', (user['id'],))]
+		lv     = kanban.levels(db, user)
+		where  = 'n.user_id = ?' + ('' if lv is None else f' AND (n.task_id IS NULL OR t.project_id IN ({kanban.marks(lv) or "NULL"}))') # drop ones about tasks they can no longer see
+		params = [user['id']] + ([] if lv is None else sorted(lv))
+		rows   = [dict(row) for row in db.execute(f'SELECT n.*, t.title FROM notifications n LEFT JOIN tasks t ON t.id = n.task_id WHERE {where} ORDER BY n.id DESC LIMIT 100', params)]
+		unread = db.execute(f'SELECT COUNT(*) FROM notifications n LEFT JOIN tasks t ON t.id = n.task_id WHERE {where} AND n.read = 0', params).fetchone()[0]
 
-	rows = [row for row in rows if lv is None or row['task_id'] is None or lv.get(row.pop('project_id'))] # drop ones about tasks they can no longer see
-
-	return {'notifications': rows[:100], 'unread': sum(not row['read'] for row in rows)}
+	return {'notifications': rows, 'unread': unread}
 
 
 def notifications_read(user: dict, ids: list = None):
