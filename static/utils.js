@@ -997,7 +997,7 @@ function teamsRender() {
 		</div>
 		<div class="team-members">${t.members.map((m) => `<span class="person">${avatar(m.username)}${esc(m.username)}${m.owner ? ' <small>owner</small>' : ''}${t.owner && m.id !== KB.me.id ? `<button type="button" class="link-btn" data-team="${m.owner ? 'demote' : 'promote'}" data-user="${m.id}">${m.owner ? 'make member' : 'make owner'}</button><button type="button" data-team="remove" data-user="${m.id}" aria-label="Remove">${SVG.x}</button>` : ''}</span>`).join('')}</div>
 		${t.owner ? '<form class="inline-form team-add"><input name="username" list="user-list" placeholder="add by username" spellcheck="false"><button>Add</button></form>' : ''}
-		${t.owner ? `<form class="inline-form team-hook" title="Task changes on projects shared with this team are POSTed here as JSON"><input name="url" value="${esc(t.webhook)}" placeholder="webhook URL (optional)" spellcheck="false"><button>Save</button></form>` : ''}
+		${t.owner ? `<form class="inline-form team-hook" title="Task changes on projects shared with this team are POSTed here as JSON"><input name="url" value="${esc(t.webhook)}" placeholder="webhook URL (optional, https)" spellcheck="false"><button>Save</button></form>${t.webhook_error ? `<small class="team-hook-error">last send failed ${new Date(t.webhook_failed).toLocaleString()}: ${esc(t.webhook_error)}</small>` : ''}` : ''}
 	</div>`).join('') || '<p class="dim">You are not in any team yet.</p>';
 }
 
