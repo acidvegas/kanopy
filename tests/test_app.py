@@ -159,8 +159,9 @@ class TestRoutes(AppBase):
 		self.assertEqual(c.delete(f'/api/tasks/{t["id"]}').json, {'ok': True})
 		trash = c.get('/api/trash').json
 		self.assertEqual((trash['days'], trash['trash'][0]['task_id']), (kanban.TRASH_DAYS, t['id']))
-		self.assertEqual(c.post(f'/api/trash/{trash["trash"][0]["id"]}/restore').json['id'], t['id'])
-		self.assertEqual(c.delete(f'/api/attachments/{aid}').json['attachments'], [])
+		back = c.post(f'/api/trash/{trash["trash"][0]["id"]}/restore').json
+		self.assertEqual(back['id'], t['id'])
+		self.assertEqual(c.delete(f'/api/attachments/{back["attachments"][0]["id"]}').json['attachments'], [])
 
 
 	def test_projects_labels_repeats(self):

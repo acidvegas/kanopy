@@ -1233,7 +1233,7 @@ def task(task_id: int) -> dict:
 		lv    = levels(db)
 		names = paths(db)
 		tags  = [r['name'] for r in db.execute('SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ? ORDER BY l.name', (task_id,))]
-		files = dict(db.execute('SELECT task_id, COUNT(*) FROM attachments WHERE task_id = ?', (task_id,)).fetchall())
+		files = dict(db.execute('SELECT task_id, COUNT(*) FROM attachments WHERE task_id = ? GROUP BY task_id', (task_id,)).fetchall())
 		data  = summary(row, names, {task_id: tags}, {}, files, assignees_map(db, task_id))
 		data['role']        = OWN if lv is None else lv.get(row['project_id'], 0)
 		data['description'] = row['description']

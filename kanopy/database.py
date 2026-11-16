@@ -85,7 +85,8 @@ class Connection:
 		sql, returning = translate(sql)
 		cur            = self.raw.cursor()
 		cur.execute(sql, tuple(params) if params else None)
-		last = cur.fetchone()[0] if returning and cur.description else None
+		row  = cur.fetchone() if returning and cur.description else None # no row when ON CONFLICT DO NOTHING skipped the insert
+		last = row[0] if row else None
 
 		return Cursor(cur, last)
 

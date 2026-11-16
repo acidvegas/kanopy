@@ -2,6 +2,7 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # tests/base.py
 
+import os
 import tempfile
 import unittest
 
@@ -15,6 +16,7 @@ from kanopy import notify
 
 
 PASSWORD = 'password123'
+POSTGRES = os.environ.get('KANOPY_TEST_DATABASE') # a throwaway postgresql:// database to run the suite against; it is wiped before every test
 HASH     = accounts.password_hash(PASSWORD) # scrypt is slow, so every test user shares one hash
 
 
@@ -27,9 +29,13 @@ class Base(unittest.TestCase):
 		self.dir        = tempfile.TemporaryDirectory()
 		self.old        = (kanban.DB, kanban.DATABASE, kanban.BACKUPS, notify.send)
 		kanban.DB       = Path(self.dir.name) / 'kanban.db'
-		kanban.DATABASE = str(kanban.DB)
+		kanban.DATABASE = POSTGRES or str(kanban.DB)
 		kanban.BACKUPS  = Path(self.dir.name) / 'backups'
-		assert kanban.connect().target.startswith(self.dir.name), 'tests must never touch a real database'
+		if POSTGRES:
+			with kanban.connect() as db:
+				db.executescript('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+		else:
+			assert kanban.connect().target.startswith(self.dir.name), 'tests must never touch a real database'
 		self.pushes     = []
 		notify.send     = lambda title, message, task_id=None, priority=3, tags='', topic=None: self.pushes.append({'title': title, 'message': message, 'task_id': task_id, 'topic': topic})
 		kanban.init()
