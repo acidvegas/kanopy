@@ -645,6 +645,7 @@ class TestSearch(Base):
 		self.assertEqual([h['id'] for h in kanban.search('x', sort='due')], [c['id'], a['id'], b['id']])
 		self.assertEqual([h['id'] for h in kanban.search('x', sort='id')], [c['id'], b['id'], a['id']])
 		self.assertEqual(kanban.search('x')[-1]['id'], c['id'])
+		self.assertEqual([h['id'] for h in kanban.search('x', sort='id', limit=2)], [c['id'], b['id']])
 
 
 	def test_filters(self):

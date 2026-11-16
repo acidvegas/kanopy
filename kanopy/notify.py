@@ -233,6 +233,19 @@ def send(title: str, message: str, task_id: int = None, priority: int = 3, tags:
 		resp.read()
 
 
+def sent_purge(days: int = 30):
+	'''
+	Forget sent-push records older than the given days; every key holds a date or time, so old ones never come round again.
+
+	:param days: Days to keep
+	'''
+
+	cutoff = (datetime.now(ZoneInfo('UTC')) - timedelta(days=days)).isoformat(timespec='seconds')
+
+	with kanban.connect() as db:
+		db.execute('DELETE FROM sent WHERE at < ?', (cutoff,))
+
+
 def settings() -> dict:
 	'''Return notification settings with defaults filled in.'''
 

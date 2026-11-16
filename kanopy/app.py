@@ -42,6 +42,7 @@ HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
 OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
+THREADS = 16 # requests served at once; open pages poll every 15s, so many viewers need more than waitress's default 4
 STATIC = Path(__file__).parent.parent / 'static'
 URL    = os.environ.get('KANOPY_URL', '').rstrip('/') # public address when behind a reverse proxy
 
@@ -508,7 +509,7 @@ def api_search() -> dict:
 	statuses = [v for v in args.get('status', '').split(',') if v]
 	fields   = [v for v in args.get('fields', '').split(',') if v]
 
-	return {'results': kanban.search(args.get('q', ''), args.get('project', type=int), statuses, args.get('label') or None, args.get('priority', 0, type=int), args.get('due', ''), fields, args.get('sort', 'updated'), args.get('assignee') or None)[:300]}
+	return {'results': kanban.search(args.get('q', ''), args.get('project', type=int), statuses, args.get('label') or None, args.get('priority', 0, type=int), args.get('due', ''), fields, args.get('sort', 'updated'), args.get('assignee') or None, limit=300)}
 
 
 @app.get('/api/revision')
@@ -671,6 +672,7 @@ def housekeep():
 
 	kanban.backup()
 	kanban.trash_purge()
+	notify.sent_purge()
 	days = int(notify.settings()['archive_days'])
 
 	if days and kanban.archive_done(days):
@@ -744,4 +746,4 @@ if __name__ == '__main__':
 		accounts.token_import(admin['id'], 'shared key', KEY)
 	threading.Thread(target=notify.loop, daemon=True).start()
 	threading.Thread(target=housekeep_loop, daemon=True).start()
-	serve(app, host=HOST, port=PORT)
+	serve(app, host=HOST, port=PORT, threads=THREADS)
