@@ -5,7 +5,9 @@
 import json
 import logging
 import re
+import threading
 import time
+import urllib.parse
 import urllib.request
 
 from datetime import datetime, timedelta
@@ -14,10 +16,11 @@ from zoneinfo import ZoneInfo
 from . import kanban
 
 
-BASE_URL   = '' # set by app.py from HOST and PORT
-STALE_DAYS = 3 # a task in doing with no update for this many days shows in the digest
-MENTION_RE = re.compile(r'(?<![\w@])@([a-z0-9_-]{2,32})')
-USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+BASE_URL    = '' # set by app.py from HOST and PORT
+STALE_DAYS  = 3 # a task in doing with no update for this many days shows in the digest
+HOOK_FIELDS = ('title', 'status', 'priority', 'due', 'project', 'labels', 'assignees', 'description') # task fields whose changes go out on team webhooks
+MENTION_RE  = re.compile(r'(?<![\w@])@([a-z0-9_-]{2,32})')
+USER_AGENT  = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
 
 DEFAULTS = {
 	'ntfy_url'          : 'https://ntfy.sh',
@@ -266,6 +269,8 @@ def task_event(before: dict, after: dict, comment: str = ''):
 	if not actor:
 		return
 
+	webhook('commented' if comment else 'updated' if before else 'created', before, after, comment)
+
 	with kanban.connect() as db:
 		people = {row['username']: dict(row) for row in db.execute('SELECT * FROM users')}
 
@@ -295,3 +300,72 @@ def task_event(before: dict, after: dict, comment: str = ''):
 		for name in after['assignees']:
 			if name in people and name not in done:
 				deliver(people[name], 'activity', after, what)
+
+
+def webhook(event: str, before: dict, after: dict, comment: str = ''):
+	'''
+	Post a task change made by the signed-in user to the webhook of every team its project is shared with.
+
+	:param event: created, updated, commented or deleted
+	:param before: Task before the change, or None for a new task
+	:param after: Task after the change (the deleted task for deleted)
+	:param comment: Body of a new comment, if the change was a comment
+	'''
+
+	if not (actor := kanban.ACTOR.get()):
+		return
+
+	changes = [{'field': key, 'old': None if key == 'description' else before[key], 'new': None if key == 'description' else after[key]} for key in HOOK_FIELDS if event == 'updated' and before[key] != after[key]] # descriptions are too long to repeat
+
+	if event == 'updated' and not changes:
+		return
+
+	if not (urls := webhook_urls(after['project_id'])):
+		return
+
+	task = {key: after[key] for key in ('id', 'title', 'project', 'status', 'priority', 'due', 'assignees', 'labels')}
+
+	webhook_post(urls, {'event': event, 'actor': actor['username'], 'agent': kanban.AGENT.get(), 'task': dict(task, url=f'{BASE_URL}/#/task/{after["id"]}'), 'changes': changes, 'comment': comment})
+
+
+def webhook_post(urls: list, payload: dict):
+	'''
+	POST the payload as JSON to each URL from a background thread, so a slow receiver never holds up the request. A key= URL parameter is sent as a Bearer header instead, keeping it out of proxy logs.
+
+	:param urls: Webhook URLs
+	:param payload: Event payload
+	'''
+
+	def run():
+		for url in urls:
+			try:
+				parts   = urllib.parse.urlsplit(url)
+				query   = urllib.parse.parse_qsl(parts.query)
+				headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
+				if (key := next((v for k, v in query if k == 'key'), None)):
+					headers['Authorization'] = f'Bearer {key}'
+					url = parts._replace(query=urllib.parse.urlencode([(k, v) for k, v in query if k != 'key'])).geturl()
+				req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+				with urllib.request.urlopen(req, timeout=10) as resp:
+					resp.read()
+			except Exception as exc:
+				logging.warning('team webhook for #%s failed: %s', payload['task']['id'], exc)
+
+	threading.Thread(target=run, daemon=True).start()
+
+
+def webhook_urls(project_id: int) -> list:
+	'''
+	Return the webhook URLs of the teams a project is shared with, directly or through a parent project.
+
+	:param project_id: Project id
+	'''
+
+	with kanban.connect() as db:
+		parent = {row['id']: row['parent_id'] for row in db.execute('SELECT id, parent_id FROM projects')}
+		chain  = []
+		node   = project_id
+		while node:
+			chain.append(node)
+			node = parent.get(node)
+		return [row['webhook'] for row in db.execute(f"SELECT DISTINCT t.webhook FROM shares s JOIN teams t ON t.id = s.team_id WHERE t.webhook != '' AND s.project_id IN ({kanban.marks(chain)})", chain)]

@@ -265,6 +265,19 @@ class TestTeams(Base):
 		self.assertEqual(accounts.teams(self.bob), [])
 
 
+	def test_webhook(self):
+		'''Only owners set the webhook and only they see it; it must be an http(s) URL, and empty clears it.'''
+
+		with self.assertRaises(PermissionError):
+			accounts.team_webhook(self.bob, self.team, 'https://chat.example.com/hook')
+		for bad in ('ftp://x', 'not a url', 'https://' + 'x' * 500):
+			with self.assertRaises(ValueError, msg=bad):
+				accounts.team_webhook(self.ann, self.team, bad)
+		self.assertEqual(accounts.team_webhook(self.ann, self.team, ' https://chat.example.com/hook ')[0]['webhook'], 'https://chat.example.com/hook')
+		self.assertEqual(accounts.teams(self.bob)[0]['webhook'], '')
+		self.assertEqual(accounts.team_webhook(self.ann, self.team, '')[0]['webhook'], '')
+
+
 	def test_last_owner(self):
 		'''A team always keeps at least one owner.'''
 

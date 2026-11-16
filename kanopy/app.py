@@ -268,6 +268,13 @@ def api_team_member_role(team_id: int, user_id: int) -> dict:
 	return {'teams': accounts.team_member_role(g.user, team_id, user_id, (request.get_json(force=True) or {}).get('owner'))}
 
 
+@app.put('/api/teams/<int:team_id>/webhook')
+def api_team_webhook(team_id: int) -> dict:
+	'''Set or clear the team's webhook URL.'''
+
+	return {'teams': accounts.team_webhook(g.user, team_id, (request.get_json(force=True) or {}).get('url'))}
+
+
 @app.get('/api/tokens')
 def api_tokens() -> dict:
 	'''List the signed-in user's API tokens.'''
@@ -362,9 +369,18 @@ def api_attachment_get(attachment_id: int) -> Response:
 def api_bulk() -> dict:
 	'''Apply one change to many tasks.'''
 
-	body = request.get_json(force=True) or {}
+	body    = request.get_json(force=True) or {}
+	ids     = [int(i) for i in body.get('ids', [])]
+	before  = {task_id: kanban.task(task_id) for task_id in ids}
+	changed = kanban.bulk(ids, body)
 
-	return {'changed': kanban.bulk([int(i) for i in body.get('ids', [])], body)}
+	for task_id in ids:
+		if body.get('delete'):
+			notify.webhook('deleted', None, before[task_id])
+		else:
+			notify.webhook('updated', before[task_id], kanban.task(task_id))
+
+	return {'changed': changed}
 
 
 @app.post('/api/tasks/<int:task_id>/comments')
@@ -581,7 +597,9 @@ def api_task_create() -> dict:
 def api_task_delete(task_id: int) -> dict:
 	'''Move a task to the trash.'''
 
+	task = kanban.task(task_id)
 	kanban.task_delete(task_id)
+	notify.webhook('deleted', None, task)
 
 	return {'ok': True}
 

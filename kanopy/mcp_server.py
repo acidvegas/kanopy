@@ -158,9 +158,10 @@ def call(name: str, args: dict, agent: str) -> str:
 			task = kanban.trash_restore(entry['id'])
 			return task_line(task['id']) + ('' if task['id'] == entry['task_id'] else f'\nrestored as #{task["id"]}, #{entry["task_id"]} was taken')
 		if args.get('task'):
-			title = kanban.task(int(args['task']))['title']
-			kanban.task_delete(int(args['task']))
-			return f'deleted #{args["task"]} {title} (restore= within {kanban.TRASH_DAYS} days)'
+			task = kanban.task(int(args['task']))
+			kanban.task_delete(task['id'])
+			notify.webhook('deleted', None, task)
+			return f'deleted #{task["id"]} {task["title"]} (restore= within {kanban.TRASH_DAYS} days)'
 		if args.get('project'):
 			pid  = project_id(args['project'])
 			path = project_path(pid)

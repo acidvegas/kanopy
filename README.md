@@ -134,6 +134,8 @@ Projects are private to whoever made them until shared with a user or a team. Sh
 
 Anyone can create a team and add members by username. Admins see every project.
 
+A team owner can give the team a **webhook URL**. Every change made on a project shared with the team *(new tasks, field changes, comments and deletes, on its sub-projects too)* is then POSTed there as JSON: `event` *(created, updated, commented or deleted)*, `actor`, `agent`, `task` *(id, title, project, status, priority, due, assignees, labels, url)*, `changes` *(field, old, new)* and `comment`.
+
 ## Connecting agents
 
 kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history. A token can be made **read-only**: the agent then sees only the reading tools and every change is refused, over MCP and the REST API alike.

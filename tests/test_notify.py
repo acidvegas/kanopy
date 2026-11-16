@@ -2,7 +2,10 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # tests/test_notify.py
 
+import http.server
 import json
+import queue
+import threading
 import unittest
 
 from datetime import datetime, timedelta, timezone
@@ -285,6 +288,97 @@ class TestTaskEvents(Base):
 		self.act(None)
 		notify.task_event(None, kanban.task(self.t['id']))
 		self.assertEqual(self.inbox(), [])
+
+
+
+class TestWebhooks(Base):
+	'''Team webhooks for changes on shared projects.'''
+
+	def setUp(self):
+		'''Ann shares Work with team crew, which has a webhook; Ann acts and posts are recorded.'''
+
+		super().setUp()
+		self.ann            = self.user('ann')
+		self.hits           = []
+		self.old_post       = notify.webhook_post
+		notify.webhook_post = lambda urls, payload: self.hits.append((urls, payload))
+		self.act(self.ann)
+		accounts.team_create(self.ann, 'crew')
+		team = accounts.teams(self.ann)[0]['id']
+		accounts.team_webhook(self.ann, team, 'https://chat.example.com/hook')
+		self.nt = kanban.project_save('Work')['id']
+		accounts.share_add(self.nt, 'editor', team='crew')
+
+
+	def tearDown(self):
+		'''Restore the real poster.'''
+
+		notify.webhook_post = self.old_post
+		super().tearDown()
+
+
+	def events(self) -> list:
+		'''Event names posted so far.'''
+
+		return [payload['event'] for urls, payload in self.hits]
+
+
+	def test_lifecycle(self):
+		'''Create, field changes, comments and deletes on a sub-project all post, with the changed fields.'''
+
+		t = self.task('Work/api', 'scan')
+		notify.task_event(None, t)
+		before = kanban.task(t['id'])
+		notify.task_event(before, kanban.task_update(t['id'], {'status': 'doing', 'description': 'plan'}))
+		task = kanban.comment_add(t['id'], 'ann', 'looks good')
+		notify.task_event(task, task, 'looks good')
+		self.assertEqual(self.events(), ['created', 'updated', 'commented'])
+		urls, payload = self.hits[1]
+		self.assertEqual(urls, ['https://chat.example.com/hook'])
+		self.assertEqual((payload['actor'], payload['task']['project'], payload['task']['status']), ('ann', 'Work/api', 'doing'))
+		self.assertEqual(payload['changes'], [{'field': 'status', 'old': 'todo', 'new': 'doing'}, {'field': 'description', 'old': None, 'new': None}])
+		self.assertTrue(payload['task']['url'].endswith(f'/#/task/{t["id"]}'))
+		self.assertEqual(self.hits[2][1]['comment'], 'looks good')
+		notify.webhook('deleted', None, kanban.task(t['id']))
+		self.assertEqual(self.events()[-1], 'deleted')
+
+
+	def test_post_moves_key_to_header(self):
+		'''The real poster sends JSON, and a key= URL parameter goes out as a Bearer header instead.'''
+
+		got = queue.Queue()
+
+		class Handler(http.server.BaseHTTPRequestHandler):
+			def do_POST(self):
+				got.put((self.path, self.headers.get('Authorization'), json.loads(self.rfile.read(int(self.headers['Content-Length'])))))
+				self.send_response(200)
+				self.end_headers()
+
+			def log_message(self, *args):
+				pass
+
+		server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
+		threading.Thread(target=server.handle_request, daemon=True).start()
+		self.old_post([f'http://127.0.0.1:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
+		path, auth, body = got.get(timeout=5)
+		server.server_close()
+		self.assertEqual((path, auth, body['event']), ('/hook?channel=dev&topic=kanopy', 'Bearer secret123', 'created'))
+
+
+	def test_skipped(self):
+		'''Unshared projects, changes with no tracked field, system changes and teams without a URL post nothing.'''
+
+		other = self.task('Home', 'dishes')
+		notify.task_event(None, other)
+		t      = self.task('Work', 'scan')
+		before = kanban.task(t['id'])
+		notify.task_event(before, kanban.task(t['id']))
+		self.act(None)
+		notify.task_event(None, t)
+		self.act(self.ann)
+		accounts.team_webhook(self.ann, accounts.teams(self.ann)[0]['id'], '')
+		notify.task_event(None, t)
+		self.assertEqual(self.hits, [])
 
 
 
