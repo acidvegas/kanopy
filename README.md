@@ -166,18 +166,18 @@ Any MCP client that supports streamable HTTP works: point it at `http://HOST:POR
 
 ## MCP tools
 
-| Tool            | Does                                                                                                   |
-|-----------------|--------------------------------------------------------------------------------------------------------|
-| `list_projects` | Project tree with open task counts                                                                     |
-| `list_tasks`    | Tasks filtered by project, labels, text, status, priority or due date; `changed` lists recent activity |
-| `get_task`      | Full tasks with description, links and comments, or the text of an attachment                          |
-| `save_task`     | Create or update any field, set status, tick a checklist item, comment; `ids` updates many at once     |
-| `save_project`  | Rename or move, describe, set the local folder, archive                                                |
-| `comment`       | Add a progress note                                                                                    |
-| `link`          | Relate two tasks, or remove the relation                                                               |
-| `labels`        | List labels, create a global `type:` value *(admin)*, delete one                                       |
-| `inbox`         | Unread notifications                                                                                   |
-| `delete`        | A task, or an empty project                                                                            |
+| Tool            | Does                                                                                                                              |
+|-----------------|-----------------------------------------------------------------------------------------------------------------------------------|
+| `list_projects` | Project tree with open task counts                                                                                                |
+| `list_tasks`    | Tasks filtered by project, labels, text *(with the matching line)*, status, priority or due date; `changed` lists recent activity |
+| `get_task`      | Full tasks with description, links and the last 5 comments *(`comments` for all)*, or an attachment's text                        |
+| `save_task`     | Create or update any field, edit or append to the description, tick a checklist item, comment; `ids` updates many at once         |
+| `save_project`  | Rename or move, describe, set the local folder, archive                                                                           |
+| `comment`       | Add a progress note                                                                                                               |
+| `link`          | Relate two tasks, or remove the relation                                                                                          |
+| `labels`        | List labels, create a global `type:` value *(admin)*, delete one                                                                  |
+| `inbox`         | Unread notifications                                                                                                              |
+| `delete`        | A task *(to the trash)*, or an empty project; `restore` brings a deleted task back                                                |
 
 A few rules keep agents from making a mess:
 

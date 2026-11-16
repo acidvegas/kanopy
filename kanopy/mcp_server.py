@@ -434,7 +434,9 @@ def list_tasks(args: dict) -> str:
 	text  = (args.get('text') or '').strip()
 	due   = args.get('due') or ''
 	rows  = kanban.tasks(project_id(args['project']) if args.get('project') else None, archived=bool(text) or status in ('done', 'all'))
-	match = {r['id'] for r in kanban.search(text, due=due)} if text or due else None
+	hits  = {r['id']: r for r in kanban.search(text, due=due)} if text or due else None
+	match = set(hits) if hits is not None else None
+	found = lambda t: f'\n    {hits[t["id"]]["where"]}: {hits[t["id"]]["snippet"]}' if text and hits[t['id']]['snippet'] else '' # the line that matched, when it was not the title
 	who   = (args.get('assignee') or '').strip().lower().lstrip('@')
 	who   = kanban.ACTOR.get()['username'] if who == 'me' and kanban.ACTOR.get() else who
 
@@ -467,7 +469,7 @@ def list_tasks(args: dict) -> str:
 
 	if cutoff: # newest first, one flat list
 		out.sort(key=lambda t: t['updated'], reverse=True)
-		lines = [line(t, rels.get(t['id'], {})) + f'  changed:{t["updated"][:10]}' for t in out[:limit]]
+		lines = [line(t, rels.get(t['id'], {})) + f'  changed:{t["updated"][:10]}' + (found(t) if hits else '') for t in out[:limit]]
 		if len(out) > limit:
 			lines.append(f'... {len(out) - limit} more (raise limit)')
 		return '\n'.join(lines)
@@ -477,7 +479,7 @@ def list_tasks(args: dict) -> str:
 		if t['project'] != group:
 			group = t['project']
 			lines.append(f'[{group}]')
-		lines.append(line(t, rels.get(t['id'], {}), project=False))
+		lines.append(line(t, rels.get(t['id'], {}), project=False) + (found(t) if hits else ''))
 
 	if len(out) > limit:
 		lines.append(f'... {len(out) - limit} more (raise limit)')
