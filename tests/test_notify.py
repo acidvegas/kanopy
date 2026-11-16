@@ -137,7 +137,7 @@ class TestPushes(Base):
 			sent.append((req, timeout))
 			return Resp()
 
-		real, notify.send = notify.send, self.old[2]
+		real, notify.send = notify.send, self.old[3]
 		old_open, notify.urllib.request.urlopen = notify.urllib.request.urlopen, urlopen
 		try:
 			notify.save({'ntfy_url': 'https://push.example/', 'ntfy_token': 'tk_9'})
