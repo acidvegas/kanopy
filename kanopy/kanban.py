@@ -2,8 +2,10 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanopy/kanban.py
 
+import base64
 import calendar
 import contextvars
+import json
 import random
 import re
 import sqlite3
@@ -31,6 +33,7 @@ VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
 HISTORY  = 200 # events kept per task
+TRASH_DAYS = 30 # days a deleted task can be restored
 TYPES    = {'bug': '#f87171', 'ci': None, 'cleanup': None, 'decommission': None, 'dependency': None, 'deploy': None, 'design': None, 'docs': None, 'event': '#22d3ee', 'feature': None, 'goal': '#22d3ee', 'habit': '#22d3ee', 'hardware': None, 'idea': None, 'learning': '#22d3ee', 'migration': None, 'note': '#22d3ee', 'performance': None, 'purchase': '#22d3ee', 'question': '#22d3ee', 'release': None, 'repo': None, 'research': None, 'review': None, 'security': '#f87171', 'support': None, 'test': None} # global type: labels a fresh install starts with; red flags trouble, cyan is life and thoughts
 
 SCHEMA = '''
@@ -81,6 +84,7 @@ CREATE INDEX IF NOT EXISTS attachments_task ON attachments (task_id);
 CREATE INDEX IF NOT EXISTS task_labels_label ON task_labels (label_id);
 CREATE INDEX IF NOT EXISTS links_other ON links (other_id);
 CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees (user_id);
+CREATE TABLE IF NOT EXISTS trash          (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, project_id INTEGER NOT NULL, title TEXT NOT NULL, deleted TEXT NOT NULL, deleted_by TEXT NOT NULL, data TEXT NOT NULL); -- deleted tasks as JSON snapshots, purged after TRASH_DAYS
 CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
 '''
 
@@ -316,7 +320,7 @@ def bulk(ids: list, data: dict) -> int:
 		for task_id in ids:
 			row = need_task(db, task_id, EDIT)
 			if data.get('delete'):
-				db.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+				trash(db, task_id)
 				continue
 			fields = {key: data[key] for key in ('status', 'project_id') if data.get(key)}
 			if data.get('add_label') or data.get('remove_label'):
@@ -860,7 +864,7 @@ def record(db: sqlite3.Connection, task_id: int, field: str, old: str = None, ne
 
 	:param db: Open database connection
 	:param task_id: Task id
-	:param field: What changed: created, title, description, status, priority, due, remind_at, repeat, next (the repeat's new copy), project, label, assignee, link, attachment, comment
+	:param field: What changed: created, restored, title, description, status, priority, due, remind_at, repeat, next (the repeat's new copy), project, label, assignee, link, attachment, comment
 	:param old: Value before, or None
 	:param new: Value after, or None
 	'''
@@ -1246,14 +1250,14 @@ def task_create(data: dict) -> dict:
 
 def task_delete(task_id: int):
 	'''
-	Delete a task with its comments, labels and links.
+	Move a task to the trash with its comments, labels, links and attachments.
 
 	:param task_id: Task id
 	'''
 
 	with connect() as db:
 		need_task(db, task_id, EDIT)
-		db.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+		trash(db, task_id)
 
 
 def task_update(task_id: int, data: dict) -> dict:
@@ -1311,6 +1315,86 @@ def touch(db: sqlite3.Connection, task_id: int):
 	'''
 
 	db.execute('UPDATE tasks SET updated = ? WHERE id = ?', (now(), task_id))
+
+
+def trash(db: sqlite3.Connection, task_id: int):
+	'''
+	Snapshot a task and everything attached to it into the trash, then delete it, inside the caller's transaction.
+
+	:param db: Open database connection
+	:param task_id: Task id
+	'''
+
+	row   = require(db, 'tasks', task_id)
+	actor = ACTOR.get()
+	rows  = lambda sql: [dict(r) for r in db.execute(sql, (task_id,))]
+	data  = {
+		'task'        : dict(row),
+		'labels'      : [r['name'] for r in db.execute('SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?', (task_id,))],
+		'assignees'   : assignees_map(db, task_id).get(task_id, []),
+		'comments'    : rows('SELECT author, body, created FROM comments WHERE task_id = ? ORDER BY id'),
+		'attachments' : [dict(r, data=base64.b64encode(r['data']).decode()) for r in rows('SELECT name, mime, size, data, created FROM attachments WHERE task_id = ? ORDER BY id')],
+		'links'       : rows('SELECT kind, other_id FROM links WHERE task_id = ?'),
+		'events'      : rows('SELECT at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id')
+	}
+
+	db.execute('INSERT INTO trash (task_id, project_id, title, deleted, deleted_by, data) VALUES (?, ?, ?, ?, ?, ?)', (task_id, row['project_id'], row['title'], now(), (actor['username'] if actor else 'system') + (f' ({AGENT.get()})' if AGENT.get() else ''), json.dumps(data)))
+	db.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+
+
+def trash_list() -> list:
+	'''Return the trashed tasks the signed-in user could restore (editor or better on their project), newest first.'''
+
+	with connect() as db:
+		lv    = levels(db)
+		names = paths(db)
+		rows  = db.execute('SELECT id, task_id, project_id, title, deleted, deleted_by FROM trash ORDER BY id DESC').fetchall()
+
+	return [dict(r, project=names.get(r['project_id'], 'a deleted project')) for r in rows if lv is None or lv.get(r['project_id'], 0) >= EDIT]
+
+
+def trash_purge(days: int = TRASH_DAYS) -> int:
+	'''
+	Permanently delete trash older than the given number of days; returns how many.
+
+	:param days: Days a deleted task stays restorable
+	'''
+
+	cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec='seconds')
+
+	with connect() as db:
+		return db.execute('DELETE FROM trash WHERE deleted < ?', (cutoff,)).rowcount
+
+
+def trash_restore(trash_id: int) -> dict:
+	'''
+	Bring a trashed task back into its project, under its old id when that is still free. Links come back only to tasks that still exist.
+
+	:param trash_id: Trash entry id
+	'''
+
+	with connect() as db:
+		entry = require(db, 'trash', trash_id)
+		if not db.execute('SELECT 1 FROM projects WHERE id = ?', (entry['project_id'],)).fetchone():
+			raise LookupError('its project was deleted')
+		need(db, entry['project_id'], EDIT)
+		data = json.loads(entry['data'])
+		cols = {r['name'] for r in db.execute('PRAGMA table_info(tasks)')}
+		row  = {k: v for k, v in data['task'].items() if k in cols and not (k == 'id' and db.execute('SELECT 1 FROM tasks WHERE id = ?', (v,)).fetchone())}
+		new  = db.execute(f'INSERT INTO tasks ({", ".join(row)}) VALUES ({", ".join("?" * len(row))})', tuple(row.values())).lastrowid
+		set_labels(db, new, data['labels'])
+		db.executemany('INSERT INTO task_assignees SELECT ?, id FROM users WHERE username = ?', [(new, name) for name in data['assignees']])
+		db.executemany('INSERT INTO comments (task_id, author, body, created) VALUES (?, ?, ?, ?)', [(new, c['author'], c['body'], c['created']) for c in data['comments']])
+		db.executemany('INSERT INTO attachments (task_id, name, mime, size, data, created) VALUES (?, ?, ?, ?, ?, ?)', [(new, a['name'], a['mime'], a['size'], base64.b64decode(a['data']), a['created']) for a in data['attachments']])
+		for link in data['links']:
+			if db.execute('SELECT 1 FROM tasks WHERE id = ?', (link['other_id'],)).fetchone():
+				db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (new, link['kind'], link['other_id']))
+				db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (link['other_id'], INVERSE[link['kind']], new))
+		db.executemany('INSERT INTO task_events (task_id, at, actor, agent, field, old, new) VALUES (?, ?, ?, ?, ?, ?, ?)', [(new, e['at'], e['actor'], e['agent'], e['field'], e['old'], e['new']) for e in data['events']])
+		record(db, new, 'restored')
+		db.execute('DELETE FROM trash WHERE id = ?', (trash_id,))
+
+	return task(new)
 
 
 def valid_label(name: str) -> str:

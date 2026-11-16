@@ -319,6 +319,7 @@ function kbRender() {
 	if (KB.view === 'search') searchFilters();
 	if (KB.view === 'settings') {
 		lblRender();
+		trashLoad();
 		if (!KB.setLoaded) { KB.setLoaded = true; accountLoad(); if (KB.me?.is_admin) setLoad(); }
 	}
 	kbBar();
@@ -784,6 +785,10 @@ function accountBind() {
 		if (!btn || !await ask({ title: 'Revoke this token?', text: 'Agents using it stop working.', ok: 'Revoke', danger: true })) return;
 		guard(async () => { await api('DELETE', `/api/tokens/${btn.dataset.token}`); tokensRender((await api('GET', '/api/tokens')).tokens); });
 	});
+	$('#trash').addEventListener('click', (e) => {
+		const btn = e.target.closest('[data-trash]');
+		if (btn) guard(async () => { const t = await api('POST', `/api/trash/${btn.dataset.trash}/restore`); await kbLoad(); trashLoad(); toast(`Restored #${t.id}`); });
+	});
 	$('#invite-new').onclick = () => guard(async () => {
 		const inv = await api('POST', '/api/invites');
 		secretShow($('#invite-shown'), 'Send this link to the person you are inviting. It works once and expires in 7 days.', inv.url);
@@ -977,6 +982,12 @@ function tokensRender(tokens) {
 	$('#tokens').innerHTML = tokens.map((t) => `<div class="row-item"><b>${esc(t.name)}</b><span class="dim">created ${new Date(t.created).toLocaleDateString()} · ${t.used ? `last used ${new Date(t.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-token="${t.id}">Revoke</button></div>`).join('') || '<p class="dim">No tokens yet.</p>';
 }
 
+async function trashLoad() {
+	const data = await api('GET', '/api/trash');
+	$('#trash-days').textContent = data.days;
+	$('#trash').innerHTML = data.trash.map((t) => `<div class="row-item"><b>#${t.task_id} ${esc(t.title)}</b><span class="dim">${esc(t.project)} · deleted by ${esc(t.deleted_by)} ${new Date(t.deleted).toLocaleString()}</span><span class="spacer"></span><button type="button" class="link-btn" data-trash="${t.id}">Restore</button></div>`).join('') || '<p class="dim">Trash is empty.</p>';
+}
+
 async function usersLoad() {
 	const [users, invites] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/invites')]);
 	const now = new Date().toISOString();
@@ -1100,7 +1111,8 @@ function kbEvent(e, task = '') {
 		assignee   : () => e.new ? `assigned ${v(e.new)}` : `unassigned ${v(e.old)}`,
 		link       : () => e.new ? `added link: ${link(e.new)}` : `removed link: ${link(e.old)}`,
 		attachment : () => e.new ? `attached ${v(e.new)}` : `removed attachment ${v(e.old)}`,
-		comment    : () => 'commented'
+		comment    : () => 'commented',
+		restored   : () => 'restored it from the trash'
 	}[e.field];
 	return `<li><span>${task}${who} ${what ? what() : esc(e.field)}</span><span class="dim at">${new Date(e.at).toLocaleString()}</span></li>`;
 }
@@ -1271,7 +1283,7 @@ async function kbAction(act, el) {
 		return guard(async () => { await api('POST', `/api/tasks/${t.id}/comments`, { body }).then((saved) => { input.value = ''; return kbTaskSaved(saved); }); }).finally(() => { KB.commenting = false; });
 	}
 	if (act === 'delete') {
-		if (!await ask({ title: 'Delete task?', text: `#${t.id} ${t.title}\nThis cannot be undone.`, ok: 'Delete', danger: true })) return;
+		if (!await ask({ title: 'Delete task?', text: `#${t.id} ${t.title}\nIt stays in the trash on the Settings page for 30 days.`, ok: 'Delete', danger: true })) return;
 		return guard(async () => {
 			await api('DELETE', `/api/tasks/${t.id}`);
 			location.hash = kbBase();
@@ -1483,7 +1495,7 @@ function kbBind() {
 	$('#bulk-label').onchange = (e) => { if (KB.labels.some((l) => l.name === e.target.value.trim())) bulkApply({ add_label: e.target.value.trim() }, `Added ${e.target.value.trim()}`); };
 	$('#bulk-delete').onclick = async () => {
 		const n = KB.picked.size;
-		if (!n || !await ask({ title: `Delete ${n} task${n === 1 ? '' : 's'}?`, text: 'Their comments, links and attachments go too. This cannot be undone.', ok: 'Delete', danger: true })) return;
+		if (!n || !await ask({ title: `Delete ${n} task${n === 1 ? '' : 's'}?`, text: 'They stay in the trash on the Settings page for 30 days.', ok: 'Delete', danger: true })) return;
 		await bulkApply({ delete: true }, `Deleted ${n}`);
 		KB.picked.clear();
 		kbBoard();

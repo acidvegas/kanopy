@@ -57,7 +57,7 @@ To run it as a service, copy `kanopy.service` to `/etc/systemd/system/`, set `YO
 
 Projects form a tree addressed by path, like `Code/weatherbox`, and a project's board includes its sub-projects. Cards drag between To-Do, Doing and Done, onto another project in the sidebar, or onto a date in the month calendar. Each project has a markdown description panel and an **activity page** listing every change across it.
 
-Done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once.
+Done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once. Deleted tasks stay in the trash on the Settings page for 30 days, with their comments, links and attachments, and can be restored.
 
 ### Tasks
 
