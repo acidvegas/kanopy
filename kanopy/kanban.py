@@ -6,6 +6,7 @@ import base64
 import calendar
 import contextvars
 import json
+import os
 import random
 import re
 import sqlite3
@@ -14,8 +15,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from . import database
+
 
 DB       = Path(__file__).parent.parent / 'data' / 'kanban.db'
+DATABASE = os.environ.get('KANOPY_DATABASE') or str(DB) # a postgresql:// URL, else the SQLite file
 BACKUPS  = DB.parent / 'backups'
 KEEP     = 3 # backups kept
 MAX_FILE = 25 * 1024 * 1024 # bytes per attachment
@@ -38,6 +42,7 @@ TRASH_DAYS = 30 # days a deleted task can be restored
 TYPES    = {'bug': '#f87171', 'ci': None, 'cleanup': None, 'decommission': None, 'dependency': None, 'deploy': None, 'design': None, 'docs': None, 'event': '#22d3ee', 'feature': None, 'goal': '#22d3ee', 'habit': '#22d3ee', 'hardware': None, 'idea': None, 'learning': '#22d3ee', 'migration': None, 'note': '#22d3ee', 'performance': None, 'purchase': '#22d3ee', 'question': '#22d3ee', 'release': None, 'repo': None, 'research': None, 'review': None, 'security': '#f87171', 'support': None, 'test': None} # global type: labels a fresh install starts with; red flags trouble, cyan is life and thoughts
 
 SCHEMA = '''
+CREATE TABLE IF NOT EXISTS users          (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ntfy_topic TEXT NOT NULL DEFAULT '', notify_mention INTEGER NOT NULL DEFAULT 1, notify_assign INTEGER NOT NULL DEFAULT 1, notify_activity INTEGER NOT NULL DEFAULT 1, notify_due INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL, avatar BLOB, avatar_mime TEXT, avatar_at TEXT);
 CREATE TABLE IF NOT EXISTS projects (
 	id          INTEGER PRIMARY KEY,
 	parent_id   INTEGER REFERENCES projects(id),
@@ -45,7 +50,9 @@ CREATE TABLE IF NOT EXISTS projects (
 	description TEXT    NOT NULL DEFAULT '',
 	archived    INTEGER NOT NULL DEFAULT 0,
 	color       TEXT,
-	position    REAL    NOT NULL DEFAULT 0
+	position    REAL    NOT NULL DEFAULT 0,
+	owner_id    INTEGER REFERENCES users(id),
+	folder      TEXT    NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS tasks (
 	id          INTEGER PRIMARY KEY,
@@ -60,16 +67,16 @@ CREATE TABLE IF NOT EXISTS tasks (
 	created     TEXT    NOT NULL,
 	updated     TEXT    NOT NULL,
 	done_at     TEXT,
-	archived    INTEGER NOT NULL DEFAULT 0
+	archived    INTEGER NOT NULL DEFAULT 0,
+	repeat      TEXT
 );
-CREATE TABLE IF NOT EXISTS attachments (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS settings    (key TEXT PRIMARY KEY, value TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS sent        (kind TEXT NOT NULL, key TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (kind, key));
-CREATE TABLE IF NOT EXISTS labels      (id INTEGER PRIMARY KEY, name TEXT NOT NULL, color TEXT, owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE); -- owner_id NULL = global, else that user's personal label
-CREATE TABLE IF NOT EXISTS task_labels (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE, PRIMARY KEY (task_id, label_id));
-CREATE TABLE IF NOT EXISTS comments    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, author TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS links       (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, other_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, PRIMARY KEY (task_id, kind, other_id));
-CREATE TABLE IF NOT EXISTS users          (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ntfy_topic TEXT NOT NULL DEFAULT '', notify_mention INTEGER NOT NULL DEFAULT 1, notify_assign INTEGER NOT NULL DEFAULT 1, notify_activity INTEGER NOT NULL DEFAULT 1, notify_due INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS attachments    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS settings       (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS sent           (kind TEXT NOT NULL, key TEXT NOT NULL, at TEXT NOT NULL, PRIMARY KEY (kind, key));
+CREATE TABLE IF NOT EXISTS labels         (id INTEGER PRIMARY KEY, name TEXT NOT NULL, color TEXT, owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE); -- owner_id NULL = global, else that user's personal label
+CREATE TABLE IF NOT EXISTS task_labels    (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, label_id INTEGER NOT NULL REFERENCES labels(id) ON DELETE CASCADE, PRIMARY KEY (task_id, label_id));
+CREATE TABLE IF NOT EXISTS comments       (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, author TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS links          (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, other_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, PRIMARY KEY (task_id, kind, other_id));
 CREATE TABLE IF NOT EXISTS sessions       (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS tokens         (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created TEXT NOT NULL, used TEXT);
 CREATE TABLE IF NOT EXISTS invites        (id INTEGER PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created TEXT NOT NULL, expires TEXT NOT NULL, used_by INTEGER REFERENCES users(id) ON DELETE SET NULL, used TEXT);
@@ -78,6 +85,8 @@ CREATE TABLE IF NOT EXISTS team_members   (team_id INTEGER NOT NULL REFERENCES t
 CREATE TABLE IF NOT EXISTS shares         (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE, role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_assignees (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (task_id, user_id));
 CREATE TABLE IF NOT EXISTS task_events    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, at TEXT NOT NULL, actor TEXT NOT NULL, agent TEXT, field TEXT NOT NULL, old TEXT, new TEXT);
+CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS trash          (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, project_id INTEGER NOT NULL, title TEXT NOT NULL, deleted TEXT NOT NULL, deleted_by TEXT NOT NULL, data TEXT NOT NULL); -- deleted tasks as JSON snapshots, purged after TRASH_DAYS
 CREATE INDEX IF NOT EXISTS task_events_task ON task_events (task_id, id);
 CREATE INDEX IF NOT EXISTS tasks_project ON tasks (project_id);
 CREATE INDEX IF NOT EXISTS comments_task ON comments (task_id);
@@ -85,8 +94,7 @@ CREATE INDEX IF NOT EXISTS attachments_task ON attachments (task_id);
 CREATE INDEX IF NOT EXISTS task_labels_label ON task_labels (label_id);
 CREATE INDEX IF NOT EXISTS links_other ON links (other_id);
 CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees (user_id);
-CREATE TABLE IF NOT EXISTS trash          (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL, project_id INTEGER NOT NULL, title TEXT NOT NULL, deleted TEXT NOT NULL, deleted_by TEXT NOT NULL, data TEXT NOT NULL); -- deleted tasks as JSON snapshots, purged after TRASH_DAYS
-CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX IF NOT EXISTS notifications_user ON notifications (user_id, id);
 '''
 
 
@@ -291,9 +299,12 @@ def backup():
 	BACKUPS.mkdir(exist_ok=True)
 	target = BACKUPS / f'kanban-{datetime.now().strftime("%Y-%m-%d")}.db'
 
+	if database.is_postgres(DATABASE): # PostgreSQL is backed up with its own tools, like pg_dump
+		return
+
 	if not target.exists():
 		part = target.with_suffix('.part')
-		src  = sqlite3.connect(DB)
+		src  = sqlite3.connect(DATABASE)
 		dst  = sqlite3.connect(part)
 		with dst:
 			src.backup(dst)
@@ -356,28 +367,36 @@ def comment_add(task_id: int, author: str, body: str) -> dict:
 	return task(task_id)
 
 
-def connect() -> sqlite3.Connection:
-	'''Open the database with foreign keys enforced and rows as mappings.'''
+def connect(target: str = None) -> database.Connection:
+	'''
+	Open the database (SQLite or PostgreSQL) with foreign keys enforced and rows readable by name.
 
-	db = sqlite3.connect(DB, timeout=10)
-	db.row_factory = sqlite3.Row
-	db.execute('PRAGMA foreign_keys = ON')
+	:param target: Database path or URL, default DATABASE
+	'''
 
-	return db
+	return database.Connection(target or DATABASE)
 
 
-def init():
-	'''Create the database, and on a fresh one an Inbox project and the default type: labels.'''
+def init(target: str = None):
+	'''
+	Create or upgrade the database, and on a fresh one add an Inbox project and the default type: labels.
 
-	DB.parent.mkdir(exist_ok=True)
+	:param target: Database path or URL, default DATABASE
+	'''
 
-	with connect() as db:
-		db.execute('PRAGMA journal_mode = WAL')
-		db.executescript(SCHEMA)
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT')):
-			if column not in [row['name'] for row in db.execute(f'PRAGMA table_info({table})')]:
-				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
-		if 'owner_id' not in [row['name'] for row in db.execute('PRAGMA table_info(labels)')]: # labels were all global with unique names; type: stays global, the rest become the first admin's
+	target = target or DATABASE
+
+	if not database.is_postgres(target):
+		Path(target).parent.mkdir(exist_ok=True)
+
+	with connect(target) as db:
+		if not db.postgres:
+			db.execute('PRAGMA journal_mode = WAL')
+		db.executescript(database.schema(SCHEMA, db.postgres))
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT')): # columns added after the first release
+			if column not in database.columns(db, table):
+				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
+		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's
 			db.execute('PRAGMA foreign_keys = OFF')
 			db.executescript('''
 				BEGIN;
@@ -433,9 +452,9 @@ def label_create(name: str, color: str = None, glob: bool = False):
 		row = label_find(db, name)
 		if row and (row['owner_id'] is None or not glob):
 			raise ValueError(f'label {name} already exists')
-		db.execute('INSERT INTO labels (name, color, owner_id) VALUES (?, COALESCE(?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL AND (owner_id IS NULL OR owner_id IS ?) LIMIT 1)), ?)', (name, color or None, name.split(':')[0] + ':%', me(), owner))
+		cur = db.execute('INSERT INTO labels (name, color, owner_id) VALUES (?, COALESCE(?, (SELECT color FROM labels WHERE name LIKE ? AND color IS NOT NULL AND (owner_id IS NULL OR owner_id IS ?) LIMIT 1)), ?)', (name, color or None, name.split(':')[0] + ':%', me(), owner))
 		if glob:
-			absorb(db, db.execute('SELECT last_insert_rowid()').fetchone()[0], name)
+			absorb(db, cur.lastrowid, name)
 
 
 def label_delete(name: str):
@@ -1382,7 +1401,7 @@ def trash_restore(trash_id: int) -> dict:
 			raise LookupError('its project was deleted')
 		need(db, entry['project_id'], EDIT)
 		data = json.loads(entry['data'])
-		cols = {r['name'] for r in db.execute('PRAGMA table_info(tasks)')}
+		cols = set(database.columns(db, 'tasks'))
 		row  = {k: v for k, v in data['task'].items() if k in cols and not (k == 'id' and db.execute('SELECT 1 FROM tasks WHERE id = ?', (v,)).fetchone())}
 		new  = db.execute(f'INSERT INTO tasks ({", ".join(row)}) VALUES ({", ".join("?" * len(row))})', tuple(row.values())).lastrowid
 		set_labels(db, new, data['labels'])

@@ -24,12 +24,14 @@ class Base(unittest.TestCase):
 	def setUp(self):
 		'''Point kanban at an empty database and stub out network pushes.'''
 
-		self.dir       = tempfile.TemporaryDirectory()
-		self.old       = (kanban.DB, kanban.BACKUPS, notify.send)
-		kanban.DB      = Path(self.dir.name) / 'kanban.db'
-		kanban.BACKUPS = Path(self.dir.name) / 'backups'
-		self.pushes    = []
-		notify.send    = lambda title, message, task_id=None, priority=3, tags='', topic=None: self.pushes.append({'title': title, 'message': message, 'task_id': task_id, 'topic': topic})
+		self.dir        = tempfile.TemporaryDirectory()
+		self.old        = (kanban.DB, kanban.DATABASE, kanban.BACKUPS, notify.send)
+		kanban.DB       = Path(self.dir.name) / 'kanban.db'
+		kanban.DATABASE = str(kanban.DB)
+		kanban.BACKUPS  = Path(self.dir.name) / 'backups'
+		assert kanban.connect().target.startswith(self.dir.name), 'tests must never touch a real database'
+		self.pushes     = []
+		notify.send     = lambda title, message, task_id=None, priority=3, tags='', topic=None: self.pushes.append({'title': title, 'message': message, 'task_id': task_id, 'topic': topic})
 		kanban.init()
 		mcp_server.SEEN.clear()
 		app.FAILS.clear()
@@ -40,7 +42,7 @@ class Base(unittest.TestCase):
 	def tearDown(self):
 		'''Restore module state and remove the database.'''
 
-		kanban.DB, kanban.BACKUPS, notify.send = self.old
+		kanban.DB, kanban.DATABASE, kanban.BACKUPS, notify.send = self.old
 		kanban.ACTOR.set(None)
 		kanban.AGENT.set(None)
 		self.dir.cleanup()
