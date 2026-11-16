@@ -320,6 +320,35 @@ class TestMcpEndpoint(AppBase):
 		self.assertIsNone(kanban.AGENT.get())
 
 
+	def test_session_ids(self):
+		'''initialize hands out a session id that later requests send back, so two sessions claim as different workers.'''
+
+		sid = self.rpc('initialize', {'protocolVersion': '2025-06-18'}).headers['Mcp-Session-Id']
+		self.assertRegex(sid, r'^[0-9a-f]{6}$')
+		self.act(self.ann)
+		t = self.task('Ann', 'x')
+		self.act(None)
+		call = lambda s, take=False: self.client.post('/mcp', json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/call', 'params': {'name': 'save_task', 'arguments': {'id': t['id'], 'status': 'doing', 'take': take}}}, headers={'X-Key': self.key, 'X-Agent': 'claude', 'Mcp-Session-Id': s}).json['result']
+		self.assertIn(f'by:claude(ann)#{sid}', call(sid)['content'][0]['text'])
+		self.assertTrue(call('other1')['isError'])
+		self.assertEqual(kanban.task(t['id'])['claimed_by'], f'claude (ann) #{sid}')
+
+
+	def test_read_only_token(self):
+		'''A read-only token can read over REST and MCP but every write is refused.'''
+
+		ro   = accounts.token_create(self.ann, 'reader', read_only=True)['token']
+		anon = app.app.test_client()
+		self.assertEqual(anon.get('/api/projects', headers={'X-Key': ro}).status_code, 200)
+		r = anon.post('/api/projects', json={'path': 'Nope'}, headers={'X-Key': ro})
+		self.assertEqual((r.status_code, r.json['error']), (403, 'this API token is read-only'))
+		out = self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Ann', 'title': 'x'}}, key=ro).json['result']
+		self.assertTrue(out['isError'])
+		self.assertEqual(len(self.rpc('tools/list', key=ro).json['result']['tools']), 5)
+		self.assertTrue(self.client.get('/api/tokens').json is not None)
+		self.assertEqual(accounts.tokens(self.ann)[-1]['read_only'], 1)
+
+
 	def test_tools_list_and_call(self):
 		'''tools/list and tools/call work end to end as the token's user.'''
 

@@ -344,6 +344,41 @@ class TestTools(Base):
 		self.assertIn('... 1 more', self.mcp('list_tasks', {'changed': '1d', 'limit': 1}))
 
 
+	def test_claims(self):
+		'''doing claims a task for the session; another session is refused unless it takes over; leaving doing releases it.'''
+
+		self.user('ann', admin=True)
+		t = self.task()
+		kanban.AGENT.set('claude') # set by the /mcp route from X-Agent
+		kanban.SESSION.set('aaa')
+		self.assertIn('by:claude#aaa', self.mcp('save_task', {'id': t['id'], 'status': 'doing'}))
+		self.mcp('save_task', {'id': t['id'], 'status': 'doing'}) # the same session again is fine
+		kanban.SESSION.set('bbb')
+		with self.assertRaises(ToolError) as err:
+			self.mcp('save_task', {'id': t['id'], 'status': 'doing'})
+		self.assertIn('already being worked on by claude #aaa', str(err.exception))
+		self.mcp('save_task', {'id': t['id'], 'title': 'renamed'}) # other edits are allowed
+		self.assertIn('by:claude#bbb', self.mcp('save_task', {'id': t['id'], 'status': 'doing', 'take': True}))
+		self.assertEqual(kanban.task(t['id'])['history'][0]['field'], 'claim')
+		self.assertIsNone(kanban.task_update(t['id'], {'status': 'todo'})['claimed_by'])
+		kanban.SESSION.set('ccc')
+		self.assertIn('by:claude#ccc', self.mcp('save_task', {'id': t['id'], 'status': 'doing'})) # released, so anyone can claim it
+
+
+	def test_read_only_tools(self):
+		'''A read-only token sees and runs only the tools that change nothing.'''
+
+		t     = self.task()
+		tools = {x['name'] for x in mcp_server.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'}, 'claude', True)['result']['tools']}
+		self.assertEqual(tools, {'list_projects', 'list_tasks', 'get_task', 'inbox', 'labels'})
+		call = lambda name, args: mcp_server.handle({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': name, 'arguments': args}}, 'claude', True)['result']
+		self.assertFalse(call('get_task', {'ids': [t['id']]}).get('isError'))
+		self.assertFalse(call('labels', {}).get('isError'))
+		for name, args in (('save_task', {'id': t['id'], 'title': 'x'}), ('comment', {'id': t['id'], 'text': 'x'}), ('delete', {'task': t['id']}), ('labels', {'create': 'type:x'}), ('inbox', {'read': True})):
+			self.assertIn('read-only', call(name, args)['content'][0]['text'], name)
+		self.assertEqual(kanban.task(t['id'])['title'], 'task')
+
+
 	def test_line_format(self):
 		'''Compact lines carry status, fields, checks, labels, assignees and relations.'''
 
@@ -351,7 +386,7 @@ class TestTools(Base):
 		a = self.task(title='a', status='doing', priority=3, due='2030-01-02', remind_at='2030-01-01T09:00', repeat='weekly', description='- [x] x\n- [ ] y', labels=['host:pi'], assignees=['ann'])
 		b = self.task(title='b')
 		kanban.link_add(a['id'], 'blocked', b['id'])
-		self.assertEqual(mcp_server.task_line(a['id']), f'#{a["id"]} ▶ [Work] a  p3  due:2030-01-02  remind:2030-01-01T09:00  repeat:weekly  ☐1/2  host:pi  @ann  blocked-by:#{b["id"]}')
+		self.assertEqual(mcp_server.task_line(a['id']), f'#{a["id"]} ▶ [Work] a  by:system  p3  due:2030-01-02  remind:2030-01-01T09:00  repeat:weekly  ☐1/2  host:pi  @ann  blocked-by:#{b["id"]}')
 
 
 	def test_projects_tools(self):

@@ -15,6 +15,7 @@ from . import notify
 AGENTS       = Path(__file__).parent.parent / 'agents'
 INSTRUCTIONS = next(p for p in (AGENTS / 'instructions.txt', AGENTS / 'instructions.example.txt') if p.exists()).read_text().strip() # your own instructions.txt wins
 NAMESPACES   = {'host': True, 'type': False} # namespace -> new values allowed without create
+READ_TOOLS   = ('list_projects', 'list_tasks', 'get_task') # tools that never change anything
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
 SEEN         = {} # (user id, agent, task id) -> hash of the description that agent last read or wrote, for the stale-write check
@@ -63,7 +64,8 @@ TOOLS = [
 		'due'           : {**STR, 'description': 'YYYY-MM-DD, "" clears'},
 		'remind_at'     : {**STR, 'description': 'YYYY-MM-DDTHH:MM local, "" clears'},
 		'repeat'        : {**STR, 'description': 'daily, weekly, monthly, yearly, every N days/weeks/months/years, weekdays, or mon,wed,fri; done makes the next copy; "" stops'},
-		'status'        : {**STR, 'description': 'todo, doing, done'},
+		'status'        : {**STR, 'description': 'todo, doing, done; doing claims the task for you'},
+		'take'          : {**BOOL, 'description': 'with status=doing: take over a task another session claimed (only when the user says so or it is clearly abandoned)'},
 		'check'         : {**STR, 'description': 'tick checklist item by number or unique text'},
 		'checked'       : {**BOOL, 'description': 'false unticks'},
 		'comment'       : {**STR, 'description': 'markdown note added with the change'},
@@ -287,12 +289,13 @@ def get_task(task_id: int, agent: str, all_comments: bool = False) -> str:
 	return '\n'.join(out)
 
 
-def handle(msg: dict, agent: str) -> dict:
+def handle(msg: dict, agent: str, read_only: bool = False) -> dict:
 	'''
 	Answer one MCP JSON-RPC message; returns None for notifications.
 
 	:param msg: Decoded JSON-RPC request
 	:param agent: Agent tag from the X-Agent header
+	:param read_only: The token may only read: write tools are hidden and refused
 	'''
 
 	method = msg.get('method', '')
@@ -306,10 +309,12 @@ def handle(msg: dict, agent: str) -> dict:
 	elif method == 'ping':
 		result = {}
 	elif method == 'tools/list':
-		result = {'tools': [{'name': n, 'description': d, 'inputSchema': {'type': 'object', 'properties': p, 'required': r, 'additionalProperties': False}} for n, d, p, r in TOOLS]}
+		result = {'tools': [{'name': n, 'description': d, 'inputSchema': {'type': 'object', 'properties': p, 'required': r, 'additionalProperties': False}} for n, d, p, r in TOOLS if not read_only or n in READ_TOOLS + ('inbox', 'labels')]}
 	elif method == 'tools/call':
 		params = msg.get('params') or {}
 		try:
+			if read_only and not reads_only(params.get('name'), params.get('arguments') or {}):
+				raise PermissionError('this API token is read-only')
 			result = {'content': [{'type': 'text', 'text': call(params.get('name'), params.get('arguments') or {}, agent)}]}
 		except (LookupError, PermissionError, ValueError, TypeError) as exc:
 			result = {'content': [{'type': 'text', 'text': f'error: {exc}'}], 'isError': True}
@@ -366,6 +371,9 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 	'''
 
 	out = f'#{t["id"]} ' + {'doing': '▶ ', 'done': '✓ '}.get(t['status'], '') + (f'[{t["project"]}] ' if project else '') + t['title']
+
+	if t['status'] == 'doing' and t.get('claimed_by'):
+		out += f'  by:{t["claimed_by"].replace(" ", "")}'
 
 	if t['archived']:
 		out += '  archived'
@@ -527,6 +535,17 @@ def project_path(pid: int) -> str:
 		return kanban.paths(db)[pid]
 
 
+def reads_only(name: str, args: dict) -> bool:
+	'''
+	Say whether a tool call changes nothing, so a read-only token may make it.
+
+	:param name: Tool name
+	:param args: Tool arguments
+	'''
+
+	return name in READ_TOOLS or (name == 'inbox' and not args.get('read')) or (name == 'labels' and not args.get('create') and not args.get('delete'))
+
+
 def read_file(file_id: int) -> str:
 	'''
 	Return an attachment's text, capped at MAX_TEXT characters.
@@ -588,6 +607,12 @@ def save_task(args: dict, agent: str) -> str:
 
 	if args.get('id'):
 		t = kanban.task(int(args['id']))
+		if args.get('status') == 'doing' and t['status'] == 'doing' and t['claimed_by'] and t['claimed_by'] != kanban.claimant():
+			if not args.get('take'):
+				raise ValueError(f'#{t["id"]} is already being worked on by {t["claimed_by"]} (last change {t["updated"][:16]}); pick another task, or ask the user before taking it over with take=true')
+			fields['claim'] = True
+		elif args.get('status') == 'doing' and t['status'] == 'doing' and not t['claimed_by']:
+			fields['claim'] = True
 		if 'description' in args and SEEN.get(seen_key(t['id'], agent)) != hash(t['description']): # never read (or read before a restart) counts as stale
 			raise ValueError(f'#{t["id"]} description changed since you last read it, or you have not read it; get_task it first and make your edit on that text')
 		if add or remove:

@@ -2,9 +2,11 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanopy/app.py
 
+import json
 import logging
 import os
 import re
+import secrets
 import threading
 import time
 import urllib.parse
@@ -277,7 +279,9 @@ def api_tokens() -> dict:
 def api_token_create() -> dict:
 	'''Create an API token; the secret is only shown in this response.'''
 
-	return accounts.token_create(g.user, (request.get_json(force=True) or {}).get('name'))
+	body = request.get_json(force=True) or {}
+
+	return accounts.token_create(g.user, body.get('name'), bool(body.get('read_only')))
 
 
 @app.delete('/api/tokens/<int:token_id>')
@@ -648,6 +652,9 @@ def auth():
 	if not g.user and not path.startswith(OPEN):
 		return {'error': 'sign in first'}, 401
 
+	if g.user and g.user.get('read_only') and path.startswith('/api/') and request.method not in ('GET', 'HEAD', 'OPTIONS'):
+		return {'error': 'this API token is read-only'}, 403
+
 	kanban.ACTOR.set(g.user)
 
 
@@ -673,6 +680,7 @@ def auth_end(exc: Exception = None):
 
 	kanban.ACTOR.set(None)
 	kanban.AGENT.set(None)
+	kanban.SESSION.set(None)
 
 
 def housekeep():
@@ -718,12 +726,19 @@ def index():
 def mcp() -> tuple:
 	'''MCP endpoint (streamable HTTP, JSON responses, stateless). The X-Agent header tags comments.'''
 
-	agent = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
+	msg     = request.get_json(force=True) or {}
+	session = secrets.token_hex(3) if msg.get('method') == 'initialize' else re.sub(r'[^a-zA-Z0-9]', '', request.headers.get('Mcp-Session-Id', ''))[:16] # clients send back the id they were given, so each session can claim tasks as itself
+	agent   = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
 	kanban.AGENT.set(agent)
-	agent = agent if g.user['is_admin'] else f'{agent} ({g.user["username"]})'
-	reply = mcp_server.handle(request.get_json(force=True) or {}, agent)
+	kanban.SESSION.set(session or None)
+	agent   = agent if g.user['is_admin'] else f'{agent} ({g.user["username"]})'
+	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')))
+	resp    = Response(json.dumps(reply), mimetype='application/json') if reply else Response('', 202)
 
-	return (reply, 200) if reply else ('', 202)
+	if session:
+		resp.headers['Mcp-Session-Id'] = session
+
+	return resp
 
 
 def session_response(token: str) -> Response:

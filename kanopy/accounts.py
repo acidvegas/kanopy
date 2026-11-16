@@ -512,21 +512,22 @@ def teams(user: dict) -> list:
 	return out
 
 
-def token_create(user: dict, name: str) -> dict:
+def token_create(user: dict, name: str, read_only: bool = False) -> dict:
 	'''
 	Create an API token for agents; the raw token is only returned here.
 
 	:param user: Token owner
 	:param name: Label like claude or hermes
+	:param read_only: The token can read but never change anything
 	'''
 
 	name  = (name or '').strip()[:40] or 'token'
 	token = 'bk_' + secrets.token_urlsafe(32)
 
 	with kanban.connect() as db:
-		token_id = db.execute('INSERT INTO tokens (user_id, name, token, created) VALUES (?, ?, ?, ?)', (user['id'], name, digest(token), kanban.now())).lastrowid
+		token_id = db.execute('INSERT INTO tokens (user_id, name, token, created, read_only) VALUES (?, ?, ?, ?, ?)', (user['id'], name, digest(token), kanban.now(), int(bool(read_only)))).lastrowid
 
-	return {'id': token_id, 'name': name, 'token': token}
+	return {'id': token_id, 'name': name, 'token': token, 'read_only': bool(read_only)}
 
 
 def token_delete(user: dict, token_id: int):
@@ -563,7 +564,7 @@ def tokens(user: dict) -> list:
 	'''
 
 	with kanban.connect() as db:
-		return [dict(row) for row in db.execute('SELECT id, name, created, used FROM tokens WHERE user_id = ? ORDER BY id', (user['id'],))]
+		return [dict(row) for row in db.execute('SELECT id, name, created, used, read_only FROM tokens WHERE user_id = ? ORDER BY id', (user['id'],))]
 
 
 def user_by_session(token: str) -> dict:
@@ -584,7 +585,7 @@ def user_by_session(token: str) -> dict:
 
 def user_by_token(token: str) -> dict:
 	'''
-	Return the user for an API token, or None; records when it was last used.
+	Return the user for an API token, or None; records when it was last used. The user dict carries read_only for the token.
 
 	:param token: Raw API token
 	'''
@@ -593,13 +594,13 @@ def user_by_token(token: str) -> dict:
 		return None
 
 	with kanban.connect() as db:
-		row = db.execute('SELECT id, user_id FROM tokens WHERE token = ?', (digest(token),)).fetchone()
+		row = db.execute('SELECT id, user_id, read_only FROM tokens WHERE token = ?', (digest(token),)).fetchone()
 		if not row:
 			return None
 		db.execute('UPDATE tokens SET used = ? WHERE id = ?', (kanban.now(), row['id']))
 		user = db.execute(f'SELECT {PUBLIC} FROM users WHERE id = ?', (row['user_id'],)).fetchone()
 
-	return dict(user) if user else None
+	return dict(user, read_only=bool(row['read_only'])) if user else None
 
 
 def user_delete(user: dict, user_id: int):

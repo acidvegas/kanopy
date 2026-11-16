@@ -175,7 +175,7 @@
 					<div class="set-card" id="set-tokens">
 						<header class="card-head">
 							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>API tokens</h2><p>For agents like Claude Code and Hermes: they act as you and see what you see. Send one as the <code>X-Key</code> header to <code>/mcp</code>.</p></div>
-							<form id="token-new" class="inline-form"><input name="name" placeholder="name, like claude"><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>Create</button></form>
+							<form id="token-new" class="inline-form"><input name="name" placeholder="name, like claude"><label class="ro-check" title="Can read the board but never change it"><input type="checkbox" name="read_only"> read-only</label><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>Create</button></form>
 						</header>
 						<div id="token-shown" class="secret" hidden></div>
 						<div id="tokens"></div>

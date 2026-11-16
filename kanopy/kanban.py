@@ -36,6 +36,7 @@ ROLES    = {'viewer': 1, 'editor': 2, 'manager': 3} # project share roles; 4 = o
 VIEW, EDIT, MANAGE, OWN = 1, 2, 3, 4
 ACTOR    = contextvars.ContextVar('actor', default=None) # signed-in user dict for this request; None = system (full access)
 AGENT    = contextvars.ContextVar('agent', default=None) # X-Agent name when the change comes through MCP
+SESSION  = contextvars.ContextVar('session', default=None) # MCP session id, telling apart two sessions of the same agent
 HISTORY  = 200 # events kept per task
 VERSIONS = 10 # earlier descriptions kept per task, as the old value of its newest description events
 TRASH_DAYS = 30 # days a deleted task can be restored
@@ -68,7 +69,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 	updated     TEXT    NOT NULL,
 	done_at     TEXT,
 	archived    INTEGER NOT NULL DEFAULT 0,
-	repeat      TEXT
+	repeat      TEXT,
+	claimed_by  TEXT
 );
 CREATE TABLE IF NOT EXISTS attachments    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings       (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -78,7 +80,7 @@ CREATE TABLE IF NOT EXISTS task_labels    (task_id INTEGER NOT NULL REFERENCES t
 CREATE TABLE IF NOT EXISTS comments       (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, author TEXT NOT NULL DEFAULT '', body TEXT NOT NULL, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS links          (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, other_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, PRIMARY KEY (task_id, kind, other_id));
 CREATE TABLE IF NOT EXISTS sessions       (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires TEXT NOT NULL);
-CREATE TABLE IF NOT EXISTS tokens         (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created TEXT NOT NULL, used TEXT);
+CREATE TABLE IF NOT EXISTS tokens         (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created TEXT NOT NULL, used TEXT, read_only INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invites        (id INTEGER PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created TEXT NOT NULL, expires TEXT NOT NULL, used_by INTEGER REFERENCES users(id) ON DELETE SET NULL, used TEXT);
 CREATE TABLE IF NOT EXISTS teams          (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS team_members   (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, owner INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team_id, user_id));
@@ -207,6 +209,10 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 
 	if data.get('status') and data['status'] != row['status']:
 		set_status(db, task_id, data['status'], log)
+
+	if data.get('claim') and row['claimed_by'] != claimant(): # taking over a task someone else is working on
+		db.execute('UPDATE tasks SET claimed_by = ? WHERE id = ?', (claimant(), task_id))
+		note('claim', row['claimed_by'], claimant())
 
 	touch(db, task_id)
 
@@ -347,6 +353,20 @@ def bulk(ids: list, data: dict) -> int:
 	return len(ids)
 
 
+def claimant() -> str:
+	'''Name whoever is acting right now for a task's claim: the agent with its user and session, else the user.'''
+
+	actor = ACTOR.get()
+	name  = AGENT.get()
+
+	if name and actor and not actor['is_admin']:
+		name += f' ({actor["username"]})'
+
+	name = name or (actor['username'] if actor else 'system')
+
+	return name + (f' #{SESSION.get()}' if SESSION.get() else '')
+
+
 def comment_add(task_id: int, author: str, body: str) -> dict:
 	'''
 	Add a comment to a task.
@@ -394,7 +414,7 @@ def init(target: str = None):
 		if not db.postgres:
 			db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(database.schema(SCHEMA, db.postgres))
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT')): # columns added after the first release
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0')): # columns added after the first release
 			if column not in database.columns(db, table):
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
 		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's
@@ -1199,7 +1219,7 @@ def set_status(db: sqlite3.Connection, task_id: int, status: str, log: bool = Tr
 		record(db, task_id, 'status', old, status)
 
 	bottom = db.execute('SELECT COALESCE(MAX(position), 0) + 1 FROM tasks WHERE status = ?', (status,)).fetchone()[0]
-	db.execute('UPDATE tasks SET status = ?, position = ?, done_at = ?, archived = 0 WHERE id = ?', (status, bottom, now() if status == 'done' else None, task_id))
+	db.execute('UPDATE tasks SET status = ?, position = ?, done_at = ?, archived = 0, claimed_by = ? WHERE id = ?', (status, bottom, now() if status == 'done' else None, claimant() if status == 'doing' else None, task_id))
 
 	if status == 'done' and old != 'done':
 		repeat_spawn(db, task_id)
@@ -1258,7 +1278,7 @@ def summary(row: sqlite3.Row, names: dict, tags: dict, notes: dict, files: dict,
 	'''
 
 	checks = CHECK_RE.findall(row['description'])
-	data   = {key: row[key] for key in ('id', 'project_id', 'title', 'status', 'priority', 'due', 'remind_at', 'repeat', 'position', 'done_at', 'updated', 'archived')}
+	data   = {key: row[key] for key in ('id', 'project_id', 'title', 'status', 'priority', 'due', 'remind_at', 'repeat', 'position', 'done_at', 'updated', 'archived', 'claimed_by')}
 
 	return dict(data, project=names[row['project_id']], labels=tags.get(row['id'], []), checks=[sum(c != ' ' for c in checks), len(checks)], comments=notes.get(row['id'], 0), files=files.get(row['id'], 0), assignees=people.get(row['id'], []))
 
