@@ -328,6 +328,7 @@ class TestTools(Base):
 		t = self.task(status='done')
 		kanban.attachment_add(t['id'], 'a.txt', 'text/plain', b'x')
 		self.assertIn('files: #', self.mcp('get_task', {'ids': [t['id']]}))
+		self.assertIn('files:1', mcp_server.task_line(t['id']))
 		with kanban.connect() as db:
 			db.execute('UPDATE tasks SET archived = 1 WHERE id = ?', (t['id'],))
 		self.assertIn('  archived  files:1', self.mcp('list_tasks', {'status': 'done'}))
