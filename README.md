@@ -57,11 +57,11 @@ To run it as a service, copy `kanopy.service` to `/etc/systemd/system/`, set `YO
 
 Projects form a tree addressed by path, like `Code/weatherbox`, and a project's board includes its sub-projects. Cards drag between To-Do, Doing and Done, onto another project in the sidebar, or onto a date in the month calendar. Each project has a markdown description panel and an **activity page** listing every change across it.
 
-Done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once. Deleted tasks stay in the trash on the Settings page for 30 days, with their comments, links and attachments, and can be restored.
+The Done column loads its newest 25 tasks with a button for more, done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once. Deleted tasks stay in the trash on the Settings page for 30 days, with their comments, links and attachments, and can be restored.
 
 ### Tasks
 
-A task carries a markdown description with clickable checklists, a priority, due date, reminder, labels, assignees, file attachments, comments and links to other tasks *(blocks, subtask, related, duplicates, precedes)*. It opens in a side panel or as a full page at `#/task/123`, and `#123` anywhere in text links to it.
+A task carries a markdown description with clickable checklists, a priority, due date, reminder, labels, assignees, file attachments, comments and links to other tasks *(blocks, subtask, related, duplicates, precedes)*. It opens in a side panel or as a full page at `#/task/123`, and `#123` anywhere in text links to it. Long comment threads show the newest 30 first.
 
 Tasks can **repeat** daily, weekly, monthly, yearly, every N days or on chosen weekdays. Marking one done creates the next occurrence with its checklist reset and its dates moved forward; upcoming ones show faded on the calendar.
 

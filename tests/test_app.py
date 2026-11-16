@@ -154,7 +154,10 @@ class TestRoutes(AppBase):
 		self.assertEqual(c.post('/api/reorder', json={'status': 'doing', 'ids': [two['id']]}).json, {'ok': True})
 		self.assertEqual(c.post('/api/tasks/bulk', json={'ids': [two['id']], 'status': 'done'}).json, {'changed': 1})
 		self.assertEqual(len(c.get(f'/api/tasks?project={pid}').json['tasks']), 2)
-		self.assertEqual(c.get('/api/search?q=one').json['results'][0]['id'], t['id'])
+		found = c.get('/api/search?q=one').json
+		self.assertEqual((found['results'][0]['id'], found['total']), (t['id'], 1))
+		capped = c.get(f'/api/tasks?project={pid}&done_limit=0').json
+		self.assertEqual((len(capped['tasks']), capped['done_total']), (1, 1))
 		self.assertTrue(c.get(f'/api/projects/{pid}/activity').json['events'])
 		self.assertEqual(c.delete(f'/api/tasks/{t["id"]}').json, {'ok': True})
 		trash = c.get('/api/trash').json

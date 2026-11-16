@@ -98,6 +98,7 @@ const KB = {
 	project   : undefined,
 	task      : null,
 	doneLimit : 25,
+	commentsShown : 30,
 	selecting : false,
 	loadSeq   : 0,
 	routeSeq  : 0,
@@ -163,11 +164,12 @@ const avatar  = (name) => {
 
 async function kbLoad() {
 	const seq   = ++KB.loadSeq;
-	const query = KB.project ? `?project=${KB.project}` : '';
+	const query = '?' + new URLSearchParams({ ...(KB.project ? { project: KB.project } : {}), ...(KB.view !== 'calendar' ? { done_limit: KB.doneLimit } : {}) }); // the calendar needs every task; elsewhere only the newest done ones load
 	const [p, t, l, me, u] = await Promise.all([api('GET', '/api/projects'), api('GET', '/api/tasks' + query), api('GET', '/api/labels'), api('GET', '/api/me'), api('GET', '/api/users')]);
 	if (seq !== KB.loadSeq) return; // a newer load is on its way
 	KB.projects = p.projects;
 	KB.tasks    = t.tasks;
+	KB.doneTotal = t.done_total ?? t.tasks.filter((x) => x.status === 'done').length;
 	KB.labels   = l.labels;
 	KB.me       = me;
 	KB.users    = u.users;
@@ -256,14 +258,15 @@ function kbCard(t) {
 }
 
 function kbBoard() {
-	const visible = KB.tasks.filter(kbMatch);
+	const visible  = KB.tasks.filter(kbMatch);
+	const filtered = visible.length !== KB.tasks.length;
 	for (const status of Object.keys(STATUS)) {
 		let list = visible.filter((t) => t.status === status);
 		const col = $(`.column[data-status="${status}"]`);
-		col.querySelector('.count').textContent = list.length;
+		col.querySelector('.count').textContent = status === 'done' && !filtered ? KB.doneTotal : list.length;
 		if (status === 'done') {
 			list = list.sort((a, b) => (b.done_at || '').localeCompare(a.done_at || ''));
-			col.querySelector('.more').hidden = list.length <= KB.doneLimit;
+			col.querySelector('.more').hidden = (filtered ? list.length : KB.doneTotal) <= KB.doneLimit;
 			list = list.slice(0, KB.doneLimit);
 		}
 		col.querySelector('.cards').innerHTML = list.map(kbCard).join('');
@@ -531,11 +534,11 @@ async function searchRun() {
 	if (!status.length) return box.innerHTML = '<p class="dim">Pick at least one status.</p>';
 	const query = params.toString();
 	searchRun.last = query;
-	const { results } = await api('GET', `/api/search?${query}`);
+	const { results, total } = await api('GET', `/api/search?${query}`);
 	if (searchRun.last !== query) return;
 	const words = q.split(/\s+/).filter(Boolean).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
 	const mark  = (text) => words.length ? String(text ?? '').split(new RegExp(`(${words.join('|')})`, 'gi')).map((part, i) => i % 2 ? `<mark>${esc(part)}</mark>` : esc(part)).join('') : esc(text);
-	box.innerHTML = results.length ? `<p class="dim">${results.length}${results.length === 300 ? '+' : ''} result${results.length === 1 ? '' : 's'}</p>` + results.map((r) => {
+	box.innerHTML = results.length ? `<p class="dim">${total > results.length ? `First ${results.length} of ${total} results; add words or filters to narrow it down` : `${total} result${total === 1 ? '' : 's'}`}</p>` + results.map((r) => {
 		const c = tint(r.project_id);
 		return `<a class="hit ${r.status}" href="#/task/${r.id}">
 			<div class="meta"><span class="id">#${r.id}</span>${c ? `<i class="dot" style="--c:${c}"></i>` : ''}<span>${esc(r.project)}</span>${r.due ? `<span>due ${r.due}</span>` : ''}${r.priority ? `<span class="prio p${r.priority}">${PRIO[r.priority]}</span>` : ''}${r.archived ? '<span class="st">Archived</span>' : ''}<span class="st st-${r.status}">${STATUS[r.status]}</span></div>
@@ -1135,6 +1138,7 @@ function kbDrawer() {
 	const t     = KB.task;
 	const old   = pane();
 	const same  = old.dataset.task === String(t.id);
+	if (!same) KB.commentsShown = 30; // each task opens on its newest comments
 	const draft = same ? old.querySelector('.comment-input')?.value : '';
 	const edit  = same ? old.querySelector('.desc-input')?.value : undefined;
 	const page  = KB.view === 'task';
@@ -1179,7 +1183,8 @@ function kbDrawer() {
 			</section>`;
 	const comments = `<section>
 				<h4>Comments</h4>
-				<div class="comments">${t.comments.map((c) => `<div class="comment"><div class="who"><b>${esc(c.author || 'unknown')}</b> <span class="dim">${new Date(c.created).toLocaleString()}</span></div><div class="markdown">${mdHtml(c.body)}</div></div>`).join('')}</div>
+				${t.comments.length > KB.commentsShown ? `<button class="more link-btn" data-act="earlier-comments">Show ${Math.min(30, t.comments.length - KB.commentsShown)} earlier comment${t.comments.length - KB.commentsShown === 1 ? '' : 's'} (${t.comments.length - KB.commentsShown} hidden)</button>` : ''}
+				<div class="comments">${t.comments.slice(-KB.commentsShown).map((c) => `<div class="comment"><div class="who"><b>${esc(c.author || 'unknown')}</b> <span class="dim">${new Date(c.created).toLocaleString()}</span></div><div class="markdown">${mdHtml(c.body)}</div></div>`).join('')}</div>
 				${mdEditor('comment-input', '', 'Add a comment  (markdown, Ctrl+Enter to send)', 3)}
 				<div class="row end"><button class="primary" data-act="comment">Comment</button></div>
 			</section>`;
@@ -1330,6 +1335,7 @@ async function kbAction(act, el) {
 		return guard(async () => kbTaskSaved(await api('DELETE', `/api/attachments/${li.dataset.id}`)));
 	}
 	if (act === 'cancel-desc') return kbDrawer();
+	if (act === 'earlier-comments') { KB.commentsShown += 30; return kbDrawer(); }
 	if (act === 'restore-desc') { const e = t.history.find((h) => h.id === +el.dataset.event); await kbPatch({ description: e.old }); return toast('Description restored'); }
 	if (act === 'save-desc') {
 		const draft = pane().querySelector('.desc-input').value;
@@ -1500,7 +1506,7 @@ function kbBind() {
 			}
 		});
 	});
-	$('.column[data-status="done"] .more').onclick = () => { KB.doneLimit += 50; kbBoard(); };
+	$('.column[data-status="done"] .more').onclick = () => { KB.doneLimit += 50; guard(kbLoad); };
 	$('#board').addEventListener('click', (e) => {
 		const card = e.target.closest('.card');
 		if (!card || e.target.closest('.open-new')) return;

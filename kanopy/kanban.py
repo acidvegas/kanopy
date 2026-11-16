@@ -1061,7 +1061,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 	:param fields: Any of title, description, comments; default all three
 	:param sort: updated, created, priority, due or id
 	:param assignee: Username every result must be assigned to
-	:param limit: Return only the first this many, after sorting
+	:param limit: Return only the first this many, after sorting, as (results, total matches)
 	'''
 
 	words  = [w.lower() for w in query.split() if w.strip()]
@@ -1074,7 +1074,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 		raise ValueError('sort must be updated, created, priority, due or id')
 
 	if not words and not (project or statuses or label or priority or due or assignee):
-		return []
+		return ([], 0) if limit else []
 
 	local = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC'))
 	today = local.strftime('%Y-%m-%d')
@@ -1085,7 +1085,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 		names         = paths(db)
 		where, params = visible_where(db, project, 't.project_id')
 		if where is None:
-			return []
+			return ([], 0) if limit else []
 		if statuses:
 			where.append(f't.status IN ({marks(statuses)})')
 			params += list(statuses)
@@ -1119,6 +1119,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 		else:
 			rows.sort(key=lambda r: r[sort], reverse=True)
 			rows.sort(key=lambda r: r['status'] == 'done')
+		total = len(rows)
 		rows  = rows[:limit] if limit else rows # labels, people and snippets only for the results returned
 		ids   = [r['id'] for r in rows]
 		tags, people, notes = {}, {}, {}
@@ -1145,7 +1146,7 @@ def search(query: str, project: int = None, statuses: list = None, label: str = 
 					break
 		out.append({'id': row['id'], 'title': row['title'], 'project': names[row['project_id']], 'project_id': row['project_id'], 'status': row['status'], 'priority': row['priority'], 'due': d or None, 'labels': tags.get(row['id'], []), 'assignees': people.get(row['id'], []), 'archived': row['archived'], 'where': where, 'snippet': snippet, 'created': row['created'], 'updated': row['updated']})
 
-	return out
+	return (out, total) if limit else out
 
 
 def set_labels(db: sqlite3.Connection, task_id: int, names: list):
@@ -1338,7 +1339,7 @@ def task_update(task_id: int, data: dict) -> dict:
 	return task(task_id)
 
 
-def tasks(project_id: int = None, archived: bool = False, statuses: list = None, ids: list = None, labels: list = None, assignee: str = None, priority_min: int = 0, due_before: str = None, updated_since: str = None, scheduled: bool = False, brief: bool = False) -> list:
+def tasks(project_id: int = None, archived: bool = False, statuses: list = None, ids: list = None, labels: list = None, assignee: str = None, priority_min: int = 0, due_before: str = None, updated_since: str = None, scheduled: bool = False, brief: bool = False, done_limit: int = None) -> list:
 	'''
 	Return card summaries for the tasks the user can see, filtered in SQL.
 
@@ -1353,6 +1354,7 @@ def tasks(project_id: int = None, archived: bool = False, statuses: list = None,
 	:param updated_since: Changed at or after this ISO time
 	:param scheduled: Only tasks with a due date, a reminder, or in doing (what notifications look at)
 	:param brief: Return only id, project, status, priority and updated, for sorting before loading whole cards
+	:param done_limit: Keep every open task but only this many of the most recently finished
 	'''
 
 	with connect() as db:
@@ -1382,6 +1384,10 @@ def tasks(project_id: int = None, archived: bool = False, statuses: list = None,
 			params.append(updated_since)
 		if scheduled:
 			where.append("(due IS NOT NULL OR remind_at IS NOT NULL OR status = 'doing')")
+		if done_limit is not None:
+			base = ' AND '.join(where + ["status = 'done'"])
+			where.append(f"(status != 'done' OR id IN (SELECT id FROM tasks WHERE {base} ORDER BY done_at DESC, id DESC LIMIT ?))")
+			params += params + [int(done_limit)]
 		for name in labels or []:
 			where.append('EXISTS (SELECT 1 FROM task_labels tl JOIN labels l ON l.id = tl.label_id WHERE tl.task_id = tasks.id AND l.name = ?)')
 			params.append(name)
