@@ -75,6 +75,12 @@ CREATE TABLE IF NOT EXISTS shares         (id INTEGER PRIMARY KEY, project_id IN
 CREATE TABLE IF NOT EXISTS task_assignees (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (task_id, user_id));
 CREATE TABLE IF NOT EXISTS task_events    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, at TEXT NOT NULL, actor TEXT NOT NULL, agent TEXT, field TEXT NOT NULL, old TEXT, new TEXT);
 CREATE INDEX IF NOT EXISTS task_events_task ON task_events (task_id, id);
+CREATE INDEX IF NOT EXISTS tasks_project ON tasks (project_id);
+CREATE INDEX IF NOT EXISTS comments_task ON comments (task_id);
+CREATE INDEX IF NOT EXISTS attachments_task ON attachments (task_id);
+CREATE INDEX IF NOT EXISTS task_labels_label ON task_labels (label_id);
+CREATE INDEX IF NOT EXISTS links_other ON links (other_id);
+CREATE INDEX IF NOT EXISTS task_assignees_user ON task_assignees (user_id);
 CREATE TABLE IF NOT EXISTS notifications  (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE, kind TEXT NOT NULL, actor TEXT NOT NULL, text TEXT NOT NULL, created TEXT NOT NULL, read INTEGER NOT NULL DEFAULT 0);
 '''
 
