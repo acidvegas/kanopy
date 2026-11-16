@@ -362,16 +362,17 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 	return out
 
 
-def links_map(db) -> dict:
+def links_map(db, task_id: int = None) -> dict:
 	'''
-	Return task id -> {kind: [other ids]} for every link.
+	Return task id -> {kind: [other ids]} for one task's links or every link.
 
 	:param db: Open database connection
+	:param task_id: Limit to one task
 	'''
 
 	out = {}
 
-	for row in db.execute('SELECT task_id, kind, other_id FROM links ORDER BY other_id'):
+	for row in db.execute('SELECT task_id, kind, other_id FROM links' + (' WHERE task_id = ?' if task_id else '') + ' ORDER BY other_id', (task_id,) if task_id else ()):
 		out.setdefault(row['task_id'], {}).setdefault(row['kind'], []).append(row['other_id'])
 
 	return out
@@ -657,7 +658,7 @@ def task_line(task_id: int) -> str:
 	'''
 
 	with kanban.connect() as db:
-		rels = links_map(db).get(task_id, {})
+		rels = links_map(db, task_id).get(task_id, {})
 
 	return line(kanban.task(task_id), rels)
 
