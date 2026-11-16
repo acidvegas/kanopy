@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta, timezone
 from kanopy import accounts
 from kanopy import kanban
 
-from .base import Base
+from .base import Base, POSTGRES
 
 
 class TestAttachments(Base):
@@ -58,6 +58,7 @@ class TestAttachments(Base):
 class TestBackup(Base):
 	'''Daily database backups.'''
 
+	@unittest.skipIf(POSTGRES, 'PostgreSQL is backed up with its own tools')
 	def test_backup_written_and_pruned(self):
 		'''Today's backup is written once and only the newest KEEP are kept.'''
 
@@ -782,8 +783,8 @@ class TestTrash(Base):
 
 		t = self.task(title='x')
 		kanban.task_delete(t['id'])
-		taker = self.task(title='taker')
-		self.assertEqual(taker['id'], t['id'])
+		with kanban.connect() as db:
+			db.execute("INSERT INTO tasks (id, project_id, title, created, updated) VALUES (?, ?, 'taker', '', '')", (t['id'], t['project_id']))
 		r = kanban.trash_restore(kanban.trash_list()[0]['id'])
 		self.assertNotEqual(r['id'], t['id'])
 		self.assertEqual(r['title'], 'x')
