@@ -82,7 +82,7 @@ CREATE TABLE IF NOT EXISTS links          (task_id INTEGER NOT NULL REFERENCES t
 CREATE TABLE IF NOT EXISTS sessions       (token TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS tokens         (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, token TEXT NOT NULL UNIQUE, created TEXT NOT NULL, used TEXT, read_only INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS invites        (id INTEGER PRIMARY KEY, token TEXT NOT NULL UNIQUE, created_by INTEGER REFERENCES users(id) ON DELETE SET NULL, created TEXT NOT NULL, expires TEXT NOT NULL, used_by INTEGER REFERENCES users(id) ON DELETE SET NULL, used TEXT);
-CREATE TABLE IF NOT EXISTS teams          (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS teams          (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE, created TEXT NOT NULL, webhook TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS team_members   (team_id INTEGER NOT NULL REFERENCES teams(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, owner INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (team_id, user_id));
 CREATE TABLE IF NOT EXISTS shares         (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE, team_id INTEGER REFERENCES teams(id) ON DELETE CASCADE, role TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS task_assignees (task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, PRIMARY KEY (task_id, user_id));
@@ -414,7 +414,7 @@ def init(target: str = None):
 		if not db.postgres:
 			db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(database.schema(SCHEMA, db.postgres))
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0')): # columns added after the first release
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''")): # columns added after the first release
 			if column not in database.columns(db, table):
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
 		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's

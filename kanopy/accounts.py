@@ -493,6 +493,27 @@ def team_owner(db, user: dict, team_id: int):
 		raise PermissionError('only a team owner can do that')
 
 
+def team_webhook(user: dict, team_id: int, url: str) -> list:
+	'''
+	Set or clear the URL that changes on the team's shared projects are posted to (team owner or admin).
+
+	:param user: Acting user
+	:param team_id: Team id
+	:param url: http(s) URL, or empty to turn it off
+	'''
+
+	url = (url or '').strip()
+
+	if url and (not re.fullmatch(r'https?://\S+', url) or len(url) > 500):
+		raise ValueError('the webhook must be an http:// or https:// URL under 500 characters')
+
+	with kanban.connect() as db:
+		team_owner(db, user, team_id)
+		db.execute('UPDATE teams SET webhook = ? WHERE id = ?', (url, team_id))
+
+	return teams(user)
+
+
 def teams(user: dict) -> list:
 	'''
 	Return the teams the user belongs to (admins see all) with their members.
@@ -507,7 +528,8 @@ def teams(user: dict) -> list:
 		for team in rows:
 			members = [dict(row) for row in db.execute('SELECT u.id, u.username, m.owner FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ? ORDER BY m.owner DESC, u.username', (team['id'],))]
 			mine    = any(m['id'] == user['id'] and m['owner'] for m in members)
-			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'owner': mine or bool(user['is_admin'])})
+			owner   = mine or bool(user['is_admin'])
+			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'owner': owner, 'webhook': team['webhook'] if owner else ''}) # the URL can hold a key, so only owners see it
 
 	return out
 
