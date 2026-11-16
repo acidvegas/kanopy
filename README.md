@@ -65,7 +65,7 @@ A task carries a markdown description with clickable checklists, a priority, due
 
 Tasks can **repeat** daily, weekly, monthly, yearly, every N days or on chosen weekdays. Marking one done creates the next occurrence with its checklist reset and its dates moved forward; upcoming ones show faded on the calendar.
 
-Every task keeps a **history** of who changed what, including the agent's name for changes made over MCP.
+Every task keeps a **history** of who changed what, including the agent's name for changes made over MCP. The text of the last 10 description edits is kept, and any of them can be restored from the history.
 
 ### Search and labels
 
