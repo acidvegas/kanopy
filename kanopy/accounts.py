@@ -6,10 +6,12 @@ import hashlib
 import hmac
 import re
 import secrets
+import urllib.parse
 
 from datetime import datetime, timedelta, timezone
 
 from . import kanban
+from . import notify
 
 
 INVITE_DAYS  = 7
@@ -509,6 +511,8 @@ def team_webhook(user: dict, team_id: int, url: str) -> list:
 
 	with kanban.connect() as db:
 		team_owner(db, user, team_id)
+		if url and not notify.webhook_public(urllib.parse.urlsplit(url).hostname or ''):
+			raise ValueError('the webhook must point at a public address, not loopback, LAN or tailnet')
 		db.execute('UPDATE teams SET webhook = ? WHERE id = ?', (url, team_id))
 
 	return teams(user)

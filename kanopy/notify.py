@@ -2,9 +2,12 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanopy/notify.py
 
+import ipaddress
 import json
 import logging
+import queue
 import re
+import socket
 import threading
 import time
 import urllib.parse
@@ -21,6 +24,22 @@ STALE_DAYS  = 3 # a task in doing with no update for this many days shows in the
 HOOK_FIELDS = ('title', 'status', 'priority', 'due', 'project', 'labels', 'assignees', 'description') # task fields whose changes go out on team webhooks
 MENTION_RE  = re.compile(r'(?<![\w@])@([a-z0-9_-]{2,32})')
 USER_AGENT  = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
+
+HOOK_LOCK   = threading.Lock()
+HOOK_QUEUE  = queue.Queue()
+HOOK_SENDER = None # background thread posting HOOK_QUEUE, started on first use
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+	'''Refuse redirects, so a webhook never carries its key to another host.'''
+
+	def redirect_request(self, req, fp, code, msg, headers, newurl):
+		'''Return None so urllib raises the 3xx as an HTTPError.'''
+
+		return None
+
+
+HOOK_OPENER = urllib.request.build_opener(NoRedirect)
 
 DEFAULTS = {
 	'ntfy_url'          : 'https://ntfy.sh',
@@ -328,30 +347,102 @@ def webhook(event: str, before: dict, after: dict, comment: str = ''):
 	webhook_post(urls, {'event': event, 'actor': actor['username'], 'agent': kanban.AGENT.get(), 'task': dict(task, url=f'{BASE_URL}/#/task/{after["id"]}'), 'changes': changes, 'comment': comment})
 
 
+def webhook_bulk(action: str, before: dict, after: dict):
+	'''
+	Post one summary per webhook for a bulk change made by the signed-in user, instead of one message per task.
+
+	:param action: updated or deleted
+	:param before: Task id to task before the change
+	:param after: Task id to task after the change (empty for deleted)
+	'''
+
+	if not (actor := kanban.ACTOR.get()):
+		return
+
+	groups = {}
+
+	for task_id, old in before.items():
+		new    = after.get(task_id, old)
+		fields = [key for key in HOOK_FIELDS if old[key] != new[key]]
+		if action == 'updated' and not fields:
+			continue
+		for url in webhook_urls(new['project_id']):
+			group = groups.setdefault(url, {'tasks': [], 'fields': set()})
+			group['tasks'].append({'id': new['id'], 'title': new['title'], 'project': new['project'], 'status': new['status'], 'url': f'{BASE_URL}/#/task/{new["id"]}'})
+			group['fields'].update(fields)
+
+	for url, group in groups.items():
+		webhook_post([url], {'event': 'bulk', 'action': action, 'actor': actor['username'], 'agent': kanban.AGENT.get(), 'tasks': group['tasks'], 'fields': sorted(group['fields'])})
+
+
 def webhook_post(urls: list, payload: dict):
 	'''
-	POST the payload as JSON to each URL from a background thread, so a slow receiver never holds up the request. A key= URL parameter is sent as a Bearer header instead, keeping it out of proxy logs.
+	Queue the payload for each URL; one background sender posts them in order, so a slow receiver never holds up a request and a burst never opens a thread per task.
 
 	:param urls: Webhook URLs
 	:param payload: Event payload
 	'''
 
-	def run():
-		for url in urls:
-			try:
-				parts   = urllib.parse.urlsplit(url)
-				query   = urllib.parse.parse_qsl(parts.query)
-				headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
-				if (key := next((v for k, v in query if k == 'key'), None)):
-					headers['Authorization'] = f'Bearer {key}'
-					url = parts._replace(query=urllib.parse.urlencode([(k, v) for k, v in query if k != 'key'])).geturl()
-				req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
-				with urllib.request.urlopen(req, timeout=10) as resp:
-					resp.read()
-			except Exception as exc:
-				logging.warning('team webhook for #%s failed: %s', payload['task']['id'], exc)
+	global HOOK_SENDER
 
-	threading.Thread(target=run, daemon=True).start()
+	with HOOK_LOCK:
+		if not HOOK_SENDER or not HOOK_SENDER.is_alive():
+			HOOK_SENDER = threading.Thread(target=webhook_sender, daemon=True)
+			HOOK_SENDER.start()
+
+	for url in urls:
+		HOOK_QUEUE.put((url, payload))
+
+
+def webhook_public(host: str) -> bool:
+	'''
+	Return whether every address a host resolves to is public, so a webhook cannot be aimed at loopback, LAN, tailnet or cloud-metadata addresses.
+
+	:param host: Hostname or IP literal
+	'''
+
+	try:
+		addresses = {info[4][0] for info in socket.getaddrinfo(host, None)}
+	except (OSError, UnicodeError):
+		return False
+
+	return bool(addresses) and all(ipaddress.ip_address(address.split('%')[0]).is_global for address in addresses)
+
+
+def webhook_send(url: str, payload: dict):
+	'''
+	POST one payload as JSON; raises on failure, a non-public host or a redirect. A key= URL parameter is sent as a Bearer header instead, keeping it out of proxy logs.
+
+	:param url: Webhook URL
+	:param payload: Event payload
+	'''
+
+	parts   = urllib.parse.urlsplit(url)
+	query   = urllib.parse.parse_qsl(parts.query)
+	headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
+
+	if not webhook_public(parts.hostname or ''):
+		raise ValueError(f'{parts.hostname} is not a public address')
+
+	if (key := next((v for k, v in query if k == 'key'), None)):
+		headers['Authorization'] = f'Bearer {key}'
+		url = parts._replace(query=urllib.parse.urlencode([(k, v) for k, v in query if k != 'key'])).geturl()
+
+	req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+
+	with HOOK_OPENER.open(req, timeout=10) as resp:
+		resp.read()
+
+
+def webhook_sender():
+	'''Post queued webhook payloads one at a time forever; meant for a daemon thread.'''
+
+	while True:
+		url, payload = HOOK_QUEUE.get()
+		try:
+			webhook_send(url, payload)
+		except Exception as exc:
+			logging.warning('team webhook %s failed: %s', payload['event'], exc)
 
 
 def webhook_urls(project_id: int) -> list:
