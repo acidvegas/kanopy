@@ -249,6 +249,34 @@ class TestRoutes(AppBase):
 		self.assertEqual(app.app.test_client().put('/api/settings', json={}, headers={'X-Key': self.key}).status_code, 403)
 
 
+	def test_revision(self):
+		'''Writes bump the revision, reads and failed writes do not, and every response carries it.'''
+
+		start = self.client.get('/api/revision').json['revision']
+		r     = self.client.post('/api/projects', json={'path': 'R'})
+		self.assertEqual(int(r.headers['X-Revision']), start + 1)
+		self.client.get('/api/projects')
+		self.client.post('/api/projects', json={'path': ''})
+		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
+		self.rpc('tools/call', {'name': 'list_tasks', 'arguments': {}})
+		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
+		self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Ann', 'title': 'x'}})
+		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 2)
+
+
+	def test_description_clash(self):
+		'''A web save whose starting text is out of date is refused with the newer text; a matching one saves.'''
+
+		t = self.task(description='v1')
+		kanban.task_update(t['id'], {'description': 'v2 from an agent'})
+		r = self.client.patch(f'/api/tasks/{t["id"]}', json={'description': 'mine', 'description_was': 'v1'})
+		self.assertEqual((r.status_code, r.json['description']), (409, 'v2 from an agent'))
+		self.assertEqual(kanban.task(t['id'])['description'], 'v2 from an agent')
+		r = self.client.patch(f'/api/tasks/{t["id"]}', json={'description': 'mine', 'description_was': 'v2 from an agent'})
+		self.assertEqual(r.json['description'], 'mine')
+		self.assertEqual(self.client.patch(f'/api/tasks/{t["id"]}', json={'description': 'forced'}).json['description'], 'forced')
+
+
 	def test_context(self):
 		'''The session hook endpoint returns the briefing as plain text.'''
 
