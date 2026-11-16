@@ -28,7 +28,7 @@ MENTION_RE  = re.compile(r'(?<![\w@])@([a-z0-9_-]{2,32})')
 USER_AGENT  = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36'
 
 HOOK_LOCK   = threading.Lock()
-HOOK_QUEUE  = queue.Queue()
+HOOK_QUEUE  = queue.Queue(maxsize=500) # past this, the oldest queued post is dropped
 HOOK_SENDER = None # background thread posting HOOK_QUEUE, started on first use
 
 
@@ -382,7 +382,16 @@ def webhook_post(urls: list, payload: dict):
 			HOOK_SENDER.start()
 
 	for url in urls:
-		HOOK_QUEUE.put((url, payload))
+		while True:
+			try:
+				HOOK_QUEUE.put_nowait((url, payload))
+				break
+			except queue.Full:
+				try:
+					dropped = HOOK_QUEUE.get_nowait()
+					logging.warning('team webhook queue full, dropped a %s post', dropped[1]['event'])
+				except queue.Empty:
+					pass
 
 
 def webhook_address(host: str) -> str:
@@ -457,8 +466,28 @@ def webhook_sender():
 		url, payload = HOOK_QUEUE.get()
 		try:
 			webhook_send(url, payload)
+			webhook_status(url, '')
 		except Exception as exc:
 			logging.warning('team webhook %s failed: %s', payload['event'], exc)
+			webhook_status(url, str(exc)[:200] or type(exc).__name__)
+
+
+def webhook_status(url: str, error: str):
+	'''
+	Record the result of the latest send on the teams using this URL, so owners see failures on the team card; a success clears it.
+
+	:param url: Webhook URL
+	:param error: Error text, or empty for a success
+	'''
+
+	try:
+		with kanban.connect() as db:
+			if error:
+				db.execute('UPDATE teams SET webhook_error = ?, webhook_failed = ? WHERE webhook = ?', (error, kanban.now(), url))
+			else:
+				db.execute("UPDATE teams SET webhook_error = '', webhook_failed = NULL WHERE webhook = ? AND webhook_error != ''", (url,))
+	except Exception as exc:
+		logging.warning('could not record team webhook status: %s', exc)
 
 
 def webhook_urls(project_id: int) -> list:

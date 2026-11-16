@@ -501,19 +501,19 @@ def team_webhook(user: dict, team_id: int, url: str) -> list:
 
 	:param user: Acting user
 	:param team_id: Team id
-	:param url: http(s) URL, or empty to turn it off
+	:param url: https URL, or empty to turn it off
 	'''
 
 	url = (url or '').strip()
 
-	if url and (not re.fullmatch(r'https?://\S+', url) or len(url) > 500):
-		raise ValueError('the webhook must be an http:// or https:// URL under 500 characters')
+	if url and (not re.fullmatch(r'https://\S+', url) or len(url) > 500):
+		raise ValueError('the webhook must be an https:// URL under 500 characters')
 
 	with kanban.connect() as db:
 		team_owner(db, user, team_id)
 		if url and not notify.webhook_public(urllib.parse.urlsplit(url).hostname or ''):
 			raise ValueError('the webhook must point at a public address, not loopback, LAN or tailnet')
-		db.execute('UPDATE teams SET webhook = ? WHERE id = ?', (url, team_id))
+		db.execute("UPDATE teams SET webhook = ?, webhook_error = '', webhook_failed = NULL WHERE id = ?", (url, team_id))
 
 	return teams(user)
 
@@ -533,7 +533,7 @@ def teams(user: dict) -> list:
 			members = [dict(row) for row in db.execute('SELECT u.id, u.username, m.owner FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ? ORDER BY m.owner DESC, u.username', (team['id'],))]
 			mine    = any(m['id'] == user['id'] and m['owner'] for m in members)
 			owner   = mine or bool(user['is_admin'])
-			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'owner': owner, 'webhook': team['webhook'] if owner else ''}) # the URL can hold a key, so only owners see it
+			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'owner': owner, 'webhook': team['webhook'] if owner else '', 'webhook_error': team['webhook_error'] if owner else '', 'webhook_failed': team['webhook_failed'] if owner else None}) # the URL can hold a key, so only owners see it
 
 	return out
 

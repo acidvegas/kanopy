@@ -267,11 +267,11 @@ class TestTeams(Base):
 
 
 	def test_webhook(self):
-		'''Only owners set the webhook and only they see it; it must be an http(s) URL, and empty clears it.'''
+		'''Only owners set the webhook and only they see it; it must be a public https URL, and empty clears it.'''
 
 		with self.assertRaises(PermissionError):
 			accounts.team_webhook(self.bob, self.team, 'https://chat.example.com/hook')
-		for bad in ('ftp://x', 'not a url', 'https://' + 'x' * 500, 'http://127.0.0.1:3000/hook', 'http://100.64.0.1/hook'):
+		for bad in ('ftp://x', 'not a url', 'https://' + 'x' * 500, 'http://chat.example.com/hook', 'https://127.0.0.1:3000/hook', 'https://100.64.0.1/hook'):
 			with self.assertRaises(ValueError, msg=bad):
 				accounts.team_webhook(self.ann, self.team, bad)
 		real, notify.webhook_public = notify.webhook_public, lambda host: host == 'chat.example.com' # no DNS in tests

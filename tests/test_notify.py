@@ -361,14 +361,17 @@ class TestWebhooks(Base):
 
 		server = http.server.HTTPServer(('127.0.0.1', 0), Handler)
 		threading.Thread(target=server.handle_request, daemon=True).start()
-		lookups = []
-		real    = notify.webhook_address
+		lookups  = []
+		statuses = queue.Queue()
+		real     = (notify.webhook_address, notify.webhook_status)
 		notify.webhook_address = lambda host: lookups.append(host) or '127.0.0.1' # hook.test never resolves, so the send must use this pinned address
+		notify.webhook_status  = lambda url, error: statuses.put(error)
 		try:
 			self.old_post([f'http://hook.test:{server.server_port}/hook?channel=dev&key=secret123&topic=kanopy'], {'event': 'created', 'task': {'id': 1}})
 			path, host, auth, body = got.get(timeout=5)
+			self.assertEqual(statuses.get(timeout=5), '') # the sender is done before this test's database goes away
 		finally:
-			notify.webhook_address = real
+			notify.webhook_address, notify.webhook_status = real
 			server.server_close()
 		self.assertEqual(lookups, ['hook.test'])
 		self.assertEqual((path, host, auth, body['event']), ('/hook?channel=dev&topic=kanopy', f'hook.test:{server.server_port}', 'Bearer secret123', 'created'))
@@ -401,6 +404,39 @@ class TestWebhooks(Base):
 		finally:
 			notify.webhook_address = real
 			server.server_close()
+
+
+	def test_failure_shown_until_success(self):
+		'''A failed send is recorded on the team for its owner; a later success or a new URL clears it.'''
+
+		team = accounts.teams(self.ann)[0]['id']
+		notify.webhook_status('https://chat.example.com/hook', 'HTTP 401 from chat.example.com')
+		mine = accounts.teams(self.ann)[0]
+		self.assertEqual(mine['webhook_error'], 'HTTP 401 from chat.example.com')
+		self.assertIsNotNone(mine['webhook_failed'])
+		notify.webhook_status('https://chat.example.com/hook', '')
+		self.assertEqual(accounts.teams(self.ann)[0]['webhook_error'], '')
+		notify.webhook_status('https://chat.example.com/hook', 'down')
+		accounts.team_webhook(self.ann, team, '')
+		self.assertEqual((accounts.teams(self.ann)[0]['webhook_error'], accounts.teams(self.ann)[0]['webhook_failed']), ('', None))
+
+
+	def test_queue_drops_oldest_when_full(self):
+		'''Past the queue limit the oldest post is dropped, with a warning, so a dead receiver cannot grow memory forever.'''
+
+		class Alive:
+			def is_alive(self):
+				return True
+
+		old = (notify.HOOK_QUEUE, notify.HOOK_SENDER)
+		notify.HOOK_QUEUE, notify.HOOK_SENDER = queue.Queue(maxsize=2), Alive() # no sender drains it
+		try:
+			with self.assertLogs(level='WARNING'):
+				for n in range(3):
+					self.old_post(['https://chat.example.com/hook'], {'event': f'e{n}'})
+			self.assertEqual([notify.HOOK_QUEUE.get_nowait()[1]['event'] for _ in range(2)], ['e1', 'e2'])
+		finally:
+			notify.HOOK_QUEUE, notify.HOOK_SENDER = old
 
 
 	def test_mixed_answers_refused(self):

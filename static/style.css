@@ -601,6 +601,7 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .team + .team { margin-top: .5rem; }
 .team-head { display: flex; align-items: center; gap: .5rem; }
 .team-members { display: flex; flex-wrap: wrap; gap: .35rem; }
+.team-hook-error { color: var(--danger); overflow-wrap: anywhere; }
 .spacer { flex: 1; }
 .row-item { display: flex; align-items: center; gap: .6rem; padding: .5rem .2rem; border-bottom: 1px solid var(--line); font-size: .86rem; flex-wrap: wrap; }
 .row-item:last-child { border-bottom: none; }
