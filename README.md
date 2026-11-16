@@ -182,7 +182,7 @@ Any MCP client that supports streamable HTTP works: point it at `http://HOST:POR
 A few rules keep agents from making a mess:
 
 - A new project is created by filing its first task into it, so no project is ever empty
-- An agent must read a task before it can replace the description, so it never overwrites edits it has not seen
+- An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; `edit` *(exact text, must match once)* and `append` need no read
 - `host:` labels that differ only by punctuation *(`host:web01` and `host:web-01`)* are rejected
 
 ## Configuration

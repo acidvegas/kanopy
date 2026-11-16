@@ -46,13 +46,15 @@ TOOLS = [
 		'changed'      : {**STR, 'description': 'since YYYY-MM-DD or Nd; newest first, any status'},
 		'limit'        : {**INT, 'description': 'default 50'}
 	}, []),
-	('get_task', 'Full tasks: description, relations, comments. file= returns one attachment\'s text instead.', {'ids': {'type': 'array', 'items': INT}, 'file': {**INT, 'description': 'attachment id'}}, []),
+	('get_task', 'Full tasks: description, relations, the last 5 comments. file= returns one attachment\'s text instead.', {'ids': {'type': 'array', 'items': INT}, 'file': {**INT, 'description': 'attachment id'}, 'comments': {**BOOL, 'description': 'every comment'}}, []),
 	('save_task', 'Create (project + title) or update by id; only given fields change.', {
 		'id'            : {**INT, 'description': 'omit to create'},
 		'ids'           : {'type': 'array', 'items': INT, 'description': 'apply the same update to each'},
 		'project'       : {**STR, 'description': 'path or id; moves on update; a new path creates the project'},
 		'title'         : STR,
-		'description'   : {**STR, 'description': 'markdown, replaces it all; steps as "- [ ] "'},
+		'description'   : {**STR, 'description': 'markdown, replaces it all; steps as "- [ ] "; prefer edit/append on an existing task'},
+		'edit'          : {'type': 'array', 'items': {'type': 'object', 'properties': {'old': STR, 'new': STR}, 'required': ['old', 'new']}, 'description': 'replace exact text in the description; each old must match once'},
+		'append'        : {**STR, 'description': 'markdown added to the end of the description'},
 		'add_labels'    : {**LIST, 'description': 'like host:pi'},
 		'remove_labels' : LIST,
 		'assign'        : {**LIST, 'description': 'usernames'},
@@ -126,7 +128,7 @@ def call(name: str, args: dict, agent: str) -> str:
 			return read_file(int(args['file']))
 		if not (args.get('ids') or args.get('id')):
 			raise ValueError('give ids or file')
-		return '\n\n---\n\n'.join(get_task(int(i), agent) for i in args.get('ids') or [args['id']])
+		return '\n\n---\n\n'.join(get_task(int(i), agent, bool(args.get('comments'))) for i in args.get('ids') or [args['id']])
 
 	if name == 'save_task':
 		return save_task(args, agent)
@@ -226,12 +228,35 @@ def context(cwd: str) -> str:
 	return '\n'.join(lines)
 
 
-def get_task(task_id: int, agent: str) -> str:
+def edit_description(description: str, edits: list, append: str) -> str:
+	'''
+	Apply exact-text replacements, then an append, to a markdown description.
+
+	:param description: Markdown description
+	:param edits: List of {old, new}; each old must appear exactly once
+	:param append: Markdown added to the end, or empty
+	'''
+
+	for change in edits:
+		if not change.get('old'):
+			raise ValueError('edit old is empty')
+		if (hits := description.count(change['old'])) != 1:
+			raise ValueError(f'edit old "{change["old"][:60]}" matches {hits} times in the description, it must match once; get_task to see the text')
+		description = description.replace(change['old'], change['new'])
+
+	if append := (append or '').strip():
+		description = (description.rstrip() + '\n\n' if description.strip() else '') + append
+
+	return description
+
+
+def get_task(task_id: int, agent: str, all_comments: bool = False) -> str:
 	'''
 	Render a full task: line, description, relations and comments.
 
 	:param task_id: Task id
 	:param agent: Agent tag, remembered as having read this description
+	:param all_comments: Every comment instead of the last 5
 	'''
 
 	t   = kanban.task(task_id)
@@ -249,8 +274,9 @@ def get_task(task_id: int, agent: str) -> str:
 		out.append('\nfiles: ' + ', '.join(f'#{a["id"]} {a["name"]} ({a["size"] // 1024 or 1} KB)' for a in t['attachments']))
 
 	if t['comments']:
-		out.append('\ncomments:')
-		out += [f'- {c["created"][:10]} [{c["author"]}] {c["body"]}' for c in t['comments']]
+		shown = t['comments'] if all_comments else t['comments'][-5:]
+		out.append('\ncomments:' if len(shown) == len(t['comments']) else f'\ncomments (last {len(shown)} of {len(t["comments"])}, comments=true for all):')
+		out += [f'- {c["created"][:10]} [{c["author"]}] {c["body"]}' for c in shown]
 
 	return '\n'.join(out)
 
@@ -570,6 +596,8 @@ def save_task(args: dict, agent: str) -> str:
 			fields['labels'] = [l for l in t['labels'] if l not in remove] + add
 		if assign or unassign:
 			fields['assignees'] = [a for a in t['assignees'] if a not in unassign] + assign
+		if args.get('edit') or args.get('append'):
+			fields['description'] = edit_description(fields.get('description', t['description']), args.get('edit') or [], args.get('append'))
 		if args.get('check'):
 			fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
 		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
@@ -586,6 +614,9 @@ def save_task(args: dict, agent: str) -> str:
 
 	if not (fields.get('project_id') or new_path) or not (fields.get('title') or '').strip():
 		raise ValueError('project and title are required to create a task')
+
+	if args.get('edit') or args.get('append'):
+		raise ValueError('edit and append change an existing task; give id, or use description to create')
 
 	fields['labels'] = add
 	if assign:
