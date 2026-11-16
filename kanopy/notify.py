@@ -2,12 +2,14 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanopy/notify.py
 
+import http.client
 import ipaddress
 import json
 import logging
 import queue
 import re
 import socket
+import ssl
 import threading
 import time
 import urllib.parse
@@ -29,17 +31,6 @@ HOOK_LOCK   = threading.Lock()
 HOOK_QUEUE  = queue.Queue()
 HOOK_SENDER = None # background thread posting HOOK_QUEUE, started on first use
 
-
-class NoRedirect(urllib.request.HTTPRedirectHandler):
-	'''Refuse redirects, so a webhook never carries its key to another host.'''
-
-	def redirect_request(self, req, fp, code, msg, headers, newurl):
-		'''Return None so urllib raises the 3xx as an HTTPError.'''
-
-		return None
-
-
-HOOK_OPENER = urllib.request.build_opener(NoRedirect)
 
 DEFAULTS = {
 	'ntfy_url'          : 'https://ntfy.sh',
@@ -394,44 +385,69 @@ def webhook_post(urls: list, payload: dict):
 		HOOK_QUEUE.put((url, payload))
 
 
-def webhook_public(host: str) -> bool:
+def webhook_address(host: str) -> str:
 	'''
-	Return whether every address a host resolves to is public, so a webhook cannot be aimed at loopback, LAN, tailnet or cloud-metadata addresses.
+	Resolve a host once and return the address to connect to, raising ValueError unless every address it resolves to is public (no loopback, LAN, tailnet or cloud metadata). The send connects to this exact address, so a second lookup can never point it somewhere else.
 
 	:param host: Hostname or IP literal
 	'''
 
 	try:
-		addresses = {info[4][0] for info in socket.getaddrinfo(host, None)}
+		addresses = [info[4][0] for info in socket.getaddrinfo(host, None, proto=socket.IPPROTO_TCP)]
 	except (OSError, UnicodeError):
+		raise ValueError(f'{host} does not resolve')
+
+	if not addresses or not all(ipaddress.ip_address(address.split('%')[0]).is_global for address in addresses):
+		raise ValueError(f'{host} is not a public address')
+
+	return addresses[0]
+
+
+def webhook_public(host: str) -> bool:
+	'''
+	Return whether a host resolves only to public addresses.
+
+	:param host: Hostname or IP literal
+	'''
+
+	try:
+		webhook_address(host)
+	except ValueError:
 		return False
 
-	return bool(addresses) and all(ipaddress.ip_address(address.split('%')[0]).is_global for address in addresses)
+	return True
 
 
 def webhook_send(url: str, payload: dict):
 	'''
-	POST one payload as JSON; raises on failure, a non-public host or a redirect. A key= URL parameter is sent as a Bearer header instead, keeping it out of proxy logs.
+	POST one payload as JSON to the address checked by webhook_address; raises on failure or any non-2xx reply, and redirects are never followed. A key= URL parameter is sent as a Bearer header instead, keeping it out of proxy logs.
 
 	:param url: Webhook URL
 	:param payload: Event payload
 	'''
 
 	parts   = urllib.parse.urlsplit(url)
+	secure  = parts.scheme == 'https'
+	port    = parts.port or (443 if secure else 80)
+	address = webhook_address(parts.hostname or '')
 	query   = urllib.parse.parse_qsl(parts.query)
 	headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
 
-	if not webhook_public(parts.hostname or ''):
-		raise ValueError(f'{parts.hostname} is not a public address')
-
 	if (key := next((v for k, v in query if k == 'key'), None)):
 		headers['Authorization'] = f'Bearer {key}'
-		url = parts._replace(query=urllib.parse.urlencode([(k, v) for k, v in query if k != 'key'])).geturl()
+		query = [(k, v) for k, v in query if k != 'key']
 
-	req = urllib.request.Request(url, data=json.dumps(payload).encode('utf-8'), headers=headers, method='POST')
+	path = (parts.path or '/') + (f'?{urllib.parse.urlencode(query)}' if query else '')
+	conn = PinnedHTTPSConnection(parts.hostname, port, address, timeout=10, context=ssl.create_default_context()) if secure else PinnedHTTPConnection(parts.hostname, port, address, timeout=10)
 
-	with HOOK_OPENER.open(req, timeout=10) as resp:
+	try:
+		conn.request('POST', path, body=json.dumps(payload).encode('utf-8'), headers=headers)
+		resp = conn.getresponse()
 		resp.read()
+		if not 200 <= resp.status < 300:
+			raise OSError(f'HTTP {resp.status} from {parts.hostname}')
+	finally:
+		conn.close()
 
 
 def webhook_sender():
@@ -460,3 +476,47 @@ def webhook_urls(project_id: int) -> list:
 			chain.append(node)
 			node = parent.get(node)
 		return [row['webhook'] for row in db.execute(f"SELECT DISTINCT t.webhook FROM shares s JOIN teams t ON t.id = s.team_id WHERE t.webhook != '' AND s.project_id IN ({kanban.marks(chain)})", chain)]
+
+
+class PinnedHTTPConnection(http.client.HTTPConnection):
+	'''HTTP connection to a fixed, already-checked address; the hostname is only used for the Host header.'''
+
+	def __init__(self, host: str, port: int, address: str, **kwargs):
+		'''
+		Remember the address to connect to.
+
+		:param host: Hostname for the Host header
+		:param port: Port
+		:param address: IP address to connect to
+		'''
+
+		super().__init__(host, port, **kwargs)
+		self.address = address
+
+
+	def connect(self):
+		'''Connect to the pinned address instead of resolving the hostname again.'''
+
+		self.sock = socket.create_connection((self.address, self.port), self.timeout)
+
+
+class PinnedHTTPSConnection(http.client.HTTPSConnection):
+	'''HTTPS connection to a fixed, already-checked address; the certificate is still verified against the hostname.'''
+
+	def __init__(self, host: str, port: int, address: str, **kwargs):
+		'''
+		Remember the address to connect to.
+
+		:param host: Hostname for the Host header, SNI and certificate check
+		:param port: Port
+		:param address: IP address to connect to
+		'''
+
+		super().__init__(host, port, **kwargs)
+		self.address = address
+
+
+	def connect(self):
+		'''Connect to the pinned address, then do TLS against the hostname.'''
+
+		self.sock = self._context.wrap_socket(socket.create_connection((self.address, self.port), self.timeout), server_hostname=self.host)
