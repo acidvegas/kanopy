@@ -209,7 +209,7 @@ Any MCP client that supports streamable HTTP works: point it at `http://HOST:POR
 | Tool            | Does                                                                                                                              |
 |-----------------|-----------------------------------------------------------------------------------------------------------------------------------|
 | `list_projects` | Project tree with open task counts                                                                                                |
-| `list_tasks`    | Tasks filtered by project, labels, text *(with the matching line)*, status, priority or due date; `changed` lists recent activity |
+| `list_tasks`    | Tasks filtered by project, team, labels, text *(with the matching line)*, status, priority or due date; `changed` lists recent activity |
 | `get_task`      | Full tasks with description, links and the last 5 comments *(`comments` for all)*, or an attachment's text                        |
 | `save_task`     | Create or update any field, edit or append to the description, tick a checklist item, comment; `ids` updates many at once         |
 | `save_project`  | Rename or move, describe, set the local folder, archive                                                                           |
