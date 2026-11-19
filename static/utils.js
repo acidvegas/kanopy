@@ -214,8 +214,11 @@ function kbTree() {
 	const parent = (p) => KB.projects.some((c) => c.parent_id === p.id && (KB.archived || !c.archived));
 	const mine   = $('#kb-filter').value.trim() === '@me';
 	const words  = $('#kb-filter').value.toLowerCase().split(/\s+/).filter((w) => w && !/^[#@]|:/.test(w)); // plain words; #id, @user and labels leave the tree alone
+	const teams  = $('#kb-filter').value.toLowerCase().split(/\s+/).filter((w) => w.startsWith('team:')).map((w) => kbTeam(w.slice(5))).filter(Boolean); // known teams only
 	const hit    = (p) => words.every((w) => p.path.toLowerCase().includes(w));
-	const keep   = words.length && KB.projects.some(hit) ? new Set(KB.projects.filter(hit).flatMap((p) => p.path.split('/').map((_, i, a) => a.slice(0, i + 1).join('/')))) : null; // matches plus their parents; no match = text is about tasks, show every project
+	const pool   = teams.length ? KB.projects.filter((p) => teams.every((t) => t.has(p.id))) : null; // team:name keeps that team's projects
+	const shown  = words.length && (pool || KB.projects).some(hit) ? (pool || KB.projects).filter(hit) : pool;
+	const keep   = shown ? new Set(shown.flatMap((p) => p.path.split('/').map((_, i, a) => a.slice(0, i + 1).join('/')))) : null; // matches plus their parents; no match = text is about tasks, show every project
 	nav.innerHTML = `<a class="item${KB.project === null && !mine ? ' active' : ''}" href="#/${kbView()}/all" data-all="1" style="--depth:0">${SVG.proj}<span>All tasks</span><b class="count">${open}</b></a>` +
 		`<a class="item${KB.project === null && mine ? ' active' : ''}" href="#/${kbView()}/all" data-mine="1" style="--depth:0">${avatar(KB.me?.username || '?')}<span>Assigned to me</span></a>`;
 	for (const p of KB.projects) {
