@@ -202,6 +202,14 @@ class TestPushes(Base):
 		self.assertEqual(self.titles(), [f'claude finished #{t["id"]}'])
 
 
+	def test_agent_done_needs_topic(self):
+		'''With no board topic set, the agent-done push is skipped.'''
+
+		notify.save({'ntfy_topic': ''})
+		notify.agent_done(kanban.task(self.task()['id']), 'claude')
+		self.assertEqual(self.titles(), [])
+
+
 class TestTaskEvents(Base):
 	'''Inbox fan-out for task changes.'''
 
