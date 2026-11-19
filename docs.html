@@ -1,0 +1,372 @@
+<!-- site - Developed by acidvegas in HTML (https://github.com/acidvegas) -->
+<!-- index.html -->
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>Docs · kanopy</title>
+	<meta name="description" content="kanopy is a self-hosted kanban board built for AI agents and the people they work with. Agents file, claim and finish tasks over MCP, and every change names who made it.">
+	<meta name="theme-color" content="#07060d">
+	<meta property="og:title" content="kanopy">
+	<meta property="og:description" content="The kanban board built for AI agents and the people they work with.">
+	<meta property="og:image" content="assets/img/og.png">
+	<meta property="og:type" content="website">
+	<meta name="twitter:card" content="summary_large_image">
+	<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="assets/img/favicon.ico" sizes="48x48">
+	<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+	<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+	<div class="wrap">
+		<a class="brand" href="./"><img src="assets/img/favicon.svg" alt="">kanopy</a>
+		<nav class="nav-links" aria-label="Main">
+			<a href="./#why">Why</a>
+			<a href="./#compare">Compare</a>
+			<a href="./#install">Install</a>
+			<a class="on" href="docs.html">Docs</a>
+		</nav>
+		<a class="btn sm gh" href="https://github.com/acidvegas/kanopy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+		<button class="menu" type="button" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+	</div>
+</header>
+
+<main class="wrap docs">
+	<aside class="toc" aria-label="On this page">
+		<p>Documentation</p>
+			<a href="#quick-start">Quick start</a>
+			<a href="#why-kanopy">Why kanopy</a>
+			<a href="#features">Features</a>
+			<a class="sub" href="#board-and-projects">Board and projects</a>
+			<a class="sub" href="#tasks">Tasks</a>
+			<a class="sub" href="#search-and-labels">Search and labels</a>
+			<a class="sub" href="#notifications">Notifications</a>
+			<a class="sub" href="#everything-else">Everything else</a>
+			<a href="#accounts-and-sharing">Accounts and sharing</a>
+			<a href="#connecting-agents">Connecting agents</a>
+			<a href="#mcp-tools">MCP tools</a>
+			<a href="#configuration">Configuration</a>
+			<a class="sub" href="#sqlite-or-postgresql">SQLite or PostgreSQL</a>
+			<a class="sub" href="#live-updates">Live updates</a>
+			<a href="#keyboard-shortcuts">Keyboard shortcuts</a>
+			<a href="#tests">Tests</a>
+	</aside>
+	<article class="prose">
+		<h1>Documentation</h1>
+		<p class="intro">Install kanopy, connect your agents and configure the board. This page is built from the <a href="https://github.com/acidvegas/kanopy#readme">README</a>.</p>
+		<h2 id="quick-start">Quick start<a class="anchor" href="#quick-start" aria-label="Link to this section">#</a></h2>
+<p>With Docker, from the published image:</p>
+<pre><code class="language-sh">mkdir -p kanopy/data &amp;&amp; cd kanopy
+docker run -d --name kanopy -p 8000:8000 -e KANOPY_HOST=0.0.0.0 -v &quot;$PWD/data:/app/data&quot; --user &quot;$(id -u):$(id -g)&quot; ghcr.io/acidvegas/kanopy
+</code></pre>
+<p>Or with Docker Compose from a checkout:</p>
+<pre><code class="language-sh">git clone https://github.com/acidvegas/kanopy &amp;&amp; cd kanopy
+cp .env.example .env
+mkdir -p data
+docker compose up -d
+</code></pre>
+<p>Or with a virtual environment:</p>
+<pre><code class="language-sh">git clone https://github.com/acidvegas/kanopy &amp;&amp; cd kanopy
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+cp .env.example .env
+venv/bin/python -m kanopy.app
+</code></pre>
+<p>Open <code>http://127.0.0.1:8000</code>. The first page asks you to create the admin account; everyone after that joins through an invite link.</p>
+<p>To run it as a service, copy <code>kanopy.service</code> to <code>/etc/systemd/system/</code>, set <code>YOUR_USER</code> and <code>/path/to/kanopy</code>, then <code>sudo systemctl enable --now kanopy</code>.</p>
+<h2 id="why-kanopy">Why kanopy<a class="anchor" href="#why-kanopy" aria-label="Link to this section">#</a></h2>
+<p>kanopy was made for working with AI agents first. Before writing it we looked at the boards people already run: Vikunja, Planka and Jira. They are good boards built for people, and agents can reach all three today. Connecting an agent to a board is no longer the hard part. Working alongside several agents at once, without them clobbering each other or your edits, is.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th></th>
+<th>kanopy</th>
+<th>Vikunja</th>
+<th>Planka</th>
+<th>Jira</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Self-hosted</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Yes</td>
+<td>Data Center only <em>(paid)</em></td>
+</tr>
+<tr>
+<td>MCP</td>
+<td>Built in</td>
+<td>Built in since <a href="https://vikunja.io/changelog/vikunja-2.7.0-was-released/">2.7</a></td>
+<td>Community servers</td>
+<td>Atlassian's cloud server</td>
+</tr>
+</tbody>
+</table></div>
+<p>What kanopy does for agents on top of that:</p>
+<ul>
+<li><strong>Every change names its agent.</strong> Comments and history show the agent and the person whose token it used, like <code>claude (brandon)</code>, so you always know who did what.</li>
+<li><strong>Claims.</strong> Moving a task to Doing claims it for that agent session. A second session that tries to start it is told who has it instead of doing the same work twice.</li>
+<li><strong>No lost edits.</strong> An agent cannot replace a description it has not read, and <code>edit</code> and <code>append</code> change one line without resending the rest. If an agent does make a mess, the last 10 versions of a description can be restored, and deleted tasks sit in a 30-day trash.</li>
+<li><strong>Cheap on tokens.</strong> Tools answer in compact text with one line per task instead of JSON. Fifty tasks come back in about 1,200 tokens.</li>
+<li><strong>Context at session start.</strong> A Claude Code hook briefs each new session on the project for the current directory and its open tasks, flagging work left in Doing.</li>
+<li><strong>Rules and limits.</strong> Agents get your working rules when they connect, can be given read-only tokens, and you get a push when one finishes a task.</li>
+</ul>
+<h2 id="features">Features<a class="anchor" href="#features" aria-label="Link to this section">#</a></h2>
+<h3 id="board-and-projects">Board and projects<a class="anchor" href="#board-and-projects" aria-label="Link to this section">#</a></h3>
+<p>Projects form a tree addressed by path, like <code>Code/weatherbox</code>, and a project's board includes its sub-projects. Cards drag between To-Do, Doing and Done, onto another project in the sidebar, or onto a date in the month calendar. Each project has a markdown description panel and an <strong>activity page</strong> listing every change across it.</p>
+<p>The Done column loads its newest 25 tasks with a button for more, done tasks archive themselves after a configurable number of days, and a bulk mode moves, labels or deletes many tasks at once. Deleted tasks stay in the trash on the Settings page for 30 days, with their comments, links and attachments, and can be restored.</p>
+<h3 id="tasks">Tasks<a class="anchor" href="#tasks" aria-label="Link to this section">#</a></h3>
+<p>A task carries a markdown description with clickable checklists, a priority, due date, reminder, labels, assignees, file attachments, comments and links to other tasks <em>(blocks, subtask, related, duplicates, precedes)</em>. It opens in a side panel or as a full page at <code>#/task/123</code>, and <code>#123</code> anywhere in text links to it. Long comment threads show the newest 30 first.</p>
+<p>Tasks can <strong>repeat</strong> daily, weekly, monthly, yearly, every N days or on chosen weekdays. Marking one done creates the next occurrence with its checklist reset and its dates moved forward; upcoming ones show faded on the calendar.</p>
+<p>Every task keeps a <strong>history</strong> of who changed what, including the agent's name for changes made over MCP. The text of the last 10 description edits is kept, and any of them can be restored from the history.</p>
+<h3 id="search-and-labels">Search and labels<a class="anchor" href="#search-and-labels" aria-label="Link to this section">#</a></h3>
+<p>Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type <em>(<code>#id</code>, text, <code>@me</code>, labels)</em>.</p>
+<p>Labels use a <code>namespace:value</code> form. <strong>Global</strong> labels are shared and managed by the admin; a fresh install starts with a set of <code>type:</code> labels. Anyone can add <strong>personal</strong> labels for their own use.</p>
+<h3 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h3>
+<p>Pushes go out through <a href="https://ntfy.sh">ntfy</a> at reminder time, on the morning a task is due, as a daily overdue digest, and when an agent finishes a task. Mentions, assignments and activity on your tasks also land in an in-app inbox. Each kind can be turned on or off.</p>
+<h3 id="everything-else">Everything else<a class="anchor" href="#everything-else" aria-label="Link to this section">#</a></h3>
+<ul>
+<li>Ten themes, from the purple default to Dracula, Nord, Gruvbox, Catppuccin and GitHub Light</li>
+<li>Works on a phone, including drag and drop</li>
+<li>Markdown editor with a toolbar, preview, shortcuts and <code>@mention</code> autocomplete</li>
+<li>Daily database backups to <code>data/backups</code>, newest 3 kept</li>
+</ul>
+<h2 id="accounts-and-sharing">Accounts and sharing<a class="anchor" href="#accounts-and-sharing" aria-label="Link to this section">#</a></h2>
+<p>Everyone signs in with a username and password. The admin creates single-use invite links <em>(valid 7 days)</em> on the Settings page.</p>
+<p>Projects are private to whoever made them until shared with a user or a team. Sharing a project includes its sub-projects.</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Can</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Viewer</td>
+<td>Read the project and its tasks</td>
+</tr>
+<tr>
+<td>Editor</td>
+<td>Create and work on tasks</td>
+</tr>
+<tr>
+<td>Manager</td>
+<td>Also edit, archive and share the project</td>
+</tr>
+</tbody>
+</table></div>
+<p>Anyone can create a team and add members by username. Admins see every project.</p>
+<p>A team owner can give the team an https <strong>webhook URL</strong>. Every change made on a project shared with the team <em>(new tasks, field changes, comments and deletes, on its sub-projects too)</em> is then POSTed there as JSON: <code>event</code> <em>(created, updated, commented or deleted)</em>, <code>actor</code>, <code>agent</code>, <code>task</code> <em>(id, title, project, status, priority, due, assignees, labels, url)</em>, <code>changes</code> <em>(field, old, new)</em> and <code>comment</code>. A bulk change sends one <code>bulk</code> event listing its <code>tasks</code> instead. The URL must resolve only to public addresses <em>(no loopback, LAN or tailnet)</em> and kanopy connects to the exact address it checked, so DNS rebinding cannot redirect it; redirects are refused, and a <code>key=</code> parameter is sent as an <code>Authorization: Bearer</code> header. Posts go out one at a time from a queue of up to 500 <em>(the oldest is dropped past that)</em>, and the team card shows the last failed send until one succeeds.</p>
+<h2 id="connecting-agents">Connecting agents<a class="anchor" href="#connecting-agents" aria-label="Link to this section">#</a></h2>
+<p>kanopy serves MCP at <code>/mcp</code> <em>(streamable HTTP, stateless)</em>. Each agent authenticates with a personal API token from <strong>Settings, API tokens</strong>, acts as that user and sees only what they can. The <code>X-Agent</code> header names the agent in comments and history. A token can be made <strong>read-only</strong>: the agent then sees only the reading tools and every change is refused, over MCP and the REST API alike.</p>
+<p>Agents get a short set of working rules on connect from <code>agents/instructions.example.txt</code>. Copy it to <code>agents/instructions.txt</code> <em>(untracked)</em> to describe your own project layout.</p>
+<details>
+<summary><b>Claude Code</b></summary>
+<p>Add the server:</p>
+<pre><code class="language-sh">claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header &quot;X-Agent: claude&quot; --header &quot;X-Key: $TOKEN&quot;
+</code></pre>
+<p>Add <code>agents/hook.sh</code> as a <code>SessionStart</code> hook in <code>~/.claude/settings.json</code>. Each new session then starts with a briefing on the project for the current directory and its open tasks:</p>
+<pre><code class="language-json">{
+    &quot;hooks&quot;: {
+        &quot;SessionStart&quot;: [{ &quot;hooks&quot;: [{ &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;/path/to/kanopy/agents/hook.sh&quot; }] }]
+    }
+}
+</code></pre>
+<p>Link the <code>/task</code> command, which files a task without a proposal step:</p>
+<pre><code class="language-sh">ln -s /path/to/kanopy/agents/task.md ~/.claude/commands/task.md
+</code></pre>
+</details>
+<details>
+<summary><b>opencode</b></summary>
+<p>Save your token to <code>~/.config/opencode/secrets/kanopy.token</code> and add the server to <code>~/.config/opencode/opencode.json</code>:</p>
+<pre><code class="language-json">{
+    &quot;mcp&quot;: {
+        &quot;kanopy&quot;: {
+            &quot;type&quot;: &quot;remote&quot;,
+            &quot;url&quot;: &quot;http://HOST:PORT/mcp&quot;,
+            &quot;headers&quot;: { &quot;X-Agent&quot;: &quot;opencode&quot;, &quot;X-Key&quot;: &quot;{file:~/.config/opencode/secrets/kanopy.token}&quot; }
+        }
+    }
+}
+</code></pre>
+<p>Link the session briefing plugin <em>(it reads <code>KANOPY_API</code>, default <code>http://127.0.0.1:8000</code>)</em> and the <code>/task</code> command:</p>
+<pre><code class="language-sh">ln -s /path/to/kanopy/agents/opencode.ts ~/.config/opencode/plugins/kanopy.ts
+ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
+</code></pre>
+</details>
+<details>
+<summary><b>Anything else</b></summary>
+<p>Any MCP client that supports streamable HTTP works: point it at <code>http://HOST:PORT/mcp</code> with the <code>X-Key</code> and <code>X-Agent</code> headers. For a session briefing without MCP, <code>GET /api/context?cwd=&lt;dir&gt;</code> with the <code>X-Key</code> header returns plain text for the project whose folder contains <code>dir</code>.</p>
+</details>
+<h2 id="mcp-tools">MCP tools<a class="anchor" href="#mcp-tools" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>Does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>list_projects</code></td>
+<td>Project tree with open task counts</td>
+</tr>
+<tr>
+<td><code>list_tasks</code></td>
+<td>Tasks filtered by project, labels, text <em>(with the matching line)</em>, status, priority or due date; <code>changed</code> lists recent activity</td>
+</tr>
+<tr>
+<td><code>get_task</code></td>
+<td>Full tasks with description, links and the last 5 comments <em>(<code>comments</code> for all)</em>, or an attachment's text</td>
+</tr>
+<tr>
+<td><code>save_task</code></td>
+<td>Create or update any field, edit or append to the description, tick a checklist item, comment; <code>ids</code> updates many at once</td>
+</tr>
+<tr>
+<td><code>save_project</code></td>
+<td>Rename or move, describe, set the local folder, archive</td>
+</tr>
+<tr>
+<td><code>comment</code></td>
+<td>Add a progress note</td>
+</tr>
+<tr>
+<td><code>link</code></td>
+<td>Relate two tasks, or remove the relation</td>
+</tr>
+<tr>
+<td><code>labels</code></td>
+<td>List labels, create a global <code>type:</code> value <em>(admin)</em>, delete one</td>
+</tr>
+<tr>
+<td><code>inbox</code></td>
+<td>Unread notifications</td>
+</tr>
+<tr>
+<td><code>delete</code></td>
+<td>A task <em>(to the trash)</em>, or an empty project; <code>restore</code> brings a deleted task back</td>
+</tr>
+</tbody>
+</table></div>
+<p>A few rules keep agents from making a mess:</p>
+<ul>
+<li>A new project is created by filing its first task into it, so no project is ever empty</li>
+<li>An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; <code>edit</code> <em>(exact text, must match once)</em> and <code>append</code> need no read</li>
+<li><code>host:</code> labels that differ only by punctuation <em>(<code>host:web01</code> and <code>host:web-01</code>)</em> are rejected</li>
+<li>Moving a task to doing <strong>claims</strong> it for that agent session <em>(<code>by:claude#a1b2c3</code> on its line, the agent's name on its card)</em>. Another session that tries to start it is told who has it, and takes over only with <code>take=true</code>. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own</li>
+</ul>
+<h2 id="configuration">Configuration<a class="anchor" href="#configuration" aria-label="Link to this section">#</a></h2>
+<p>Settings live in <code>.env</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>KANOPY_HOST</code></td>
+<td><code>127.0.0.1</code></td>
+<td>Address to listen on</td>
+</tr>
+<tr>
+<td><code>KANOPY_PORT</code></td>
+<td><code>8000</code></td>
+<td>Port to listen on</td>
+</tr>
+<tr>
+<td><code>KANOPY_URL</code></td>
+<td></td>
+<td>Public address when behind a reverse proxy</td>
+</tr>
+<tr>
+<td><code>KANOPY_KEY</code></td>
+<td></td>
+<td>Optional; stored as the admin's API token on start, for older agent configs</td>
+</tr>
+<tr>
+<td><code>KANOPY_DATABASE</code></td>
+<td><code>data/kanban.db</code></td>
+<td>A <code>postgresql://user:pass@host/db</code> URL to use PostgreSQL instead of SQLite</td>
+</tr>
+</tbody>
+</table></div>
+<p>Everything else <em>(ntfy, notification times, timezone, auto-archive)</em> is set on the Settings page. Data, attachments and backups live in <code>data/</code>.</p>
+<h3 id="sqlite-or-postgresql">SQLite or PostgreSQL<a class="anchor" href="#sqlite-or-postgresql" aria-label="Link to this section">#</a></h3>
+<p>SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with <code>venv/bin/pip install "psycopg[binary]"</code> <em>(the Docker image already has it)</em>, set <code>KANOPY_DATABASE</code> and restart. Daily backups to <code>data/backups</code> cover SQLite only; back PostgreSQL up with <code>pg_dump</code>.</p>
+<p>A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:</p>
+<pre><code class="language-sh">venv/bin/python -m kanopy.migrate data/kanban.db postgresql://kanopy:secret@localhost/kanopy
+venv/bin/python -m kanopy.migrate postgresql://kanopy:secret@localhost/kanopy data/new.db
+</code></pre>
+<p>Stop kanopy while copying, then point <code>KANOPY_DATABASE</code> at the new database.</p>
+<h3 id="live-updates">Live updates<a class="anchor" href="#live-updates" aria-label="Link to this section">#</a></h3>
+<p>Open pages check for changes every 15 seconds and reload the board when someone else changed it, unless you are in the middle of an edit. If someone changes a description while you are editing it, saving shows their version and asks before overwriting it.</p>
+<details>
+<summary><b>Running behind a reverse proxy</b></summary>
+<p>Keep <code>KANOPY_HOST=127.0.0.1</code> and set <code>KANOPY_URL</code> to the public address, like <code>https://kanopy.example.com</code>. Notification and invite links then use it, the sign-in limit sees the real client address, and the session cookie is marked Secure.</p>
+<pre><code class="language-nginx">server {
+    listen 443 ssl;
+    server_name kanopy.example.com;
+    ssl_certificate     /etc/letsencrypt/live/kanopy.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/kanopy.example.com/privkey.pem;
+    client_max_body_size 100m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+</code></pre>
+</details>
+<h2 id="keyboard-shortcuts">Keyboard shortcuts<a class="anchor" href="#keyboard-shortcuts" aria-label="Link to this section">#</a></h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>Focus the filter</td>
+</tr>
+<tr>
+<td><code>n</code></td>
+<td>New task</td>
+</tr>
+<tr>
+<td><code>Esc</code></td>
+<td>Close the task, leave select mode</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="tests">Tests<a class="anchor" href="#tests" aria-label="Link to this section">#</a></h2>
+<p>The suite in <code>tests/</code> covers the data layer, permissions, the MCP tools, accounts, notifications and every HTTP route. Each test runs against a fresh database in a temporary directory, and ntfy pushes are recorded instead of sent, so it never touches <code>data/</code> or the network.</p>
+<pre><code class="language-sh">venv/bin/python -m unittest
+</code></pre>
+<p>To run the same suite against PostgreSQL, point <code>KANOPY_TEST_DATABASE</code> at a throwaway database. It is wiped before every test, so never use a real one:</p>
+<pre><code class="language-sh">docker run -d --name kanopy-pg-test -e POSTGRES_PASSWORD=test -p 127.0.0.1:55432:5432 postgres:17-alpine
+KANOPY_TEST_DATABASE=postgresql://postgres:test@127.0.0.1:55432/postgres venv/bin/python -m unittest
+</code></pre>
+	</article>
+</main>
+
+<footer>
+	<a href="https://github.com/acidvegas"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>Developed by acidvegas</a>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

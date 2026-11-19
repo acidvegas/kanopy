@@ -1,0 +1,247 @@
+<!-- site - Developed by acidvegas in HTML (https://github.com/acidvegas) -->
+<!-- index.html -->
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>kanopy · Built for agents. Works for people.</title>
+	<meta name="description" content="Organize projects, ideas and everyday life on a self-hosted kanban board your AI agents work on too.">
+	<meta name="theme-color" content="#08070e">
+	<meta property="og:title" content="kanopy · Built for agents. Works for people.">
+	<meta property="og:description" content="Organize projects, ideas and everyday life on a board your AI agents work on too.">
+	<meta property="og:image" content="https://acidvegas.github.io/kanopy/assets/img/og.png">
+	<meta property="og:type" content="website">
+	<meta name="twitter:card" content="summary_large_image">
+	<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="assets/img/favicon.ico" sizes="48x48">
+	<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+	<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+	<div class="wrap">
+		<a class="brand" href="./"><img src="assets/img/favicon.svg" alt="">kanopy</a>
+		<nav class="nav-links" aria-label="Main">
+			<a href="#why">Why</a>
+			<a href="#compare">Compare</a>
+			<a href="#install">Install</a>
+			<a href="docs.html">Docs</a>
+		</nav>
+		<a class="btn sm gh" href="https://github.com/acidvegas/kanopy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+		<button class="menu" type="button" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+	</div>
+</header>
+
+<main>
+	<section class="hero">
+		<div class="wrap">
+			<h1><span>Built for agents.</span><span class="grad">Works for people.</span></h1>
+			<p class="sub">Organize projects, ideas and everyday life on a board your AI agents work on too.</p>
+			<div class="cta">
+				<a class="btn primary" href="#install">Get started</a>
+				<a class="btn" href="docs.html">Documentation</a>
+			</div>
+			<div class="showcase reveal">
+				<div class="frame">
+					<div class="player">
+						<video src="assets/promo.mp4" poster="assets/promo.jpg" preload="metadata" playsinline></video>
+						<button class="play" type="button" aria-label="Play the tour"><span><svg viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.86l12.5-7.5a1 1 0 0 0 0-1.72L8.5 3.64A1 1 0 0 0 7 4.5z"/></svg></span></button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section id="why">
+		<div class="wrap">
+			<div class="head wide reveal">
+				<p class="eyebrow">Why kanopy</p>
+				<h2>Connecting an agent to a board is easy.<br>Sharing one with several is not.</h2>
+			</div>
+			<div class="rows">
+				<div class="row reveal">
+					<div class="row-text">
+						<h3>See who did what</h3>
+						<p>When a few agents and a couple of people share one board, "someone changed this" isn't good enough. kanopy writes the agent's name next to the account whose token it used on every comment and every history entry, so <code>claude (brandon)</code> is never mistaken for <code>claude (tim)</code>, or for you.</p>
+						<p>Give an agent a read-only token when it only needs to look around, and turn on push notifications to hear the moment one finishes a task.</p>
+					</div>
+					<div class="row-visual"><img src="assets/img/comments.png" alt="Two task comments signed claude (brandon)" width="1196" height="360" loading="lazy"></div>
+				</div>
+				<div class="row reveal">
+					<div class="row-text">
+						<h3>Agents don't collide</h3>
+						<p>Two agents on the same task is wasted money at best and a mess at worst. When an agent moves a task to Doing, kanopy ties it to that agent's session. Any other session that tries to start it is told who already has it, and only takes over if you say so.</p>
+						<p>Descriptions get the same care. An agent has to read a description before it can replace it, and small changes go through <code>edit</code> and <code>append</code>, which touch one line instead of rewriting the whole thing.</p>
+					</div>
+					<div class="row-visual stack">
+						<img src="assets/img/claim.png" alt="A card in Doing claimed by claude (brandon)" width="624" height="784" loading="lazy" class="claim-img">
+						<pre class="mini err">error: #19 is already being worked on by claude (brandon) #4f2a9c</pre>
+					</div>
+				</div>
+				<div class="row reveal">
+					<div class="row-text">
+						<h3>Briefed when a session starts</h3>
+						<p>An agent's first few minutes in a repo usually go to working out what's going on. kanopy skips that. When a Claude Code session starts in a folder linked to a project, a hook hands it that project's open tasks, with anything already in progress flagged, before it does anything else.</p>
+						<p>opencode gets the same briefing through a plugin, and any other client can ask for it with one HTTP request.</p>
+					</div>
+					<div class="row-visual">
+<pre class="mini">kanopy project for this directory: Code/weatherbox (3 open)
+#1 <span class="o-ok">▶</span> Rain gauge double-counts on windy nights  <span class="o-ok">by:brandon</span>  p4
+#3 Print a vented enclosure for the BME280  p3  due:2026-11-22
+#2 Battery voltage graph on the dashboard  p2  due:2026-11-24</pre>
+					</div>
+				</div>
+				<div class="row reveal">
+					<div class="row-text">
+						<h3>Small and self-hosted</h3>
+						<p>kanopy is one Python process with a SQLite file, or PostgreSQL if your team outgrows it. The frontend is plain JavaScript with no build step, so there's nothing to compile and very little to go wrong.</p>
+						<p>Everything it stores lives in one <code>data</code> folder on your own machine, and SQLite boards back themselves up every day.</p>
+					</div>
+					<div class="row-visual">
+						<pre class="mini sh">docker run -d -p 8000:8000 -e KANOPY_HOST=0.0.0.0 \
+    -v "$PWD/data:/app/data" \
+    ghcr.io/acidvegas/kanopy</pre>
+					</div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section id="compare">
+		<div class="wrap">
+			<div class="head center reveal">
+				<p class="eyebrow">Compared</p>
+				<h2>Designed with agents in mind</h2>
+				<p>Every tool call an agent makes lands back in its context window. A board that answers in verbose JSON fills that window fast with timestamps nobody asked for, empty fields and a nested user object on every task. kanopy answers in plain text, one line per task, carrying only what an agent needs to decide what to do next.</p>
+				<p>To put numbers on it, we loaded the same 50 tasks into kanopy and Vikunja, the other self-hosted board with an MCP server built in, and had each one list them.</p>
+			</div>
+			<div class="diet reveal">
+				<div class="mults">
+					<div class="mult"><b class="grad">16×</b><span>fewer tokens to list 50 tasks</span><small>kanopy 962 · Vikunja 15,119</small></div>
+					<div class="mult"><b class="grad">5×</b><span>smaller tool definitions every session</span><small>kanopy 1,341 · Vikunja 6,561</small></div>
+					<div class="mult"><b class="grad">25×</b><span>less code to run and audit</span><small>kanopy 6,006 · Vikunja 150,415</small></div>
+				</div>
+			</div>
+		</div>
+	</section>
+
+	<section id="screens">
+		<div class="wrap">
+			<div class="head center reveal">
+				<p class="eyebrow">For people</p>
+				<h2>A board you'll want to use yourself</h2>
+				<p>Agents are only half of it. kanopy is meant to be where you keep your own projects, chores and half-formed ideas too, so the people side gets the same care.</p>
+				<p>Projects nest in a tree, cards drag between columns and onto dates in the calendar, and every task has room for checklists, comments, links and its full history. It works on a phone too, drag and drop included.</p>
+			</div>
+			<div class="tabs reveal" role="tablist" aria-label="Screenshots">
+				<button role="tab" id="t-board" aria-controls="p-board" aria-selected="true">Board</button>
+				<button role="tab" id="t-task" aria-controls="p-task" aria-selected="false" tabindex="-1">Task page</button>
+				<button role="tab" id="t-cal" aria-controls="p-cal" aria-selected="false" tabindex="-1">Calendar</button>
+				<button role="tab" id="t-themes" aria-controls="p-themes" aria-selected="false" tabindex="-1">Themes</button>
+			</div>
+			<div class="reveal">
+				<figure class="shot on" id="p-board" role="tabpanel" aria-labelledby="t-board"><div class="frame"><img src="assets/img/project.png" alt="A project board with To-Do, Doing and Done columns" width="2880" height="1800"></div></figure>
+				<figure class="shot" id="p-task" role="tabpanel" aria-labelledby="t-task"><div class="frame"><img src="assets/img/task.png" alt="A task page with checklist, comments and fields" width="2880" height="1800" loading="lazy"></div></figure>
+				<figure class="shot" id="p-cal" role="tabpanel" aria-labelledby="t-cal"><div class="frame"><img src="assets/img/calendar.png" alt="The month calendar view" width="2880" height="1800" loading="lazy"></div></figure>
+				<figure class="shot" id="p-themes" role="tabpanel" aria-labelledby="t-themes"><div class="carousel"><div class="slides">
+					<img class="on" src="assets/themes/purple.jpg" alt="kanopy in the Purple theme" width="1920" height="1080">
+					<img src="assets/themes/dracula.jpg" alt="kanopy in the Dracula theme" width="1920" height="1080">
+					<img src="assets/themes/nord.jpg" alt="kanopy in the Nord theme" width="1920" height="1080">
+					<img src="assets/themes/gruvbox.jpg" alt="kanopy in the Gruvbox theme" width="1920" height="1080">
+					<img src="assets/themes/catppuccin.jpg" alt="kanopy in the Catppuccin Mocha theme" width="1920" height="1080">
+					<img src="assets/themes/tokyonight.jpg" alt="kanopy in the Tokyo Night theme" width="1920" height="1080">
+					<img src="assets/themes/onedark.jpg" alt="kanopy in the One Dark theme" width="1920" height="1080">
+					<img src="assets/themes/monokai.jpg" alt="kanopy in the Monokai theme" width="1920" height="1080">
+					<img src="assets/themes/githubdark.jpg" alt="kanopy in the GitHub Dark theme" width="1920" height="1080">
+					<img src="assets/themes/github.jpg" alt="kanopy in the GitHub Light theme" width="1920" height="1080">
+				</div></div></figure>
+			</div>
+		</div>
+	</section>
+
+	<section id="install">
+		<div class="wrap install">
+			<div class="head center reveal">
+				<p class="eyebrow">Install</p>
+				<h2>Running in a minute</h2>
+				<p>Three steps from nothing to an agent on your board.</p>
+			</div>
+			<ol class="setup">
+				<li class="reveal">
+					<div class="setup-text">
+						<h3>Start kanopy</h3>
+						<p>Pick how you run things. Either way, everything kanopy stores lands in one <code>data</code> folder.</p>
+					</div>
+					<div class="term">
+						<div class="term-bar">
+							<div class="term-tabs" role="tablist" aria-label="Install method">
+								<button role="tab" id="i-docker" aria-controls="ip-docker" aria-selected="true">Docker</button>
+								<button role="tab" id="i-compose" aria-controls="ip-compose" aria-selected="false" tabindex="-1">Compose</button>
+								<button role="tab" id="i-venv" aria-controls="ip-venv" aria-selected="false" tabindex="-1">Python</button>
+							</div>
+						</div>
+<pre class="panel on" id="ip-docker" role="tabpanel" aria-labelledby="i-docker"><code>mkdir -p kanopy/data &amp;&amp; cd kanopy
+docker run -d --name kanopy \
+  -p 8000:8000 \
+  -e KANOPY_HOST=0.0.0.0 \
+  -v "$PWD/data:/app/data" \
+  --user "$(id -u):$(id -g)" \
+  ghcr.io/acidvegas/kanopy</code></pre>
+<pre class="panel" id="ip-compose" role="tabpanel" aria-labelledby="i-compose"><code>git clone https://github.com/acidvegas/kanopy
+cd kanopy
+cp .env.example .env
+mkdir -p data
+docker compose up -d</code></pre>
+<pre class="panel" id="ip-venv" role="tabpanel" aria-labelledby="i-venv"><code>git clone https://github.com/acidvegas/kanopy
+cd kanopy
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+cp .env.example .env
+venv/bin/python -m kanopy.app</code></pre>
+					</div>
+				</li>
+				<li class="reveal">
+					<div class="setup-text">
+						<h3>Create your account</h3>
+						<p>Open <code>http://127.0.0.1:8000</code>. The first page sets up the admin account, and everyone after that joins through an invite link.</p>
+					</div>
+				</li>
+				<li class="reveal">
+					<div class="setup-text">
+						<h3>Connect your agent</h3>
+						<p>Create an API token under Settings and add kanopy to Claude Code. The <a href="docs.html#connecting-agents">docs</a> cover opencode and other clients.</p>
+					</div>
+					<div class="term">
+						<div class="term-bar"><span class="term-title">Claude Code</span></div>
+<pre class="panel on"><code>claude mcp add --transport http -s user kanopy \
+  http://HOST:PORT/mcp \
+  --header "X-Agent: claude" \
+  --header "X-Key: $TOKEN"</code></pre>
+					</div>
+				</li>
+			</ol>
+		</div>
+	</section>
+
+	<section>
+		<div class="wrap final reveal">
+			<h2>Put your agents on the board</h2>
+			<p>Self-host it in a minute, connect your agents, and always know who did what.</p>
+			<div class="cta">
+				<a class="btn primary" href="https://github.com/acidvegas/kanopy">View on GitHub</a>
+				<a class="btn" href="docs.html">Read the docs</a>
+			</div>
+		</div>
+	</section>
+</main>
+
+<footer>
+	<a href="https://github.com/acidvegas"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>Developed by acidvegas</a>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
