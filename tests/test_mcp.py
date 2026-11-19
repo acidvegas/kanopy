@@ -323,6 +323,26 @@ class TestTools(Base):
 			with self.assertRaises(ToolError):
 				self.mcp('list_tasks', bad)
 
+	def test_list_tasks_team(self):
+		'''team= lists tasks on projects shared with that team and their sub-projects, for members only.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		self.task('NT', 'one')
+		self.task('NT/havoc', 'two')
+		self.task('Other', 'three')
+		accounts.team_create(ann, 'crew')
+		accounts.team_member_add(ann, accounts.teams(ann)[0]['id'], 'bob')
+		accounts.share_add(next(p['id'] for p in kanban.projects() if p['path'] == 'NT'), 'editor', team='crew')
+		self.act(bob)
+		out = self.mcp('list_tasks', {'team': 'CREW'})
+		self.assertIn('one', out)
+		self.assertIn('two', out)
+		self.assertNotIn('three', out)
+		self.act(self.user('cat'))
+		with self.assertRaises(ToolError):
+			self.mcp('list_tasks', {'team': 'crew'})
+
 
 	def test_files_and_archived_markers(self):
 		'''get_task lists files; list_tasks marks archived tasks and file counts.'''

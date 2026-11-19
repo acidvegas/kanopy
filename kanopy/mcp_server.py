@@ -44,6 +44,7 @@ TOOLS = [
 		'due_before'   : {**STR, 'description': 'YYYY-MM-DD'},
 		'due'          : {**STR, 'description': 'overdue, today, week, any, none'},
 		'assignee'     : {**STR, 'description': 'username or me'},
+		'team'         : {**STR, 'description': 'projects shared with this team'},
 		'changed'      : {**STR, 'description': 'since YYYY-MM-DD or Nd; newest first, any status'},
 		'limit'        : {**INT, 'description': 'default 50'}
 	}, []),
@@ -449,6 +450,10 @@ def list_tasks(args: dict) -> str:
 	who   = kanban.ACTOR.get()['username'] if who == 'me' and kanban.ACTOR.get() else who
 	out   = kanban.tasks(pid, archived=bool(text) or status in ('done', 'all'), statuses={'open': ['todo', 'doing'], 'all': None}.get(status, [status]), ids=list(hits) if hits is not None else None, labels=want, assignee=who or None, priority_min=args.get('priority_min') or 0, due_before=args.get('due_before'), updated_since=cutoff, brief=True)
 
+	if args.get('team'):
+		roots = team_paths(args['team'])
+		out   = [t for t in out if any(t['project'] == r or t['project'].startswith(r + '/') for r in roots)]
+
 	if not out:
 		return 'no matching tasks'
 
@@ -484,6 +489,24 @@ def list_tasks(args: dict) -> str:
 		lines.append(f'... {more} more (raise limit)')
 
 	return '\n'.join(lines)
+
+
+def team_paths(name: str) -> list:
+	'''
+	Return the paths of the projects shared with one of the user's teams (admins: any team).
+
+	:param name: Team name, any case
+	'''
+
+	team = next((t for t in accounts.teams(kanban.ACTOR.get()) if t['name'].lower() == name.strip().lower()), None)
+
+	if not team:
+		raise LookupError(f'no team named {name.strip()} that you are in')
+
+	with kanban.connect() as db:
+		names = kanban.paths(db)
+
+	return [names[pid] for pid in team['projects']]
 
 
 def norm_label(name: str) -> tuple:
