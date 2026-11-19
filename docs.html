@@ -125,7 +125,7 @@ venv/bin/python -m kanopy.app
 <p>Tasks can <strong>repeat</strong> daily, weekly, monthly, yearly, every N days or on chosen weekdays. Marking one done creates the next occurrence with its checklist reset and its dates moved forward; upcoming ones show faded on the calendar.</p>
 <p>Every task keeps a <strong>history</strong> of who changed what, including the agent's name for changes made over MCP. The text of the last 10 description edits is kept, and any of them can be restored from the history.</p>
 <h3 id="search-and-labels">Search and labels<a class="anchor" href="#search-and-labels" aria-label="Link to this section">#</a></h3>
-<p>Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type <em>(<code>#id</code>, text, <code>@me</code>, labels)</em>.</p>
+<p>Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type <em>(<code>#id</code>, text, <code>@me</code>, labels, <code>team:name</code> for projects shared with a team)</em>.</p>
 <p>Labels use a <code>namespace:value</code> form. <strong>Global</strong> labels are shared and managed by the admin; a fresh install starts with a set of <code>type:</code> labels. Anyone can add <strong>personal</strong> labels for their own use.</p>
 <h3 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h3>
 <p>Pushes go out through <a href="https://ntfy.sh">ntfy</a> at reminder time, on the morning a task is due, as a daily overdue digest, and when an agent finishes a task. Mentions, assignments and activity on your tasks also land in an in-app inbox. Each kind can be turned on or off.</p>
@@ -219,7 +219,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 </tr>
 <tr>
 <td><code>list_tasks</code></td>
-<td>Tasks filtered by project, labels, text <em>(with the matching line)</em>, status, priority or due date; <code>changed</code> lists recent activity</td>
+<td>Tasks filtered by project, team, labels, text <em>(with the matching line)</em>, status, priority or due date; <code>changed</code> lists recent activity</td>
 </tr>
 <tr>
 <td><code>get_task</code></td>
