@@ -49,13 +49,15 @@ DEFAULTS = {
 
 def agent_done(task: dict, agent: str):
 	'''
-	Push that an agent finished a task, if that notification is on.
+	Push that an agent finished a task, if that notification is on and a board topic is set.
 
 	:param task: Task dict from kanban.task
 	:param agent: Agent tag
 	'''
 
-	if settings()['notify_agent_done'] == '1':
+	conf = settings()
+
+	if conf['notify_agent_done'] == '1' and conf['ntfy_topic']:
 		try:
 			send(f'{agent} finished #{task["id"]}', f'{task["title"]}\n{task["project"]}', task['id'], tags='white_check_mark')
 		except Exception as exc:
