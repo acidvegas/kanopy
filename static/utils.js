@@ -95,6 +95,7 @@ const KB = {
 	projects  : [],
 	tasks     : [],
 	labels    : [],
+	teams     : [],
 	project   : undefined,
 	task      : null,
 	doneLimit : 25,
@@ -165,7 +166,7 @@ const avatar  = (name) => {
 async function kbLoad() {
 	const seq   = ++KB.loadSeq;
 	const query = '?' + new URLSearchParams({ ...(KB.project ? { project: KB.project } : {}), ...(KB.view !== 'calendar' ? { done_limit: KB.doneLimit } : {}) }); // the calendar needs every task; elsewhere only the newest done ones load
-	const [p, t, l, me, u] = await Promise.all([api('GET', '/api/projects'), api('GET', '/api/tasks' + query), api('GET', '/api/labels'), api('GET', '/api/me'), api('GET', '/api/users')]);
+	const [p, t, l, me, u, tm] = await Promise.all([api('GET', '/api/projects'), api('GET', '/api/tasks' + query), api('GET', '/api/labels'), api('GET', '/api/me'), api('GET', '/api/users'), api('GET', '/api/teams')]);
 	if (seq !== KB.loadSeq) return; // a newer load is on its way
 	KB.projects = p.projects;
 	KB.tasks    = t.tasks;
@@ -173,6 +174,7 @@ async function kbLoad() {
 	KB.labels   = l.labels;
 	KB.me       = me;
 	KB.users    = u.users;
+	KB.teams    = tm.teams;
 	meRender();
 	kbTree();
 	kbRender();
@@ -230,10 +232,20 @@ function kbTree() {
 
 /* ---------- board ---------- */
 
+function kbTeam(name) {
+	const team = KB.teams.find((t) => t.name.toLowerCase() === name);
+	if (!team) return null;
+	const roots = KB.projects.filter((p) => team.projects.includes(p.id)).map((p) => p.path);
+	return new Set(KB.projects.filter((p) => roots.some((r) => p.path === r || p.path.startsWith(r + '/'))).map((p) => p.id)); // shared projects and their sub-projects
+}
+
 function kbMatch(task) {
 	const terms = $('#kb-filter').value.toLowerCase().split(/\s+/).filter(Boolean).map((term) => term === '@me' && KB.me ? '@' + KB.me.username : term);
 	const hay   = `#${task.id} ${task.title} ${task.project} ${task.labels.join(' ')} p${task.priority} ${task.assignees.map((a) => '@' + a).join(' ')}`.toLowerCase();
-	return terms.every((term) => hay.includes(term));
+	return terms.every((term) => {
+		const team = term.startsWith('team:') && kbTeam(term.slice(5)); // team:name = tasks on projects shared with that team; an unknown team matches as text
+		return team ? team.has(task.project_id) : hay.includes(term);
+	});
 }
 
 function kbCard(t) {

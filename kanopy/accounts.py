@@ -520,7 +520,7 @@ def team_webhook(user: dict, team_id: int, url: str) -> list:
 
 def teams(user: dict) -> list:
 	'''
-	Return the teams the user belongs to (admins see all) with their members.
+	Return the teams the user belongs to (admins see all) with their members and the projects shared with them.
 
 	:param user: User dict
 	'''
@@ -533,7 +533,8 @@ def teams(user: dict) -> list:
 			members = [dict(row) for row in db.execute('SELECT u.id, u.username, m.owner FROM team_members m JOIN users u ON u.id = m.user_id WHERE m.team_id = ? ORDER BY m.owner DESC, u.username', (team['id'],))]
 			mine    = any(m['id'] == user['id'] and m['owner'] for m in members)
 			owner   = mine or bool(user['is_admin'])
-			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'owner': owner, 'webhook': team['webhook'] if owner else '', 'webhook_error': team['webhook_error'] if owner else '', 'webhook_failed': team['webhook_failed'] if owner else None}) # the URL can hold a key, so only owners see it
+			projects = [row[0] for row in db.execute('SELECT project_id FROM shares WHERE team_id = ? ORDER BY project_id', (team['id'],))]
+			out.append({'id': team['id'], 'name': team['name'], 'members': members, 'projects': projects, 'owner': owner, 'webhook': team['webhook'] if owner else '', 'webhook_error': team['webhook_error'] if owner else '', 'webhook_failed': team['webhook_failed'] if owner else None}) # the URL can hold a key, so only owners see it
 
 	return out
 
