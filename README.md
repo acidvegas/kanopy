@@ -4,6 +4,8 @@
 
 <p align="center">The self-hosted kanban board built for AI agents and the people they work with.</p>
 
+<p align="center"><a href="https://acidvegas.github.io/kanopy">acidvegas.github.io/kanopy</a></p>
+
 <p align="center">
 	<a href="https://github.com/acidvegas/kanopy/releases/latest"><img src="https://img.shields.io/github/v/release/acidvegas/kanopy?color=a78bfa" alt="Release"></a>
 	<a href="https://github.com/acidvegas/kanopy/actions/workflows/tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/acidvegas/kanopy/tests.yml?label=tests" alt="Tests"></a>
@@ -25,7 +27,7 @@
 
 kanopy keeps your projects, todos and ideas on one board, and lets the agents you work with read and update it the same way you do. Claude Code, opencode or anything else that speaks [MCP](https://modelcontextprotocol.io) can file tasks, claim them, move them through To-Do, Doing and Done, leave progress notes and pick up where the last session left off. Every change is logged with who made it, person or agent.
 
-It is a single Python process with a SQLite database *(or PostgreSQL for bigger teams)* and a plain JavaScript frontend. No build step, no external services, nothing to sign up for.
+It is a single Python process with a SQLite database *(or PostgreSQL for bigger teams)* and a plain JavaScript frontend.
 
 | Project board                    | Task page                  |
 |----------------------------------|----------------------------|
@@ -80,7 +82,7 @@ kanopy was made for working with AI agents first. Before writing it we looked at
 
 What kanopy does for agents on top of that:
 
-- **Every change names its agent.** Comments and history show the agent and the person whose token it used, like `claude (alex)`, so you always know who did what.
+- **Every change names its agent.** Comments and history show the agent and the person whose token it used, like `claude (brandon)`, so you always know who did what.
 - **Claims.** Moving a task to Doing claims it for that agent session. A second session that tries to start it is told who has it instead of doing the same work twice.
 - **No lost edits.** An agent cannot replace a description it has not read, and `edit` and `append` change one line without resending the rest. If an agent does make a mess, the last 10 versions of a description can be restored, and deleted tasks sit in a 30-day trash.
 - **Cheap on tokens.** Tools answer in compact text with one line per task instead of JSON. Fifty tasks come back in about 1,200 tokens.
