@@ -107,7 +107,7 @@ Every task keeps a **history** of who changed what, including the agent's name f
 
 ### Search and labels
 
-Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type *(`#id`, text, `@me`, labels)*.
+Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type *(`#id`, text, `@me`, labels, `team:name` for projects shared with a team)*.
 
 Labels use a `namespace:value` form. **Global** labels are shared and managed by the admin; a fresh install starts with a set of `type:` labels. Anyone can add **personal** labels for their own use.
 

@@ -415,6 +415,7 @@ class TestPermissions(Base):
 		team = accounts.teams(self.ann)[0]['id']
 		accounts.team_member_add(self.ann, team, 'bob')
 		accounts.share_add(self.pid, 'viewer', team='crew')
+		self.assertEqual(accounts.teams(self.ann)[0]['projects'], [self.pid])
 		self.act(self.bob)
 		self.assertEqual(kanban.task(self.t['id'])['title'], 'secret')
 
