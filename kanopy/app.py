@@ -45,6 +45,7 @@ FAIL_WINDOW = 900 # seconds
 HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
 TOKEN_DENY = re.compile(r'^/api/(invites|me|tokens|teams|shares|users|settings|version|projects/\d+/shares)(/|$)') # account and admin endpoints: API tokens get the board only, so one can never mint another
+OPEN_MCP = ('initialize', 'notifications/initialized', 'ping', 'tools/list') # MCP methods that work without a token: the handshake and the public tool list, so directories can check the server
 OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 THREADS = 16 # requests served at once; open pages poll every 15s, so many viewers need more than waitress's default 4
@@ -718,6 +719,10 @@ def auth():
 	else:
 		g.user = accounts.user_by_session(request.cookies.get(COOKIE))
 
+	body = request.get_json(silent=True) if path == '/mcp' and 'X-Key' not in request.headers else None
+	if not g.user and isinstance(body, dict) and body.get('method') in OPEN_MCP:
+		return # no token: the handshake and tool list only; every tool call needs one
+
 	if not g.user and not path.startswith(OPEN):
 		return {'error': 'sign in first'}, 401
 
@@ -872,8 +877,11 @@ def mcp() -> tuple:
 	agent   = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
 	kanban.AGENT.set(agent)
 	kanban.SESSION.set(session or None)
-	agent   = f'{agent} ({g.user["username"]})'
-	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')), g.user.get('token_level', 4))
+	if g.user:
+		agent = f'{agent} ({g.user["username"]})'
+		reply = mcp_server.handle(msg, agent, bool(g.user.get('read_only')), g.user.get('token_level', 4))
+	else: # only OPEN_MCP methods get here without a token
+		reply = mcp_server.handle(msg, agent, anonymous=True)
 	params  = msg.get('params') if isinstance(msg.get('params'), dict) else {}
 	g.mcp_write = bool(reply) and msg.get('method') == 'tools/call' and not reply.get('result', {}).get('isError') and not mcp_server.reads_only(params.get('name'), params.get('arguments') if isinstance(params.get('arguments'), dict) else {})
 	resp    = Response(json.dumps(reply), mimetype='application/json') if reply else Response('', 202)

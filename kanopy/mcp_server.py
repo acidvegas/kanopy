@@ -298,7 +298,7 @@ def get_task(task_id: int, agent: str, all_comments: bool = False) -> str:
 	return '\n'.join(out)
 
 
-def handle(msg: dict, agent: str, read_only: bool = False, level: int = 4) -> dict:
+def handle(msg: dict, agent: str, read_only: bool = False, level: int = 4, anonymous: bool = False) -> dict:
 	'''
 	Answer one MCP JSON-RPC message; returns None for notifications.
 
@@ -306,6 +306,7 @@ def handle(msg: dict, agent: str, read_only: bool = False, level: int = 4) -> di
 	:param agent: Agent tag from the X-Agent header
 	:param read_only: The token may only read: write tools are hidden and refused
 	:param level: Highest role the token may use (kanban.VIEW .. kanban.OWN); below manager, save_project is hidden
+	:param anonymous: No token (only the handshake and tool list reach here): the board's own instructions are left out
 	'''
 
 	method = msg.get('method', '')
@@ -315,7 +316,9 @@ def handle(msg: dict, agent: str, read_only: bool = False, level: int = 4) -> di
 		return None
 
 	if method == 'initialize':
-		result = {'protocolVersion': (msg.get('params') or {}).get('protocolVersion') or PROTOCOL, 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'kanopy', 'version': __version__}, 'instructions': INSTRUCTIONS}
+		result = {'protocolVersion': (msg.get('params') or {}).get('protocolVersion') or PROTOCOL, 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'kanopy', 'version': __version__}}
+		if not anonymous:
+			result['instructions'] = INSTRUCTIONS
 	elif method == 'ping':
 		result = {}
 	elif method == 'tools/list':
