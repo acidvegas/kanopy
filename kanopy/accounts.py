@@ -150,6 +150,9 @@ def login(username: str, password: str) -> str:
 	:param password: Password
 	'''
 
+	if not isinstance(username or '', str) or not isinstance(password or '', str):
+		raise ValueError('username and password must be text')
+
 	with kanban.connect() as db:
 		row = db.execute('SELECT * FROM users WHERE username = ?', ((username or '').strip().lower(),)).fetchone()
 

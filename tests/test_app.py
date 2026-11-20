@@ -102,6 +102,17 @@ class TestAuthLayer(AppBase):
 		self.assertEqual(len(calls), app.FAIL_LIMIT)
 
 
+	def test_malformed_bodies_are_400(self):
+		'''Bodies of the wrong shape or type get a clean 400 or tool error, never a 500.'''
+
+		self.assertEqual(self.client.post('/api/tasks', json=[1]).status_code, 400)
+		self.assertEqual(app.app.test_client().post('/api/login', json={'username': 'ann', 'password': 5}).status_code, 400)
+		r = self.client.post('/mcp', json=[{'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}], headers={'X-Key': self.key})
+		self.assertEqual((r.status_code, r.json['error']['code']), (400, -32600))
+		self.assertTrue(self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'P', 'title': 't', 'add_labels': [5]}}).json['result']['isError'])
+		self.assertTrue(self.rpc('tools/call', {'name': 'list_tasks', 'arguments': [1]}).json['result']['isError'])
+
+
 	def test_login_cookie_and_rate_limit(self):
 		'''Sign-in sets an HttpOnly SameSite cookie; five failures lock the address out.'''
 

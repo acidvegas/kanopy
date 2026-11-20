@@ -95,7 +95,7 @@ def api_invite_delete(invite_id: int) -> dict:
 def api_login() -> Response:
 	'''Sign in and set the session cookie.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 	ip   = request.remote_addr or ''
 	now  = time.monotonic()
 
@@ -173,7 +173,7 @@ def api_me_avatar_delete() -> dict:
 def api_me_update() -> dict:
 	'''Update the signed-in user's password, ntfy topic or notification toggles.'''
 
-	return accounts.user_update(g.user, request.get_json(force=True) or {}, None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
+	return accounts.user_update(g.user, json_body(), None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
 
 
 @app.get('/api/notifications')
@@ -187,7 +187,7 @@ def api_notifications() -> dict:
 def api_notifications_read() -> dict:
 	'''Mark notifications read (all when no ids are given).'''
 
-	accounts.notifications_read(g.user, (request.get_json(force=True) or {}).get('ids'))
+	accounts.notifications_read(g.user, json_body().get('ids'))
 
 	return accounts.notifications(g.user)
 
@@ -203,7 +203,7 @@ def api_shares(project_id: int) -> dict:
 def api_share_add(project_id: int) -> dict:
 	'''Share a project with a user or team.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return {'shares': accounts.share_add(project_id, body.get('role', 'viewer'), body.get('username'), body.get('team'))}
 
@@ -226,7 +226,7 @@ def api_setup_needed() -> dict:
 def api_setup() -> Response:
 	'''Create the first admin on an empty board and sign in.'''
 
-	body  = request.get_json(force=True) or {}
+	body  = json_body()
 	token = accounts.setup(body.get('username'), body.get('password'))
 
 	if KEY:
@@ -239,7 +239,7 @@ def api_setup() -> Response:
 def api_signup() -> Response:
 	'''Create an account from an invite link and sign in.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return session_response(accounts.signup(body.get('token', ''), body.get('username'), body.get('password')))
 
@@ -255,7 +255,7 @@ def api_teams() -> dict:
 def api_team_create() -> dict:
 	'''Create a team.'''
 
-	return {'teams': accounts.team_create(g.user, (request.get_json(force=True) or {}).get('name'))}
+	return {'teams': accounts.team_create(g.user, json_body().get('name'))}
 
 
 @app.delete('/api/teams/<int:team_id>')
@@ -269,7 +269,7 @@ def api_team_delete(team_id: int) -> dict:
 def api_team_member_add(team_id: int) -> dict:
 	'''Add a member by username.'''
 
-	return {'teams': accounts.team_member_add(g.user, team_id, (request.get_json(force=True) or {}).get('username'))}
+	return {'teams': accounts.team_member_add(g.user, team_id, json_body().get('username'))}
 
 
 @app.delete('/api/teams/<int:team_id>/members/<int:user_id>')
@@ -283,14 +283,14 @@ def api_team_member_remove(team_id: int, user_id: int) -> dict:
 def api_team_member_role(team_id: int, user_id: int) -> dict:
 	'''Promote or demote a team owner.'''
 
-	return {'teams': accounts.team_member_role(g.user, team_id, user_id, (request.get_json(force=True) or {}).get('owner'))}
+	return {'teams': accounts.team_member_role(g.user, team_id, user_id, json_body().get('owner'))}
 
 
 @app.put('/api/teams/<int:team_id>/webhook')
 def api_team_webhook(team_id: int) -> dict:
 	'''Set or clear the team's webhook URL.'''
 
-	return {'teams': accounts.team_webhook(g.user, team_id, (request.get_json(force=True) or {}).get('url'))}
+	return {'teams': accounts.team_webhook(g.user, team_id, json_body().get('url'))}
 
 
 @app.get('/api/tokens')
@@ -304,7 +304,7 @@ def api_tokens() -> dict:
 def api_token_create() -> dict:
 	'''Create an API token; the secret is only shown in this response.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return accounts.token_create(g.user, body.get('name'), bool(body.get('read_only')))
 
@@ -347,7 +347,7 @@ def api_user_delete(user_id: int) -> dict:
 def api_user_reset(user_id: int) -> dict:
 	'''Set a user's password (admin).'''
 
-	accounts.user_reset(g.user, user_id, (request.get_json(force=True) or {}).get('password', ''))
+	accounts.user_reset(g.user, user_id, json_body().get('password', ''))
 
 	return {'ok': True}
 
@@ -387,7 +387,7 @@ def api_attachment_get(attachment_id: int) -> Response:
 def api_bulk() -> dict:
 	'''Apply one change to many tasks.'''
 
-	body    = request.get_json(force=True) or {}
+	body    = json_body()
 	ids     = [int(i) for i in body.get('ids', [])]
 	before  = {task_id: kanban.task(task_id) for task_id in ids}
 	changed = kanban.bulk(ids, body)
@@ -401,7 +401,7 @@ def api_bulk() -> dict:
 def api_comment(task_id: int) -> dict:
 	'''Add a comment to a task from the web UI.'''
 
-	body = (request.get_json(force=True) or {}).get('body', '')
+	body = json_body().get('body', '')
 	task = kanban.comment_add(task_id, g.user['username'], body)
 	notify.task_event(task, task, body)
 
@@ -419,7 +419,7 @@ def api_context() -> Response:
 def api_label_create() -> dict:
 	'''Create a personal label, or a global one when the body has global (admin only).'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 	kanban.label_create(body.get('name', ''), body.get('color'), bool(body.get('global')))
 
 	return {'ok': True}
@@ -438,7 +438,7 @@ def api_label_delete() -> dict:
 def api_label_update() -> dict:
 	'''Rename (merging into an existing label) and/or recolor a label.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 	kanban.label_update(body.get('name', ''), body.get('new_name'), body.get('color'))
 
 	return {'ok': True}
@@ -455,7 +455,7 @@ def api_labels() -> dict:
 def api_link_add(task_id: int) -> dict:
 	'''Link a task to another task.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return kanban.link_add(task_id, body.get('kind'), int(body.get('other') or 0))
 
@@ -478,7 +478,7 @@ def api_project_activity(project_id: int) -> dict:
 def api_project_create() -> dict:
 	'''Create a project by path.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return kanban.project_save(body.get('path'), description=body.get('description'), folder=body.get('folder'))
 
@@ -496,7 +496,7 @@ def api_project_delete(project_id: int) -> dict:
 def api_project_order() -> dict:
 	'''Set the parent and order of a group of sibling projects.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 	kanban.project_order(body.get('parent_id'), [int(i) for i in body.get('ids', [])])
 
 	return {'ok': True}
@@ -506,7 +506,7 @@ def api_project_order() -> dict:
 def api_project_update(project_id: int) -> dict:
 	'''Rename/move, describe, archive or color a project.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 
 	return kanban.project_save(body.get('path'), project_id, body.get('description'), body.get('archived'), body.get('color'), body.get('folder'))
 
@@ -522,7 +522,7 @@ def api_projects() -> dict:
 def api_reorder() -> dict:
 	'''Set the status and order of the tasks in one column.'''
 
-	body = request.get_json(force=True) or {}
+	body = json_body()
 	kanban.reorder(body.get('status'), [int(i) for i in body.get('ids', [])])
 
 	return {'ok': True}
@@ -570,7 +570,7 @@ def api_settings_save() -> dict:
 	'''Save notification settings.'''
 
 	accounts.need_admin(g.user)
-	notify.save(request.get_json(force=True) or {})
+	notify.save(json_body())
 	housekeep()
 
 	return api_settings()
@@ -601,7 +601,7 @@ def api_task(task_id: int) -> dict:
 def api_task_create() -> dict:
 	'''Create a task.'''
 
-	task = kanban.task_create(request.get_json(force=True) or {})
+	task = kanban.task_create(json_body())
 	notify.task_event(None, task)
 
 	return task
@@ -623,7 +623,7 @@ def api_task_update(task_id: int) -> dict:
 	'''Update task fields.'''
 
 	before = kanban.task(task_id)
-	body   = request.get_json(force=True) or {}
+	body   = json_body()
 	was    = body.pop('description_was', None) # the text the web editor started from
 
 	if was is not None and 'description' in body and was != before['description']:
@@ -743,11 +743,23 @@ def housekeep_loop():
 		time.sleep(3600)
 
 
+def json_body() -> dict:
+	'''Return the request's JSON object, or {} when there is no body; anything but an object is a 400.'''
+
+	body = request.get_json(force=True) or {}
+
+	if not isinstance(body, dict):
+		raise ValueError('send a JSON object')
+
+	return body
+
+
 @app.errorhandler(LookupError)
 @app.errorhandler(PermissionError)
 @app.errorhandler(ValueError)
+@app.errorhandler(TypeError)
 def error(exc: Exception) -> tuple:
-	'''Return lookup errors as 404, permission errors as 403 and validation errors as 400.'''
+	'''Return lookup errors as 404, permission errors as 403 and validation errors (bad values or types) as 400.'''
 
 	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 400
 
@@ -763,7 +775,9 @@ def index():
 def mcp() -> tuple:
 	'''MCP endpoint (streamable HTTP, JSON responses, stateless). The X-Agent header tags comments.'''
 
-	msg     = request.get_json(force=True) or {}
+	msg     = request.get_json(force=True)
+	if not isinstance(msg, dict): # batches and other shapes are not supported
+		return {'jsonrpc': '2.0', 'id': None, 'error': {'code': -32600, 'message': 'send one JSON-RPC request object'}}, 400
 	session = secrets.token_hex(3) if msg.get('method') == 'initialize' else re.sub(r'[^a-zA-Z0-9]', '', request.headers.get('Mcp-Session-Id', ''))[:16] # clients send back the id they were given, so each session can claim tasks as itself
 	agent   = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
 	kanban.AGENT.set(agent)
