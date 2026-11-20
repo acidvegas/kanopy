@@ -181,13 +181,28 @@ class TestProfile(Base):
 		self.assertEqual(len(accounts.tokens(ann)), 1)
 
 
+	def test_own_password_change_signs_out_other_sessions(self):
+		'''Changing your own password keeps this session and your API tokens, and signs out every other session.'''
+
+		ann   = self.user('ann')
+		here  = accounts.login('ann', PASSWORD)
+		there = accounts.login('ann', PASSWORD)
+		key   = accounts.token_create(ann, 'claude')['token']
+		accounts.user_update(ann, {'password': 'brandnewpassword', 'current_password': PASSWORD}, here)
+		self.assertIsNotNone(accounts.user_by_session(here))
+		self.assertIsNone(accounts.user_by_session(there))
+		self.assertIsNotNone(accounts.user_by_token(key))
+
+
 	def test_admin_reset_and_delete(self):
-		'''Resetting a password signs the user out; deleting a user hands their projects to the admin.'''
+		'''Resetting a password signs the user out and revokes their API tokens; deleting a user hands their projects to the admin.'''
 
 		admin, ann = self.user('root', admin=True), self.user('ann')
 		token = accounts.login('ann', PASSWORD)
+		key   = accounts.token_create(ann, 'claude')['token']
 		accounts.user_reset(admin, ann['id'], 'resetpassword')
 		self.assertIsNone(accounts.user_by_session(token))
+		self.assertIsNone(accounts.user_by_token(key))
 		self.act(ann)
 		pid = kanban.project_save('Ann')['id']
 		self.act(None)

@@ -173,7 +173,7 @@ def api_me_avatar_delete() -> dict:
 def api_me_update() -> dict:
 	'''Update the signed-in user's password, ntfy topic or notification toggles.'''
 
-	return accounts.user_update(g.user, request.get_json(force=True) or {})
+	return accounts.user_update(g.user, request.get_json(force=True) or {}, None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
 
 
 @app.get('/api/notifications')
