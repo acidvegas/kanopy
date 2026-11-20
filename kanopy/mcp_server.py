@@ -18,7 +18,7 @@ NAMESPACES   = {'host': True, 'type': False} # namespace -> new values allowed w
 READ_TOOLS   = ('list_projects', 'list_tasks', 'get_task') # tools that never change anything
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
-SEEN         = {} # (user id, agent, task id) -> hash of the description that agent last read or wrote, for the stale-write check
+SEEN         = {} # (user id, agent, session, task id) -> hash of the description that agent last read or wrote, for the stale-write check
 REL_NAMES    = (('blocking', 'blocks'), ('blocked', 'blocked-by'), ('parenttask', 'parent'), ('subtask', 'subtasks'), ('related', 'related'), ('precedes', 'precedes'), ('follows', 'follows'), ('duplicateof', 'duplicate-of'), ('duplicates', 'duplicates'))
 
 STR  = {'type': 'string'}
@@ -723,7 +723,7 @@ def seen(task_id: int, agent: str, description: str):
 
 def seen_key(task_id: int, agent: str) -> tuple:
 	'''
-	Key for SEEN: the token's user, the agent name and the task.
+	Key for SEEN: the token's user, the agent name, its MCP session and the task, so two sessions of one agent each need their own fresh read.
 
 	:param task_id: Task id
 	:param agent: Agent tag
@@ -731,7 +731,7 @@ def seen_key(task_id: int, agent: str) -> tuple:
 
 	user = kanban.ACTOR.get()
 
-	return (user['id'] if user else 0, agent, task_id)
+	return (user['id'] if user else 0, agent, kanban.SESSION.get(), task_id)
 
 
 def task_line(task_id: int) -> str:
