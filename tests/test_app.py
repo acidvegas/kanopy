@@ -77,6 +77,7 @@ class TestAuthLayer(AppBase):
 		self.assertEqual(self.client.post('/api/projects', json={'path': 'X'}, headers={'Origin': 'http://localhost'}).status_code, 200)
 		anon = app.app.test_client()
 		self.assertEqual(anon.post('/api/projects', json={'path': 'Y'}, headers={'X-Key': self.key, 'Origin': 'https://evil.example'}).status_code, 200)
+		self.assertEqual(self.client.post('/api/projects', json={'path': 'Z'}, headers={'X-Key': 'bogus', 'Origin': 'https://evil.example'}).status_code, 401) # a bad key never falls back to the cookie
 
 
 	def test_login_cookie_and_rate_limit(self):
