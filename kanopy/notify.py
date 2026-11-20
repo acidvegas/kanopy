@@ -94,21 +94,22 @@ def check():
 			once('digest', today, lambda: send(title, body, tags='warning'))
 
 	with kanban.connect() as db:
-		people = [dict(row) for row in db.execute("SELECT id, username, is_admin, ntfy_topic FROM users WHERE notify_due = 1 AND ntfy_topic != '' AND ntfy_topic != ?", (conf['ntfy_topic'],))] # the board topic already gets everything
+		people = [dict(row) for row in db.execute("SELECT id, username, is_admin, ntfy_topic, ntfy_url, ntfy_token FROM users WHERE notify_due = 1 AND ntfy_topic != ''")]
+		people = [p for p in people if not (board and p['ntfy_topic'] == conf['ntfy_topic'] and own_server(p) == conf['ntfy_url'].rstrip('/'))] # that channel already gets every board push
 		access = {person['id']: kanban.levels(db, person) for person in people}
 
 	for person in people:
 		seen  = access[person['id']]
 		mine  = [t for t in open_ if person['username'] in t['assignees'] and (seen is None or seen.get(t['project_id']))] # skip tasks they lost access to; admins see all
-		topic = person['ntfy_topic']
+		topic, server, token = person['ntfy_topic'], own_server(person), person['ntfy_token'] # their own server and token, never the board's
 		for t in mine:
 			if t['remind_at'] and floor < t['remind_at'][:16] <= stamp:
-				once('remind', f'{person["id"]}:{t["id"]}:{t["remind_at"]}', lambda t=t: send(f'Reminder #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], priority=4, tags='bell', topic=topic))
+				once('remind', f'{person["id"]}:{t["id"]}:{t["remind_at"]}', lambda t=t: send(f'Reminder #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], priority=4, tags='bell', topic=topic, server=server, token=token))
 			if clock >= conf['due_time'] and t['due'] and t['due'][:10] == today:
-				once('due', f'{person["id"]}:{t["id"]}:{today}', lambda t=t: send(f'Due today #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], tags='calendar', topic=topic))
+				once('due', f'{person["id"]}:{t["id"]}:{today}', lambda t=t: send(f'Due today #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], tags='calendar', topic=topic, server=server, token=token))
 		title, body = digest(mine, today, stale)
 		if title and clock >= conf['digest_time']:
-			once('digest', f'{person["id"]}:{today}', lambda title=title, body=body: send(title, body, tags='warning', topic=topic))
+			once('digest', f'{person["id"]}:{today}', lambda title=title, body=body: send(title, body, tags='warning', topic=topic, server=server, token=token))
 
 
 def deliver(user: dict, kind: str, task: dict, text: str):
@@ -134,7 +135,7 @@ def deliver(user: dict, kind: str, task: dict, text: str):
 
 	if user['ntfy_topic']:
 		try:
-			send(text, f'{task["title"]}\n{task["project"]}', task['id'], tags={'mention': 'speech_balloon', 'assign': 'bust_in_silhouette', 'activity': 'memo'}[kind], topic=user['ntfy_topic'])
+			send(text, f'{task["title"]}\n{task["project"]}', task['id'], tags={'mention': 'speech_balloon', 'assign': 'bust_in_silhouette', 'activity': 'memo'}[kind], topic=user['ntfy_topic'], server=own_server(user), token=user['ntfy_token'])
 		except Exception as exc:
 			logging.warning('ntfy push to %s failed: %s', user['username'], exc)
 
@@ -226,7 +227,17 @@ def save(values: dict):
 	kanban.settings_save(clean)
 
 
-def send(title: str, message: str, task_id: int = None, priority: int = 3, tags: str = '', topic: str = None):
+def own_server(user: dict) -> str:
+	'''
+	Return the ntfy server a user's personal pushes go to: their own, or ntfy.sh when they set none.
+
+	:param user: User dict with ntfy_url
+	'''
+
+	return (user.get('ntfy_url') or 'https://ntfy.sh').rstrip('/')
+
+
+def send(title: str, message: str, task_id: int = None, priority: int = 3, tags: str = '', topic: str = None, server: str = None, token: str = None):
 	'''
 	Publish one ntfy message; raises on failure.
 
@@ -236,6 +247,8 @@ def send(title: str, message: str, task_id: int = None, priority: int = 3, tags:
 	:param priority: ntfy priority 1-5
 	:param tags: ntfy tags (emoji shortcodes)
 	:param topic: ntfy topic, default the board topic from settings
+	:param server: ntfy server, default the board's
+	:param token: ntfy access token, default the board's ('' for none)
 	'''
 
 	conf    = settings()
@@ -244,10 +257,12 @@ def send(title: str, message: str, task_id: int = None, priority: int = 3, tags:
 
 	if task_id:
 		body['click'] = f'{BASE_URL}/#/task/{task_id}'
-	if conf['ntfy_token']:
-		headers['Authorization'] = f'Bearer {conf["ntfy_token"]}'
+	token = conf['ntfy_token'] if token is None else token
 
-	req = urllib.request.Request(conf['ntfy_url'].rstrip('/'), data=json.dumps(body).encode('utf-8'), headers=headers, method='POST')
+	if token:
+		headers['Authorization'] = f'Bearer {token}'
+
+	req = urllib.request.Request((server or conf['ntfy_url']).rstrip('/'), data=json.dumps(body).encode('utf-8'), headers=headers, method='POST')
 
 	with urllib.request.urlopen(req, timeout=10) as resp:
 		resp.read()
@@ -289,7 +304,7 @@ def task_event(before: dict, after: dict, comment: str = ''):
 	webhook('commented' if comment else 'updated' if before else 'created', before, after, comment)
 
 	with kanban.connect() as db:
-		people = {row['username']: dict(row) for row in db.execute('SELECT id, username, is_admin, ntfy_topic, notify_mention, notify_assign, notify_activity FROM users')} # not avatars or password hashes
+		people = {row['username']: dict(row) for row in db.execute('SELECT id, username, is_admin, ntfy_topic, ntfy_url, ntfy_token, notify_mention, notify_assign, notify_activity FROM users')} # not avatars or password hashes
 
 	who   = actor['username']
 	tag   = f'#{after["id"]}'

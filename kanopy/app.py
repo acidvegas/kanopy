@@ -153,7 +153,7 @@ def api_logout() -> Response:
 def api_me() -> dict:
 	'''Return the signed-in user with their unread notification count.'''
 
-	return dict(g.user, unread=accounts.notifications(g.user)['unread'])
+	return dict(g.user, unread=accounts.notifications(g.user)['unread'], ntfy_token_set=accounts.ntfy_token_set(g.user['id']))
 
 
 @app.put('/api/me/avatar')
@@ -179,7 +179,9 @@ def api_me_avatar_delete() -> dict:
 def api_me_update() -> dict:
 	'''Update the signed-in user's password, ntfy topic or notification toggles.'''
 
-	return accounts.user_update(g.user, json_body(), None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
+	user = accounts.user_update(g.user, json_body(), None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
+
+	return dict(user, ntfy_token_set=accounts.ntfy_token_set(user['id']))
 
 
 @app.get('/api/notifications')
