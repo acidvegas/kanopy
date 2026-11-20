@@ -451,8 +451,8 @@ def list_tasks(args: dict) -> str:
 	out   = kanban.tasks(pid, archived=bool(text) or status in ('done', 'all'), statuses={'open': ['todo', 'doing'], 'all': None}.get(status, [status]), ids=list(hits) if hits is not None else None, labels=want, assignee=who or None, priority_min=args.get('priority_min') or 0, due_before=args.get('due_before'), updated_since=cutoff, brief=True)
 
 	if args.get('team'):
-		roots = team_paths(args['team'])
-		out   = [t for t in out if any(t['project'] == r or t['project'].startswith(r + '/') for r in roots)]
+		scope = team_projects(args['team'])
+		out   = [t for t in out if t['project_id'] in scope]
 
 	if not out:
 		return 'no matching tasks'
@@ -491,9 +491,9 @@ def list_tasks(args: dict) -> str:
 	return '\n'.join(lines)
 
 
-def team_paths(name: str) -> list:
+def team_projects(name: str) -> set:
 	'''
-	Return the paths of the projects shared with one of the user's teams (admins: any team).
+	Return the ids of the projects shared with one of the user's teams (admins: any team) and everything under them.
 
 	:param name: Team name, any case
 	'''
@@ -504,9 +504,7 @@ def team_paths(name: str) -> list:
 		raise LookupError(f'no team named {name.strip()} that you are in')
 
 	with kanban.connect() as db:
-		names = kanban.paths(db)
-
-	return [names[pid] for pid in team['projects']]
+		return set().union(*(kanban.subtree(db, pid) for pid in team['projects']))
 
 
 def norm_label(name: str) -> tuple:
@@ -539,11 +537,17 @@ def project_id(ref) -> int:
 	:param ref: Path like AI/hermes or a numeric id
 	'''
 
-	ref = str(ref).strip().strip('/')
+	ref   = str(ref).strip().strip('/')
+	every = {p['id']: p for p in kanban.projects()}
+	hits  = [p for p in every.values() if str(p['id']) == ref or p['path'].lower() == ref.lower()]
 
-	for p in kanban.projects():
-		if str(p['id']) == ref or p['path'].lower() == ref.lower():
-			return p['id']
+	def owner(p: dict) -> int:
+		while p['parent_id']:
+			p = every[p['parent_id']]
+		return p['owner_id'] # whoever owns the top of its tree
+
+	if hits: # two people can have the same path: an id wins, then their own, then an ownerless one, then a shared one
+		return min(hits, key=lambda p: (str(p['id']) != ref, 0 if owner(p) == kanban.me() else 1 if owner(p) is None else 2))['id']
 
 	raise LookupError(f'project "{ref}" not found (list_projects shows paths)')
 

@@ -114,10 +114,8 @@ def activity(project_id: int, before: int = 0, limit: int = 100) -> list:
 	with connect() as db:
 		require(db, 'projects', project_id)
 		need(db, project_id, VIEW)
-		names  = paths(db)
 		lv     = levels(db)
-		prefix = names[project_id] + '/'
-		scope  = [pid for pid, path in names.items() if (pid == project_id or path.startswith(prefix)) and (lv is None or lv.get(pid))]
+		scope  = [pid for pid in subtree(db, project_id) if lv is None or lv.get(pid)]
 		return [dict(r) for r in db.execute(f'SELECT e.id, e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) AND (? = 0 OR e.id < ?) ORDER BY e.id DESC LIMIT ?', (*scope, before, before, limit))]
 
 
@@ -721,6 +719,44 @@ def now() -> str:
 	return datetime.now(timezone.utc).isoformat(timespec='seconds')
 
 
+def subtree(db: sqlite3.Connection, project_id: int) -> set:
+	'''
+	Return a project's id and the ids of every project under it, by parent links (two people's projects can share a path).
+
+	:param db: Open database connection
+	:param project_id: Project id
+	'''
+
+	kids = {}
+	for row in db.execute('SELECT id, parent_id FROM projects'):
+		kids.setdefault(row['parent_id'], []).append(row['id'])
+
+	out, todo = set(), [project_id]
+	while todo:
+		pid = todo.pop()
+		out.add(pid)
+		todo.extend(kids.get(pid, []))
+
+	return out
+
+
+def top_project(db: sqlite3.Connection, title: str):
+	'''
+	Find the top-level project a name means for the signed-in user: their own first, then an ownerless one, then (for non-admins) one shared with them. Other people's private top-level projects never match, so everyone has their own names.
+
+	:param db: Open database connection
+	:param title: Top-level project name
+	'''
+
+	mine = me()
+	lv   = levels(db)
+	rows = [row for row in db.execute('SELECT id, owner_id FROM projects WHERE title = ? AND parent_id IS NULL', (title,)) if lv is None or lv.get(row['id'])]
+	rank = lambda row: 0 if row['owner_id'] == mine else 1 if row['owner_id'] is None else 2
+	rows = [row for row in rows if rank(row) < 2 or lv is not None] # an admin reaches others' projects by id, not by name
+
+	return min(rows, key=rank) if rows else None
+
+
 def paths(db: sqlite3.Connection) -> dict:
 	'''
 	Return a mapping of project id to its full slash path.
@@ -803,7 +839,7 @@ def project_order(parent_id: int, ids: list):
 				if ancestor == pid:
 					raise ValueError('cannot move a project into itself')
 				ancestor = db.execute('SELECT parent_id FROM projects WHERE id = ?', (ancestor,)).fetchone()['parent_id']
-			if row['parent_id'] != parent_id and db.execute('SELECT 1 FROM projects WHERE title = ? AND parent_id IS ? AND id != ?', (row['title'], parent_id, pid)).fetchone():
+			if row['parent_id'] != parent_id and db.execute('SELECT 1 FROM projects WHERE title = ? AND parent_id IS ? AND id != ?' + ('' if parent_id else ' AND owner_id IS ?'), (row['title'], parent_id, pid) + (() if parent_id else (row['owner_id'],))).fetchone(): # top-level names are unique per owner
 				raise ValueError(f'a project named {row["title"]} already exists there')
 			db.execute('UPDATE projects SET parent_id = ?, position = ? WHERE id = ?', (parent_id, pos, pid))
 
@@ -834,12 +870,12 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 		if parts:
 			parent = None
 			for part in parts[:-1]:
-				row = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id IS ?', (part, parent)).fetchone()
+				row = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (part, parent)).fetchone() if parent else top_project(db, part)
 				if not row and parent:
 					need(db, parent, MANAGE)
 				parent = row['id'] if row else db.execute('INSERT INTO projects (title, parent_id, color, position, owner_id) VALUES (?, ?, ?, ?, ?)', (part, parent, pick_color(db, parent), next_position(db, parent), owner)).lastrowid
 
-			clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id IS ?', (parts[-1], parent)).fetchone()
+			clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (parts[-1], parent)).fetchone() if parent else top_project(db, parts[-1])
 			if clash and clash['id'] != project_id:
 				raise ValueError('a project with that path already exists')
 
@@ -1604,9 +1640,7 @@ def visible_where(db: database.Connection, project_id: int = None, column: str =
 	if project_id:
 		require(db, 'projects', project_id)
 		need(db, project_id, VIEW)
-		names   = paths(db)
-		prefix  = names[project_id] + '/'
-		scope   = {pid for pid, path in names.items() if pid == project_id or path.startswith(prefix)}
+		scope   = subtree(db, project_id)
 		allowed = scope if allowed is None else allowed & scope
 
 	if allowed is None:

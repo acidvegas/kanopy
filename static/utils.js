@@ -238,8 +238,9 @@ function kbTree() {
 function kbTeam(name) {
 	const team = KB.teams.find((t) => t.name.toLowerCase() === name);
 	if (!team) return null;
-	const roots = KB.projects.filter((p) => team.projects.includes(p.id)).map((p) => p.path);
-	return new Set(KB.projects.filter((p) => roots.some((r) => p.path === r || p.path.startsWith(r + '/'))).map((p) => p.id)); // shared projects and their sub-projects
+	const out = new Set(team.projects);
+	for (let grew = true; grew;) { grew = false; for (const p of KB.projects) if (!out.has(p.id) && out.has(p.parent_id)) { out.add(p.id); grew = true; } } // shared projects and their sub-projects, by parent links
+	return out;
 }
 
 function kbMatch(task) {

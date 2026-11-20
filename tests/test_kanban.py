@@ -479,6 +479,42 @@ class TestPermissions(Base):
 class TestProjects(Base):
 	'''Project tree.'''
 
+	def test_top_level_names_are_per_person(self):
+		'''Two people can each have a private Life; paths resolve to their own, scopes never mix, and nothing reveals the other.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		a_life = kanban.project_save('Life/garden')['id']
+		a_task = self.task('Life/garden', 'ann weeds')
+		self.act(bob)
+		b_life = kanban.project_save('Life')['id'] # no "already exists" for a name bob cannot see
+		kanban.project_save('Life/gym')
+		b_task = self.task('Life/gym', 'bob lifts')
+		self.assertNotEqual(b_life, a_life)
+		self.assertEqual([t['id'] for t in kanban.tasks(next(p['id'] for p in kanban.projects() if p['path'] == 'Life'))], [b_task['id']])
+		with self.assertRaises(ValueError):
+			kanban.project_save('Life') # his own name is still unique for him
+		self.act(ann)
+		ann_life = next(p['id'] for p in kanban.projects() if p['path'] == 'Life')
+		self.assertEqual([t['id'] for t in kanban.tasks(ann_life)], [a_task['id']])
+		beds = kanban.project_save('Life/garden/beds')['id']
+		with kanban.connect() as db:
+			self.assertIn(beds, kanban.subtree(db, ann_life))
+
+
+	def test_shared_top_level_resolves_by_name(self):
+		'''A project shared with someone is reached by its name when they have none of their own, over MCP too.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		team = kanban.project_save('Team')['id']
+		accounts.share_add(team, 'editor', 'bob')
+		self.act(bob)
+		self.assertIn('[Team]', self.mcp('save_task', {'project': 'Team', 'title': 'from bob'}))
+		self.assertEqual(kanban.tasks(team)[0]['title'], 'from bob')
+
+
+
 	def test_create_path_makes_parents(self):
 		'''A slash path creates any missing parents.'''
 
