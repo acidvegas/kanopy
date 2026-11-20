@@ -128,7 +128,7 @@ venv/bin/python -m kanopy.app
 <p>Search matches every word across titles, descriptions and comments, with filters for project, label, assignee, priority, due date and status. The sidebar filter narrows the board and the project tree as you type <em>(<code>#id</code>, text, <code>@me</code>, labels, <code>team:name</code> for projects shared with a team)</em>.</p>
 <p>Labels use a <code>namespace:value</code> form. <strong>Global</strong> labels are shared and managed by the admin; a fresh install starts with a set of <code>type:</code> labels. Anyone can add <strong>personal</strong> labels for their own use.</p>
 <h3 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h3>
-<p>Pushes go out through <a href="https://ntfy.sh">ntfy</a> at reminder time, on the morning a task is due, as a daily overdue digest, and when an agent finishes a task. Mentions, assignments and activity on your tasks also land in an in-app inbox. Each kind can be turned on or off.</p>
+<p>Each person can get pushes through <a href="https://ntfy.sh">ntfy</a> on their own server and topic: at reminder time, on the morning a task assigned to them is due, as a daily overdue digest, when an agent using their token finishes a task, and for mentions, assignments and activity on their tasks. Each kind has its own switch, and pushes follow each person's timezone <em>(picked, or taken from their browser)</em>. Mentions, assignments and activity always land in the in-app inbox too. Someone with no topic set just gets no pushes.</p>
 <h3 id="everything-else">Everything else<a class="anchor" href="#everything-else" aria-label="Link to this section">#</a></h3>
 <ul>
 <li>Ten themes, from the purple default to Dracula, Nord, Gruvbox, Catppuccin and GitHub Light</li>
@@ -305,7 +305,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 </tr>
 </tbody>
 </table></div>
-<p>Everything else <em>(ntfy, notification times, timezone, auto-archive)</em> is set on the Settings page. Data, attachments and backups live in <code>data/</code>.</p>
+<p>Everything else is set on the Settings page: each person's ntfy and timezone in their account, the board's push times and auto-archive by an admin. Data, attachments and backups live in <code>data/</code>.</p>
 <h3 id="sqlite-or-postgresql">SQLite or PostgreSQL<a class="anchor" href="#sqlite-or-postgresql" aria-label="Link to this section">#</a></h3>
 <p>SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with <code>venv/bin/pip install "psycopg[binary]==3.3.9"</code> <em>(the Docker image already has it)</em>, set <code>KANOPY_DATABASE</code> and restart. Daily backups to <code>data/backups</code> cover SQLite only; back PostgreSQL up with <code>pg_dump</code>.</p>
 <p>A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:</p>
