@@ -114,7 +114,7 @@ venv/bin/python -m kanopy.app
 <li><strong>No lost edits.</strong> An agent cannot replace a description it has not read, and <code>edit</code> and <code>append</code> change one line without resending the rest. If an agent does make a mess, the last 10 versions of a description can be restored, and deleted tasks sit in a 30-day trash.</li>
 <li><strong>Cheap on tokens.</strong> Tools answer in compact text with one line per task instead of JSON. Fifty tasks come back in about 1,200 tokens.</li>
 <li><strong>Context at session start.</strong> A Claude Code hook briefs each new session on the project for the current directory and its open tasks, flagging work left in Doing.</li>
-<li><strong>Rules and limits.</strong> Agents get your working rules when they connect, can be given read-only tokens, and you get a push when one finishes a task.</li>
+<li><strong>Rules and limits.</strong> Agents get your working rules when they connect, can be given tokens limited to certain projects and a role, and you get a push when one finishes a task.</li>
 </ul>
 <h2 id="features">Features<a class="anchor" href="#features" aria-label="Link to this section">#</a></h2>
 <h3 id="board-and-projects">Board and projects<a class="anchor" href="#board-and-projects" aria-label="Link to this section">#</a></h3>
@@ -135,6 +135,8 @@ venv/bin/python -m kanopy.app
 <li>Works on a phone, including drag and drop</li>
 <li>Markdown editor with a toolbar, preview, shortcuts and <code>@mention</code> autocomplete</li>
 <li>Daily database backups to <code>data/backups</code>, newest 3 kept</li>
+<li>Export a project, or everything you can see, as one JSON file <em>(project menu, or Settings)</em></li>
+<li><code>GET /health</code> answers <code>ok</code> while the database responds <em>(no sign-in; the Docker image uses it as its health check)</em></li>
 </ul>
 <h2 id="accounts-and-sharing">Accounts and sharing<a class="anchor" href="#accounts-and-sharing" aria-label="Link to this section">#</a></h2>
 <p>Everyone signs in with a username and password. The admin creates single-use invite links <em>(valid 7 days)</em> on the Settings page.</p>
@@ -164,7 +166,7 @@ venv/bin/python -m kanopy.app
 <p>Anyone can create a team and add members by username. Admins see every project.</p>
 <p>A team owner can give the team an https <strong>webhook URL</strong>. Every change made on a project shared with the team <em>(new tasks, field changes, comments and deletes, on its sub-projects too)</em> is then POSTed there as JSON: <code>event</code> <em>(created, updated, commented or deleted)</em>, <code>actor</code>, <code>agent</code>, <code>task</code> <em>(id, title, project, status, priority, due, assignees, labels, url)</em>, <code>changes</code> <em>(field, old, new)</em> and <code>comment</code>. A bulk change sends one <code>bulk</code> event listing its <code>tasks</code> instead. The URL must resolve only to public addresses <em>(no loopback, LAN or tailnet)</em> and kanopy connects to the exact address it checked, so DNS rebinding cannot redirect it; redirects are refused, and a <code>key=</code> parameter is sent as an <code>Authorization: Bearer</code> header. Posts go out one at a time from a queue of up to 500 <em>(the oldest is dropped past that)</em>, and the team card shows the last failed send until one succeeds.</p>
 <h2 id="connecting-agents">Connecting agents<a class="anchor" href="#connecting-agents" aria-label="Link to this section">#</a></h2>
-<p>kanopy serves MCP at <code>/mcp</code> <em>(streamable HTTP, stateless)</em>. Each agent authenticates with a personal API token from <strong>Settings, API tokens</strong>, acts as that user and sees only what they can. The <code>X-Agent</code> header names the agent in comments and history. A token can be made <strong>read-only</strong>: the agent then sees only the reading tools and every change is refused, over MCP and the REST API alike.</p>
+<p>kanopy serves MCP at <code>/mcp</code> <em>(streamable HTTP, stateless)</em>. Each agent authenticates with a personal API token from <strong>Settings, API tokens</strong>, acts as that user and sees only what they can. The <code>X-Agent</code> header names the agent in comments and history. A token can be limited to <strong>certain projects</strong> <em>(and everything under them)</em> and to a <strong>highest role</strong>: read-only, editor, manager or full access. It never gets more than its user's own role, a limited token cannot make top-level projects or use admin powers, and the agent only sees the tools it can use. Tokens reach the board only, never account or admin endpoints, so one token can never create another.</p>
 <p>Agents get a short set of working rules on connect from <code>agents/instructions.example.txt</code>. Copy it to <code>agents/instructions.txt</code> <em>(untracked)</em> to describe your own project layout.</p>
 <details>
 <summary><b>Claude Code</b></summary>
