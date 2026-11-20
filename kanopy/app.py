@@ -661,7 +661,10 @@ def auth():
 		if request.content_length and request.mimetype not in ('application/json', 'multipart/form-data'):
 			return {'error': 'requests must send JSON'}, 415
 
-	g.user = accounts.user_by_token(request.headers.get('X-Key', '')) or (None if path == '/mcp' else accounts.user_by_session(request.cookies.get(COOKIE)))
+	if 'X-Key' in request.headers or path == '/mcp':
+		g.user = accounts.user_by_token(request.headers.get('X-Key', '')) # a sent key is the only credential, so a bad one never falls back to the cookie
+	else:
+		g.user = accounts.user_by_session(request.cookies.get(COOKIE))
 
 	if not g.user and not path.startswith(OPEN):
 		return {'error': 'sign in first'}, 401
