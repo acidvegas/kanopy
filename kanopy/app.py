@@ -175,6 +175,24 @@ def api_me_avatar_delete() -> dict:
 	return accounts.avatar_set(g.user, b'', '')
 
 
+@app.post('/api/me/test')
+def api_me_test() -> dict:
+	'''Send a test push to the signed-in user's own ntfy topic.'''
+
+	with kanban.connect() as db:
+		user = dict(db.execute(f'SELECT {notify.PUSH_COLS} FROM users WHERE id = ?', (g.user['id'],)).fetchone())
+
+	if not user['ntfy_topic']:
+		raise ValueError('set your ntfy topic first')
+
+	try:
+		notify.send(user, 'kanopy test', 'Your notifications are working.', tags='tada')
+	except Exception as exc:
+		raise ValueError(f'ntfy push failed: {exc}') from None
+
+	return {'ok': True}
+
+
 @app.patch('/api/me')
 def api_me_update() -> dict:
 	'''Update the signed-in user's password, ntfy topic or notification toggles.'''
@@ -576,37 +594,22 @@ def api_version() -> dict:
 
 @app.get('/api/settings')
 def api_settings() -> dict:
-	'''Return notification settings; the ntfy token is never sent back, only whether one is set.'''
+	'''Return the board's notification times, default timezone and auto-archive setting.'''
 
 	accounts.need_admin(g.user)
-	conf = notify.settings()
 
-	return dict(conf, ntfy_token='', token_set=bool(conf['ntfy_token']))
+	return notify.settings()
 
 
 @app.put('/api/settings')
 def api_settings_save() -> dict:
-	'''Save notification settings.'''
+	'''Save the board's notification times, default timezone and auto-archive setting.'''
 
 	accounts.need_admin(g.user)
 	notify.save(json_body())
 	housekeep()
 
 	return api_settings()
-
-
-@app.post('/api/settings/test')
-def api_settings_test() -> dict:
-	'''Send a test notification with the saved settings.'''
-
-	accounts.need_admin(g.user)
-
-	try:
-		notify.send('kanopy test', 'Notifications are working.', tags='tada')
-	except Exception as exc:
-		raise ValueError(f'ntfy push failed: {exc}')
-
-	return {'ok': True}
 
 
 @app.get('/api/tasks/<int:task_id>')

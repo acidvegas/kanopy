@@ -276,26 +276,30 @@ class TestRoutes(AppBase):
 		self.assertEqual(self.client.delete(f'/api/invites/{inv["id"]}').json, {'ok': True})
 
 
-	def test_settings_test_failure(self):
-		'''A failing test push is reported as a 400.'''
+	def test_test_push(self):
+		'''Anyone can send a test push to their own topic; no topic or a failing push is a 400.'''
+
+		self.assertEqual(self.client.post('/api/me/test').status_code, 400) # no topic yet
+		self.client.patch('/api/me', json={'ntfy_topic': 'root-t'})
+		self.assertEqual(self.client.post('/api/me/test').json, {'ok': True})
+		self.assertEqual((self.pushes[-1]['title'], self.pushes[-1]['topic']), ('kanopy test', 'root-t'))
 
 		def boom(*args, **kwargs):
 			raise OSError('unreachable')
 
 		notify.send = boom
-		r = self.client.post('/api/settings/test')
+		r = self.client.post('/api/me/test')
 		self.assertEqual(r.status_code, 400)
 		self.assertIn('unreachable', r.json['error'])
 
 
 	def test_settings_admin_only(self):
-		'''Settings never return the ntfy token and need an admin.'''
+		'''Board times need an admin, and the old board-wide ntfy keys are ignored.'''
 
-		self.assertEqual(self.client.put('/api/settings', json={'ntfy_token': 'secret', 'ntfy_topic': 't'}).status_code, 200)
+		self.assertEqual(self.client.put('/api/settings', json={'due_time': '07:15', 'ntfy_topic': 't'}).status_code, 200)
 		conf = self.client.get('/api/settings').json
-		self.assertEqual((conf['ntfy_token'], conf['token_set'], conf['ntfy_topic']), ('', True, 't'))
-		self.assertEqual(self.client.post('/api/settings/test').json, {'ok': True})
-		self.assertEqual(self.pushes[-1]['title'], 'kanopy test')
+		self.assertEqual(conf['due_time'], '07:15')
+		self.assertNotIn('ntfy_topic', conf)
 		self.assertEqual(app.app.test_client().put('/api/settings', json={}, headers={'X-Key': self.key}).status_code, 403)
 
 

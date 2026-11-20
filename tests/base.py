@@ -37,7 +37,7 @@ class Base(unittest.TestCase):
 		else:
 			assert kanban.connect().target.startswith(self.dir.name), 'tests must never touch a real database'
 		self.pushes     = []
-		notify.send     = lambda title, message, task_id=None, priority=3, tags='', topic=None, server=None, token=None: self.pushes.append({'title': title, 'message': message, 'task_id': task_id, 'topic': topic, 'server': server, 'token': token})
+		notify.send     = lambda user, title, message, task_id=None, priority=3, tags='': self.pushes.append({'title': title, 'message': message, 'task_id': task_id, 'topic': user['ntfy_topic'], 'server': user.get('ntfy_url'), 'token': user.get('ntfy_token'), 'user': user['username']})
 		kanban.init()
 		mcp_server.SEEN.clear()
 		app.FAILS.clear()

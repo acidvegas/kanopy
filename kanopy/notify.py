@@ -33,88 +33,67 @@ HOOK_SENDER = None # background thread posting HOOK_QUEUE, started on first use
 
 
 DEFAULTS = {
-	'ntfy_url'          : 'https://ntfy.sh',
-	'ntfy_topic'        : '',
-	'ntfy_token'        : '',
-	'timezone'          : 'UTC',
-	'notify_remind'     : '1',
-	'notify_due'        : '1',
-	'due_time'          : '09:00',
-	'notify_digest'     : '1',
-	'digest_time'       : '09:00',
-	'notify_agent_done' : '1',
-	'archive_days'      : '30'
+	'timezone'     : 'UTC',   # for people whose browser has not reported a timezone yet
+	'due_time'     : '09:00', # due-today pushes, at this hour in each person's own timezone
+	'digest_time'  : '09:00', # overdue digest, likewise
+	'archive_days' : '30'
 }
+PUSH_COLS = 'id, username, is_admin, ntfy_topic, ntfy_url, ntfy_token, notify_remind, notify_due, notify_digest, notify_agent, notify_mention, notify_assign, notify_activity, timezone, timezone_auto' # what pushes need, never avatars or password hashes
 
 
 def agent_done(task: dict, agent: str):
 	'''
-	Push that an agent finished a task, if that notification is on and a board topic is set.
+	Push to the person whose API token the agent used that it finished a task, if they have a topic and want these.
 
 	:param task: Task dict from kanban.task
 	:param agent: Agent tag
 	'''
 
-	conf = settings()
+	if not (actor := kanban.ACTOR.get()):
+		return
 
-	if conf['notify_agent_done'] == '1' and conf['ntfy_topic']:
+	with kanban.connect() as db:
+		user = db.execute(f'SELECT {PUSH_COLS} FROM users WHERE id = ?', (actor['id'],)).fetchone()
+
+	if user and user['ntfy_topic'] and user['notify_agent']:
 		try:
-			send(f'{agent} finished #{task["id"]}', f'{task["title"]}\n{task["project"]}', task['id'], tags='white_check_mark')
+			send(dict(user), f'{agent} finished #{task["id"]}', f'{task["title"]}\n{task["project"]}', task['id'], tags='white_check_mark')
 		except Exception as exc:
 			logging.warning('ntfy agent-done push failed: %s', exc)
 
 
 def check():
-	'''Send any due reminder, due-date and digest pushes that have not been sent yet.'''
+	'''Send each person's due reminder, due-today and digest pushes that have not gone out yet, at their own local time.'''
 
 	conf  = settings()
-	board = bool(conf['ntfy_topic']) # board-wide pushes need the board topic; personal ones go to each user's topic
-	now   = datetime.now(ZoneInfo(conf['timezone']))
-	stamp = now.strftime('%Y-%m-%dT%H:%M')
-	today = now.strftime('%Y-%m-%d')
-	clock = now.strftime('%H:%M')
-	floor = (now - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
 	open_ = kanban.tasks(statuses=['todo', 'doing'], scheduled=True)
 
-	if board and conf['notify_remind'] == '1':
-		for t in open_:
-			if t['remind_at'] and floor < t['remind_at'][:16] <= stamp:
-				once('remind', f'{t["id"]}:{t["remind_at"]}', lambda t=t: send(f'Reminder #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], priority=4, tags='bell'))
-
-	if board and conf['notify_due'] == '1' and clock >= conf['due_time']:
-		for t in open_:
-			if t['due'] and t['due'][:10] == today:
-				once('due', f'{t["id"]}:{today}', lambda t=t: send(f'Due today #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], tags='calendar'))
-
-	stale = (now - timedelta(days=STALE_DAYS)).strftime('%Y-%m-%d')
-
-	if board and conf['notify_digest'] == '1' and clock >= conf['digest_time']:
-		title, body = digest(open_, today, stale)
-		if title:
-			once('digest', today, lambda: send(title, body, tags='warning'))
-
 	with kanban.connect() as db:
-		people = [dict(row) for row in db.execute("SELECT id, username, is_admin, ntfy_topic, ntfy_url, ntfy_token FROM users WHERE notify_due = 1 AND ntfy_topic != ''")]
-		people = [p for p in people if not (board and p['ntfy_topic'] == conf['ntfy_topic'] and own_server(p) == conf['ntfy_url'].rstrip('/'))] # that channel already gets every board push
+		people = [dict(row) for row in db.execute(f"SELECT {PUSH_COLS} FROM users WHERE ntfy_topic != ''")]
 		access = {person['id']: kanban.levels(db, person) for person in people}
 
 	for person in people:
+		now   = datetime.now(ZoneInfo(person['timezone'] or person['timezone_auto'] or conf['timezone']))
+		stamp = now.strftime('%Y-%m-%dT%H:%M')
+		today = now.strftime('%Y-%m-%d')
+		clock = now.strftime('%H:%M')
+		floor = (now - timedelta(days=1)).strftime('%Y-%m-%dT%H:%M')
+		stale = (now - timedelta(days=STALE_DAYS)).strftime('%Y-%m-%d')
 		seen  = access[person['id']]
 		mine  = [t for t in open_ if person['username'] in t['assignees'] and (seen is None or seen.get(t['project_id']))] # skip tasks they lost access to; admins see all
-		topic, server, token = person['ntfy_topic'], own_server(person), person['ntfy_token'] # their own server and token, never the board's
 		for t in mine:
-			if t['remind_at'] and floor < t['remind_at'][:16] <= stamp:
-				once('remind', f'{person["id"]}:{t["id"]}:{t["remind_at"]}', lambda t=t: send(f'Reminder #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], priority=4, tags='bell', topic=topic, server=server, token=token))
-			if clock >= conf['due_time'] and t['due'] and t['due'][:10] == today:
-				once('due', f'{person["id"]}:{t["id"]}:{today}', lambda t=t: send(f'Due today #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], tags='calendar', topic=topic, server=server, token=token))
+			if person['notify_remind'] and t['remind_at'] and floor < t['remind_at'][:16] <= stamp:
+				once('remind', f'{person["id"]}:{t["id"]}:{t["remind_at"]}', lambda t=t, person=person: send(person, f'Reminder #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], priority=4, tags='bell'))
+			if person['notify_due'] and clock >= conf['due_time'] and t['due'] and t['due'][:10] == today:
+				once('due', f'{person["id"]}:{t["id"]}:{today}', lambda t=t, person=person: send(person, f'Due today #{t["id"]}', f'{t["title"]}\n{t["project"]}', t['id'], tags='calendar'))
 		title, body = digest(mine, today, stale)
-		if title and clock >= conf['digest_time']:
-			once('digest', f'{person["id"]}:{today}', lambda title=title, body=body: send(title, body, tags='warning', topic=topic, server=server, token=token))
+		if person['notify_digest'] and title and clock >= conf['digest_time']:
+			once('digest', f'{person["id"]}:{today}', lambda title=title, body=body, person=person: send(person, title, body, tags='warning'))
 
 
 def deliver(user: dict, kind: str, task: dict, text: str):
 	'''
-	Put a notification in a user's inbox and push it to their ntfy topic, if they want this kind and can see the task.
+	Put a notification in a user's inbox if they can see the task, and push it to their ntfy topic if they want this kind pushed.
 
 	:param user: Recipient row with prefs
 	:param kind: mention, assign or activity
@@ -124,7 +103,7 @@ def deliver(user: dict, kind: str, task: dict, text: str):
 
 	actor = kanban.ACTOR.get()
 
-	if not user[f'notify_{kind}'] or (actor and actor['id'] == user['id']):
+	if actor and actor['id'] == user['id']:
 		return
 
 	with kanban.connect() as db:
@@ -133,9 +112,9 @@ def deliver(user: dict, kind: str, task: dict, text: str):
 			return
 		db.execute('INSERT INTO notifications (user_id, task_id, kind, actor, text, created) VALUES (?, ?, ?, ?, ?, ?)', (user['id'], task['id'], kind, actor['username'] if actor else 'system', text, kanban.now()))
 
-	if user['ntfy_topic']:
+	if user['ntfy_topic'] and user[f'notify_{kind}']: # the switches only decide what is pushed; the inbox keeps everything
 		try:
-			send(text, f'{task["title"]}\n{task["project"]}', task['id'], tags={'mention': 'speech_balloon', 'assign': 'bust_in_silhouette', 'activity': 'memo'}[kind], topic=user['ntfy_topic'], server=own_server(user), token=user['ntfy_token'])
+			send(user, text, f'{task["title"]}\n{task["project"]}', task['id'], tags={'mention': 'speech_balloon', 'assign': 'bust_in_silhouette', 'activity': 'memo'}[kind])
 		except Exception as exc:
 			logging.warning('ntfy push to %s failed: %s', user['username'], exc)
 
@@ -193,7 +172,7 @@ def once(kind: str, key: str, push):
 
 def save(values: dict):
 	'''
-	Validate and store notification settings. An empty ntfy_token keeps the stored one; clear_token removes it.
+	Validate and store the board's notification times, default timezone and auto-archive.
 
 	:param values: Settings from the UI
 	'''
@@ -204,8 +183,6 @@ def save(values: dict):
 		if key not in DEFAULTS:
 			continue
 		value = str(value).strip()
-		if key.startswith('notify_') and value not in ('0', '1'):
-			raise ValueError(f'{key} must be 0 or 1')
 		if key.endswith('_time') and not re.fullmatch(r'([01]\d|2[0-3]):[0-5]\d', value):
 			raise ValueError(f'{key} must look like HH:MM')
 		if key == 'timezone':
@@ -215,54 +192,32 @@ def save(values: dict):
 				raise ValueError(f'unknown timezone {value}')
 		if key == 'archive_days' and not (value.isdigit() and int(value) <= 3650):
 			raise ValueError('archive_days must be 0-3650 (0 turns it off)')
-		if key == 'ntfy_url' and not re.match(r'^https?://', value):
-			raise ValueError('ntfy_url must start with http:// or https://')
-		if key == 'ntfy_token' and not value:
-			continue
 		clean[key] = value
-
-	if values.get('clear_token'):
-		clean['ntfy_token'] = None
 
 	kanban.settings_save(clean)
 
 
-def own_server(user: dict) -> str:
+def send(user: dict, title: str, message: str, task_id: int = None, priority: int = 3, tags: str = ''):
 	'''
-	Return the ntfy server a user's personal pushes go to: their own, or ntfy.sh when they set none.
+	Publish one ntfy message to a person's own server and topic (ntfy.sh when they set no server); raises on failure.
 
-	:param user: User dict with ntfy_url
-	'''
-
-	return (user.get('ntfy_url') or 'https://ntfy.sh').rstrip('/')
-
-
-def send(title: str, message: str, task_id: int = None, priority: int = 3, tags: str = '', topic: str = None, server: str = None, token: str = None):
-	'''
-	Publish one ntfy message; raises on failure.
-
+	:param user: Recipient with ntfy_url, ntfy_topic and ntfy_token
 	:param title: Notification title
 	:param message: Body text
 	:param task_id: Task to open when the notification is tapped
 	:param priority: ntfy priority 1-5
 	:param tags: ntfy tags (emoji shortcodes)
-	:param topic: ntfy topic, default the board topic from settings
-	:param server: ntfy server, default the board's
-	:param token: ntfy access token, default the board's ('' for none)
 	'''
 
-	conf    = settings()
-	body    = {'topic': topic or conf['ntfy_topic'], 'title': title, 'message': message, 'priority': priority, 'tags': [tags] if tags else []}
+	body    = {'topic': user['ntfy_topic'], 'title': title, 'message': message, 'priority': priority, 'tags': [tags] if tags else []}
 	headers = {'Content-Type': 'application/json', 'User-Agent': USER_AGENT}
 
 	if task_id:
 		body['click'] = f'{BASE_URL}/#/task/{task_id}'
-	token = conf['ntfy_token'] if token is None else token
+	if user.get('ntfy_token'):
+		headers['Authorization'] = f'Bearer {user["ntfy_token"]}'
 
-	if token:
-		headers['Authorization'] = f'Bearer {token}'
-
-	req = urllib.request.Request((server or conf['ntfy_url']).rstrip('/'), data=json.dumps(body).encode('utf-8'), headers=headers, method='POST')
+	req = urllib.request.Request((user.get('ntfy_url') or 'https://ntfy.sh').rstrip('/'), data=json.dumps(body).encode('utf-8'), headers=headers, method='POST')
 
 	with urllib.request.urlopen(req, timeout=10) as resp:
 		resp.read()
@@ -304,7 +259,7 @@ def task_event(before: dict, after: dict, comment: str = ''):
 	webhook('commented' if comment else 'updated' if before else 'created', before, after, comment)
 
 	with kanban.connect() as db:
-		people = {row['username']: dict(row) for row in db.execute('SELECT id, username, is_admin, ntfy_topic, ntfy_url, ntfy_token, notify_mention, notify_assign, notify_activity FROM users')} # not avatars or password hashes
+		people = {row['username']: dict(row) for row in db.execute(f'SELECT {PUSH_COLS} FROM users')}
 
 	who   = actor['username']
 	tag   = f'#{after["id"]}'

@@ -115,6 +115,8 @@ const KB = {
 };
 
 const STATUS = { todo: 'To-Do', doing: 'Doing', done: 'Done' };
+const PREFS  = ['notify_remind', 'notify_due', 'notify_digest', 'notify_agent', 'notify_mention', 'notify_assign', 'notify_activity']; // which pushes go to your ntfy topic
+const browserZone = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch { return ''; } };
 const KINDS  = { blocking: 'blocks', blocked: 'blocked by', subtask: 'subtask', parenttask: 'parent', related: 'related', duplicates: 'duplicates', duplicateof: 'duplicate of', precedes: 'precedes', follows: 'follows' };
 const PRIO   = ['none', 'low', 'medium', 'high', 'urgent', 'do now'];
 
@@ -173,6 +175,7 @@ async function kbLoad() {
 	KB.doneTotal = t.done_total ?? t.tasks.filter((x) => x.status === 'done').length;
 	KB.labels   = l.labels;
 	KB.me       = me;
+	if (browserZone() && me.timezone_auto !== browserZone() && !KB.zoneSent) { KB.zoneSent = true; api('PATCH', '/api/me', { timezone_auto: browserZone() }).catch(() => {}); } // pushes follow your own clock unless you pick a timezone
 	KB.users    = u.users;
 	KB.teams    = tm.teams;
 	meRender();
@@ -601,29 +604,13 @@ async function setLoad() {
 	versionLoad().catch(() => {});
 	const conf = await api('GET', '/api/settings');
 	const form = $('#settings-form');
-	for (const el of form.elements) {
-		if (!el.name || el.name === 'clear_token') continue;
-		if (el.type === 'checkbox') el.checked = conf[el.name] === '1';
-		else el.value = el.name === 'ntfy_token' ? '' : conf[el.name] ?? '';
-	}
+	for (const key of ['due_time', 'digest_time', 'timezone']) form.elements[key].value = conf[key] ?? '';
 	$('#board-form').elements.archive_days.value = conf.archive_days;
-	form.elements.ntfy_token.placeholder = conf.token_set ? '••••••••  (blank keeps it)' : 'not set';
-	form.elements.clear_token.value = '';
-	$('#set-clear').hidden = !conf.token_set;
-	const on = ['notify_remind', 'notify_due', 'notify_digest', 'notify_agent_done'].filter((k) => conf[k] === '1').length;
-	$('#set-status').textContent = conf.ntfy_topic ? `${conf.ntfy_topic} · ${on}/4 on` : 'no topic';
-	$('#set-status').classList.toggle('off', !conf.ntfy_topic || !on);
 }
 
 async function setSave() {
 	const form = $('#settings-form');
-	const body = {};
-	for (const el of form.elements) {
-		if (!el.name) continue;
-		body[el.name] = el.type === 'checkbox' ? (el.checked ? '1' : '0') : el.value;
-	}
-	body.clear_token = form.elements.clear_token.value === '1';
-	await api('PUT', '/api/settings', body);
+	await api('PUT', '/api/settings', { due_time: form.elements.due_time.value, digest_time: form.elements.digest_time.value, timezone: form.elements.timezone.value });
 	await setLoad();
 	toast('Settings saved');
 }
@@ -791,7 +778,10 @@ async function accountLoad() {
 	form.elements.ntfy_token.placeholder = KB.me.ntfy_token_set ? 'set (blank keeps it)' : 'not set';
 	$('#me-token-clear').hidden = !KB.me.ntfy_token_set;
 	form.elements.current_password.value = form.elements.password.value = '';
-	for (const k of ['notify_mention', 'notify_assign', 'notify_activity', 'notify_due']) form.elements[k].checked = !!KB.me[k];
+	for (const k of PREFS) form.elements[k].checked = !!KB.me[k];
+	form.elements.timezone.value = KB.me.timezone;
+	form.elements.timezone.placeholder = `automatic (${KB.me.timezone_auto || browserZone()})`;
+	if (!$('#tz-list').options.length && Intl.supportedValuesOf) $('#tz-list').innerHTML = Intl.supportedValuesOf('timeZone').map((z) => `<option value="${esc(z)}">`).join('');
 	const [teams, tokens] = await Promise.all([api('GET', '/api/teams'), api('GET', '/api/tokens')]);
 	KB.teams = teams.teams;
 	teamsRender();
@@ -810,7 +800,8 @@ function accountBind() {
 		e.preventDefault();
 		const f    = e.target.elements;
 		const body = { ntfy_topic: f.ntfy_topic.value, ntfy_url: f.ntfy_url.value, ntfy_token: f.ntfy_token.value };
-		for (const k of ['notify_mention', 'notify_assign', 'notify_activity', 'notify_due']) body[k] = f[k].checked;
+		for (const k of PREFS) body[k] = f[k].checked;
+		body.timezone = f.timezone.value.trim();
 		if (f.password.value) Object.assign(body, { password: f.password.value, current_password: f.current_password.value });
 		guard(async () => { KB.me = { ...KB.me, ...await api('PATCH', '/api/me', body) }; f.password.value = f.current_password.value = ''; accountLoad(); toast('Account saved'); });
 	});
@@ -1481,8 +1472,7 @@ function kbBind() {
 	$('#search-filters').addEventListener('submit', (e) => e.preventDefault());
 	$('#search-filters').addEventListener('reset', () => setTimeout(() => guard(searchRun)));
 	$('#settings-form').addEventListener('submit', (e) => { e.preventDefault(); guard(setSave); });
-	$('#set-clear').onclick = () => { const f = $('#settings-form'); f.elements.clear_token.value = '1'; f.elements.ntfy_token.value = ''; f.elements.ntfy_token.placeholder = 'cleared on save'; $('#set-clear').hidden = true; };
-	$('#settings-test').onclick = () => guard(async () => { await api('POST', '/api/settings/test'); toast('Test push sent'); });
+	$('#me-test').onclick = () => guard(async () => { await api('POST', '/api/me/test'); toast('Test push sent'); });
 	$('#kb-desc').addEventListener('click', (e) => {
 		const box = $('#kb-desc');
 		const act = e.target.closest('[data-desc]')?.dataset.desc;

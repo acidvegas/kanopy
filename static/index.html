@@ -155,16 +155,20 @@
 						<h3><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>My notifications</h3>
 						<div class="set-grid">
 							<label>My ntfy server<input name="ntfy_url" placeholder="https://ntfy.sh" spellcheck="false" autocomplete="off"></label>
-							<label>My ntfy topic<input name="ntfy_topic" placeholder="blank = inbox only, no pushes" spellcheck="false" autocomplete="off"></label>
+							<label>My ntfy topic<input name="ntfy_topic" placeholder="blank = no pushes" spellcheck="false" autocomplete="off"></label>
 							<label>My access token<span class="field-row"><input name="ntfy_token" type="password" placeholder="not set" autocomplete="off"><button type="button" id="me-token-clear" class="link-btn" hidden>Clear</button></span></label>
+							<label>My timezone<input name="timezone" list="tz-list" placeholder="automatic" spellcheck="false" autocomplete="off"><datalist id="tz-list"></datalist></label>
 						</div>
 						<div class="toggles">
+							<label class="toggle"><input type="checkbox" name="notify_remind"><span class="sw"></span><span class="txt"><b>Reminders</b><small>At the reminder time on tasks assigned to you</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_due"><span class="sw"></span><span class="txt"><b>Due today</b><small>The morning a task assigned to you is due</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_digest"><span class="sw"></span><span class="txt"><b>Overdue digest</b><small>One daily list of your tasks past due</small></span></label>
+							<label class="toggle"><input type="checkbox" name="notify_agent"><span class="sw"></span><span class="txt"><b>Agent finished a task</b><small>An agent using your API token marks a task done</small></span></label>
 							<label class="toggle"><input type="checkbox" name="notify_mention"><span class="sw"></span><span class="txt"><b>@mentions</b><small>Someone writes @you in a description or comment</small></span></label>
 							<label class="toggle"><input type="checkbox" name="notify_assign"><span class="sw"></span><span class="txt"><b>Assignments</b><small>Someone assigns you a task</small></span></label>
 							<label class="toggle"><input type="checkbox" name="notify_activity"><span class="sw"></span><span class="txt"><b>Activity on my tasks</b><small>Comments and status changes on tasks assigned to you</small></span></label>
-							<label class="toggle"><input type="checkbox" name="notify_due"><span class="sw"></span><span class="txt"><b>Due dates and reminders</b><small>On tasks assigned to you, pushed to your ntfy topic</small></span></label>
 						</div>
-						<footer class="card-foot"><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
+						<footer class="card-foot"><button type="button" id="me-test" class="ib"><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send test push</button><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
 					</form>
 					<div class="set-card" id="set-theme">
 						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a3 3 0 0 1 0-6h1.5a2 2 0 0 0 2-2"/></svg>Theme</h2><p>Remembered in this browser.</p></div></header>
@@ -205,26 +209,14 @@
 					</div>
 					<form id="settings-form" class="set-card admin-only" autocomplete="off">
 						<header class="card-head">
-							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Board notifications</h2><p>Board-wide pushes about every task go to this ntfy topic. Each person's own pushes use the server and topic in their account above.</p></div>
-							<span id="set-status" class="pill"></span>
+							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Notification times</h2><p>Everyone's due-today push and overdue digest go out at these times in their own timezone. Each person picks their ntfy topic and which pushes they get in their account.</p></div>
 						</header>
 						<div class="set-grid">
-							<label>Server<input name="ntfy_url" placeholder="https://ntfy.sh"></label>
-							<label>Topic<input name="ntfy_topic" placeholder="BRAIN"></label>
-							<label>Access token<span class="field-row"><input name="ntfy_token" type="password" placeholder="not set"><button type="button" id="set-clear" class="link-btn" hidden>Clear</button></span><input type="hidden" name="clear_token" value=""></label>
-							<label>Timezone<input name="timezone" placeholder="America/New_York"></label>
+							<label>Due-today push<input name="due_time" type="time"></label>
+							<label>Overdue digest<input name="digest_time" type="time"></label>
+							<label>Default timezone<input name="timezone" list="tz-list" placeholder="UTC" spellcheck="false" autocomplete="off"></label>
 						</div>
-						<h3><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send a push when</h3>
-						<div class="toggles">
-							<label class="toggle"><input type="checkbox" name="notify_remind" value="1"><span class="sw"></span><span class="txt"><b>Reminder time</b><small>At the reminder set on a task</small></span></label>
-							<label class="toggle"><input type="checkbox" name="notify_due" value="1"><span class="sw"></span><span class="txt"><b>Due today</b><small>Morning of the due date</small></span><input name="due_time" type="time"></label>
-							<label class="toggle"><input type="checkbox" name="notify_digest" value="1"><span class="sw"></span><span class="txt"><b>Overdue digest</b><small>One daily list of everything past due</small></span><input name="digest_time" type="time"></label>
-							<label class="toggle"><input type="checkbox" name="notify_agent_done" value="1"><span class="sw"></span><span class="txt"><b>Agent finished a task</b><small>Claude or Hermes marks a task done</small></span></label>
-						</div>
-						<footer class="card-foot">
-							<button type="button" id="settings-test" class="ib"><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send test push</button>
-							<button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button>
-						</footer>
+						<footer class="card-foot"><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
 					</form>
 					<form id="board-form" class="set-card admin-only" autocomplete="off">
 						<header class="card-head">
