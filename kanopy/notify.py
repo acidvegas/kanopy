@@ -289,7 +289,7 @@ def task_event(before: dict, after: dict, comment: str = ''):
 	webhook('commented' if comment else 'updated' if before else 'created', before, after, comment)
 
 	with kanban.connect() as db:
-		people = {row['username']: dict(row) for row in db.execute('SELECT * FROM users')}
+		people = {row['username']: dict(row) for row in db.execute('SELECT id, username, is_admin, ntfy_topic, notify_mention, notify_assign, notify_activity FROM users')} # not avatars or password hashes
 
 	who   = actor['username']
 	tag   = f'#{after["id"]}'

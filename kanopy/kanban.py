@@ -157,7 +157,7 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 		pid = data.get('project_id') or row['project_id']
 		ids = []
 		for name in {n.strip().lower().lstrip('@') for n in data['assignees'] or [] if n.strip()}:
-			person = db.execute('SELECT * FROM users WHERE username = ?', (name,)).fetchone()
+			person = db.execute('SELECT id, username, is_admin FROM users WHERE username = ?', (name,)).fetchone()
 			if not person:
 				raise ValueError(f'no user named {name}')
 			lv = levels(db, dict(person))
