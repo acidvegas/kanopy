@@ -635,7 +635,7 @@ def user_by_token(token: str) -> dict:
 
 def user_delete(user: dict, user_id: int):
 	'''
-	Delete a user (admin only); their projects move to the admin.
+	Delete a user (admin only); their projects move to the admin, renamed "Name (username)" where the admin already has that name.
 
 	:param user: Admin
 	:param user_id: User to delete
@@ -647,9 +647,12 @@ def user_delete(user: dict, user_id: int):
 		raise ValueError('you cannot delete yourself')
 
 	with kanban.connect() as db:
-		db.execute('UPDATE projects SET owner_id = ? WHERE owner_id = ?', (user['id'], user_id))
-		if not db.execute('DELETE FROM users WHERE id = ?', (user_id,)).rowcount:
+		gone = db.execute('SELECT username FROM users WHERE id = ?', (user_id,)).fetchone()
+		if not gone:
 			raise LookupError('user not found')
+		db.execute("UPDATE projects SET title = title || ' (' || ? || ')' WHERE owner_id = ? AND parent_id IS NULL AND title IN (SELECT title FROM projects WHERE owner_id = ? AND parent_id IS NULL)", (gone['username'], user_id, user['id'])) # keep the admin's top-level names unique
+		db.execute('UPDATE projects SET owner_id = ? WHERE owner_id = ?', (user['id'], user_id))
+		db.execute('DELETE FROM users WHERE id = ?', (user_id,))
 
 
 def user_reset(user: dict, user_id: int, password: str):

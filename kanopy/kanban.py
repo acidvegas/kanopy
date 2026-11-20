@@ -899,7 +899,12 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 					need(db, parent, MANAGE)
 				parent = row['id'] if row else db.execute('INSERT INTO projects (title, parent_id, color, position, owner_id) VALUES (?, ?, ?, ?, ?)', (part, parent, pick_color(db, parent), next_position(db, parent), owner)).lastrowid
 
-			clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (parts[-1], parent)).fetchone() if parent else top_project(db, parts[-1])
+			if parent:
+				clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (parts[-1], parent)).fetchone()
+			elif project_id: # renaming or moving to the top: the name must be free among its owner's projects
+				clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id IS NULL AND owner_id IS (SELECT owner_id FROM projects WHERE id = ?) AND id != ?', (parts[-1], project_id, project_id)).fetchone()
+			else:
+				clash = top_project(db, parts[-1])
 			if clash and clash['id'] != project_id:
 				raise ValueError('a project with that path already exists')
 
