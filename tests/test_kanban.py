@@ -757,6 +757,11 @@ class TestRepeat(Base):
 			dues.append(t['due'])
 		self.assertEqual(dues, ['2027-02-28', '2027-03-31'])
 		self.assertEqual(kanban.repeat_dates('2027-04-01', '2027-05-31')[t['id']], ['2027-04-30', '2027-05-31'])
+		kanban.task_update(t['id'], {'status': 'done'})
+		t = next(x for x in kanban.tasks() if x['title'] == 'rent' and x['status'] == 'todo')
+		kanban.task_update(t['id'], {'due': t['due'], 'remind_at': '2027-04-29T09:00'}) # an agent resending the same date, plus a reminder change
+		kanban.task_update(t['id'], {'status': 'done'})
+		self.assertEqual(next(x for x in kanban.tasks() if x['title'] == 'rent' and x['status'] == 'todo')['due'], '2027-05-31')
 
 
 	def test_overdue_repeat_projects_from_today(self):

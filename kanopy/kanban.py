@@ -188,9 +188,11 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 					value = datetime.strptime(data[key], fmt).strftime(fmt) # stored zero-padded, so 2027-1-5 becomes 2027-01-05
 				except (TypeError, ValueError):
 					raise ValueError(f'{key} must look like {shape}') from None
-			db.execute(f'UPDATE tasks SET {key} = ?, repeat_day = NULL WHERE id = ?', (value, task_id)) # a new date starts a fresh repeat anchor
+			db.execute(f'UPDATE tasks SET {key} = ? WHERE id = ?', (value, task_id))
 			if value != row[key]:
 				note(key, row[key], value)
+				if key == 'due' or not row['due']: # a changed date the repeat follows starts a fresh anchor; resending the same one keeps it
+					db.execute('UPDATE tasks SET repeat_day = NULL WHERE id = ?', (task_id,))
 
 	if 'labels' in data:
 		before = {r['name'] for r in db.execute('SELECT l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?', (task_id,))}
