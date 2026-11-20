@@ -259,6 +259,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 	#kb-desc { margin: 0 .75rem; }
 	.columns { grid-template-columns: repeat(3, 85vw); overflow-x: auto; scroll-snap-type: x mandatory; padding: 0 .75rem; gap: .75rem; }
 	.column { scroll-snap-align: center; }
+	.columns.dragging { scroll-snap-type: none; } /* snapping would fight the drag's auto-scroll */
 	#drawer { width: 100%; }
 	:is(#drawer, #taskpage) .fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

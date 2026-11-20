@@ -1545,8 +1545,10 @@ function kbBind() {
 		col.querySelector('.add').onclick = () => kbNewTask(status);
 		new Sortable(col.querySelector('.cards'), {
 			group: 'kb', animation: 150, sort: status !== 'done', delay: 150, delayOnTouchOnly: true, ghostClass: 'ghost',
-			onStart: (evt) => { KB.dragTask = +evt.item.dataset.id; },
+			scroll: $('.columns'), scrollSensitivity: 60, scrollSpeed: 14, forceAutoScrollFallback: true, // holding a card near the edge slides the columns over (phones show one at a time)
+			onStart: (evt) => { KB.dragTask = +evt.item.dataset.id; $('.columns').classList.add('dragging'); },
 			onEnd: (evt) => {
+				$('.columns').classList.remove('dragging');
 				setTimeout(() => { KB.dragTask = null; }, 0);
 				if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
 				const to = evt.to.closest('.column').dataset.status;
