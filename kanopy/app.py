@@ -35,7 +35,6 @@ from . import notify
 
 
 COOKIE = 'kb_session'
-READ_TOOLS  = ('list_projects', 'list_tasks', 'get_task') # MCP tools that change nothing, so they do not bump the revision
 FAILS       = {} # client ip -> monotonic times of recent failed sign-ins
 FAILS_LOCK  = threading.Lock()
 FAIL_LIMIT  = 5
@@ -702,8 +701,7 @@ def count_change(resp: Response) -> Response:
 	if path.startswith('/api/') or path == '/mcp':
 		write = request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400 and path not in ('/api/login', '/api/logout', '/api/notifications/read')
 		if path == '/mcp':
-			msg   = request.get_json(silent=True) or {}
-			write = resp.status_code < 400 and msg.get('method') == 'tools/call' and (msg.get('params') or {}).get('name') not in READ_TOOLS
+			write = resp.status_code < 400 and g.get('mcp_write', False) # set by the endpoint: a tool call that succeeded and can change something
 		resp.headers['X-Revision'] = str(kanban.revision_bump() if write else kanban.revision())
 		if write:
 			resp.headers['X-Revision-Was'] = str(int(resp.headers['X-Revision']) - 1) # the page only skips a reload when this write was the sole change since its last load
@@ -785,6 +783,8 @@ def mcp() -> tuple:
 	kanban.SESSION.set(session or None)
 	agent   = f'{agent} ({g.user["username"]})'
 	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')))
+	params  = msg.get('params') if isinstance(msg.get('params'), dict) else {}
+	g.mcp_write = bool(reply) and msg.get('method') == 'tools/call' and not reply.get('result', {}).get('isError') and not mcp_server.reads_only(params.get('name'), params.get('arguments') if isinstance(params.get('arguments'), dict) else {})
 	resp    = Response(json.dumps(reply), mimetype='application/json') if reply else Response('', 202)
 
 	if session:
