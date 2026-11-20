@@ -899,7 +899,8 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 			if parent:
 				clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (parts[-1], parent)).fetchone()
 			elif project_id: # renaming or moving to the top: the name must be free among its owner's projects
-				clash = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id IS NULL AND owner_id IS (SELECT owner_id FROM projects WHERE id = ?) AND id != ?', (parts[-1], project_id, project_id)).fetchone()
+				owner_of = db.execute('SELECT owner_id FROM projects WHERE id = ?', (project_id,)).fetchone()['owner_id']
+				clash    = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id IS NULL AND owner_id IS ? AND id != ?', (parts[-1], owner_of, project_id)).fetchone() # IS ? also works on PostgreSQL (IS NOT DISTINCT FROM)
 			else:
 				clash = top_project(db, parts[-1])
 			if clash and clash['id'] != project_id:
