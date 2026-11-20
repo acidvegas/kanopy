@@ -308,7 +308,7 @@ class TestMcpEndpoint(AppBase):
 
 
 	def test_agent_tag(self):
-		'''Comments from a non-admin's agent are tagged with the user; the agent name is sanitized for history.'''
+		'''Comments from an agent are tagged with its token's user, admins included; the agent name is sanitized for history.'''
 
 		self.act(self.ann)
 		t = self.task('Ann', 'x')
@@ -318,6 +318,8 @@ class TestMcpEndpoint(AppBase):
 		self.assertEqual(task['comments'][0]['author'], 'claude (ann)')
 		self.assertEqual(task['history'][0]['agent'], 'claude')
 		self.assertIsNone(kanban.AGENT.get())
+		self.rpc('tools/call', {'name': 'comment', 'arguments': {'id': t['id'], 'text': 'hi'}}, key=accounts.token_create(self.root, 'claude')['token'])
+		self.assertEqual(kanban.task(t['id'])['comments'][-1]['author'], 'claude (root)')
 
 
 	def test_session_ids(self):
