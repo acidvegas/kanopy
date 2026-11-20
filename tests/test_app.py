@@ -258,7 +258,8 @@ class TestRoutes(AppBase):
 		start = self.client.get('/api/revision').json['revision']
 		r     = self.client.post('/api/projects', json={'path': 'R'})
 		self.assertEqual(int(r.headers['X-Revision']), start + 1)
-		self.client.get('/api/projects')
+		self.assertEqual(int(r.headers['X-Revision-Was']), start)
+		self.assertNotIn('X-Revision-Was', self.client.get('/api/projects').headers)
 		self.client.post('/api/projects', json={'path': ''})
 		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
 		self.rpc('tools/call', {'name': 'list_tasks', 'arguments': {}})

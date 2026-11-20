@@ -674,7 +674,7 @@ def auth():
 
 @app.after_request
 def count_change(resp: Response) -> Response:
-	'''Bump the revision after any successful write, and tell every API response the current one.'''
+	'''Bump the revision after any successful write, and tell every API response the current one (writes also send the one before).'''
 
 	path = request.path
 
@@ -684,6 +684,8 @@ def count_change(resp: Response) -> Response:
 			msg   = request.get_json(silent=True) or {}
 			write = resp.status_code < 400 and msg.get('method') == 'tools/call' and (msg.get('params') or {}).get('name') not in READ_TOOLS
 		resp.headers['X-Revision'] = str(kanban.revision_bump() if write else kanban.revision())
+		if write:
+			resp.headers['X-Revision-Was'] = str(int(resp.headers['X-Revision']) - 1) # the page only skips a reload when this write was the sole change since its last load
 
 	return resp
 
