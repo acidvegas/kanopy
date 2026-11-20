@@ -1357,7 +1357,7 @@ async function kbAction(act, el) {
 	}
 	if (act === 'cancel-desc') return kbDrawer();
 	if (act === 'earlier-comments') { KB.commentsShown += 30; return kbDrawer(); }
-	if (act === 'restore-desc') { const e = t.history.find((h) => h.id === +el.dataset.event); await kbPatch({ description: e.old }); return toast('Description restored'); }
+	if (act === 'restore-desc') { const e = t.history.find((h) => h.id === +el.dataset.event); await kbPatch({ description: e.old, description_was: t.description }); if (KB.task?.description === e.old) toast('Description restored'); return; } // a refused save already showed why
 	if (act === 'save-desc') {
 		const draft = pane().querySelector('.desc-input').value;
 		return guard(async () => {
@@ -1590,7 +1590,7 @@ function paneBind(drawer) {
 		const at    = taskBoxes(KB.task.description)[index];
 		if (at == null) return;
 		const text  = KB.task.description;
-		kbPatch({ description: text.slice(0, at) + (text[at] === ' ' ? 'x' : ' ') + text.slice(at + 1) });
+		kbPatch({ description: text.slice(0, at) + (text[at] === ' ' ? 'x' : ' ') + text.slice(at + 1), description_was: text }); // if someone changed it meanwhile, the save is refused and their text shows
 	});
 	drawer.addEventListener('change', (e) => {
 		const el = e.target;
