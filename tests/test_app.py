@@ -202,6 +202,8 @@ class TestRoutes(AppBase):
 		self.assertEqual((found['results'][0]['id'], found['total']), (t['id'], 1))
 		capped = c.get(f'/api/tasks?project={pid}&done_limit=0').json
 		self.assertEqual((len(capped['tasks']), capped['done_total']), (1, 1))
+		slim = c.get(f'/api/tasks?project={pid}&brief=1').json['tasks']
+		self.assertEqual((len(slim), 'title' in slim[0], 'description' in slim[0]), (2, True, False))
 		self.assertTrue(c.get(f'/api/projects/{pid}/activity').json['events'])
 		self.assertEqual(c.delete(f'/api/tasks/{t["id"]}').json, {'ok': True})
 		trash = c.get('/api/trash').json

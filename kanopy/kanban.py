@@ -1443,6 +1443,19 @@ def task_update(task_id: int, data: dict) -> dict:
 	return task(task_id)
 
 
+def done_count(project_id: int = None) -> int:
+	'''
+	Count the visible, unarchived done tasks, for all projects or one project subtree.
+
+	:param project_id: Project id, or None for every visible project
+	'''
+
+	with connect() as db:
+		where, params = visible_where(db, project_id)
+		if where is None:
+			return 0
+		return db.execute('SELECT COUNT(*) FROM tasks WHERE ' + ' AND '.join(where + ["archived = 0", "status = 'done'"]), params).fetchone()[0]
+
 def tasks(project_id: int = None, archived: bool = False, statuses: list = None, ids: list = None, labels: list = None, assignee: str = None, priority_min: int = 0, due_before: str = None, updated_since: str = None, scheduled: bool = False, brief: bool = False, done_limit: int = None) -> list:
 	'''
 	Return card summaries for the tasks the user can see, filtered in SQL.
@@ -1457,7 +1470,7 @@ def tasks(project_id: int = None, archived: bool = False, statuses: list = None,
 	:param due_before: Due before this YYYY-MM-DD
 	:param updated_since: Changed at or after this ISO time
 	:param scheduled: Only tasks with a due date, a reminder, or in doing (what notifications look at)
-	:param brief: Return only id, project, status, priority and updated, for sorting before loading whole cards
+	:param brief: Return only id, project, title, status, priority and updated, for sorting or suggestions before loading whole cards
 	:param done_limit: Keep every open task but only this many of the most recently finished
 	'''
 
@@ -1501,7 +1514,7 @@ def tasks(project_id: int = None, archived: bool = False, statuses: list = None,
 
 		cond  = (' WHERE ' + ' AND '.join(where)) if where else ''
 		if brief:
-			return [dict(r, project=names[r['project_id']]) for r in db.execute(f'SELECT id, project_id, status, priority, updated FROM tasks{cond}', params)]
+			return [dict(r, project=names[r['project_id']]) for r in db.execute(f'SELECT id, project_id, title, status, priority, updated FROM tasks{cond}', params)]
 		chose = f' AND {{}} IN (SELECT id FROM tasks{cond})' if where else '' # no filter at all: the side tables are read whole
 		rows  = db.execute(f'SELECT * FROM tasks{cond} ORDER BY position, id', params).fetchall()
 		tags  = {}
