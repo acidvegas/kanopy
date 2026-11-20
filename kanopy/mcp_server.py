@@ -17,6 +17,7 @@ from . import notify
 AGENTS       = Path(__file__).parent.parent / 'agents'
 INSTRUCTIONS = next(p for p in (AGENTS / 'instructions.txt', AGENTS / 'instructions.example.txt') if p.exists()).read_text().strip() # your own instructions.txt wins
 NAMESPACES   = {'host': True, 'type': False} # namespace -> new values allowed without create
+OPEN_METHODS = ('initialize', 'notifications/initialized', 'ping', 'tools/list') # work without a token: the handshake and the public tool list, so directories can check the server
 READ_TOOLS   = ('list_projects', 'list_tasks', 'get_task') # tools that never change anything
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'

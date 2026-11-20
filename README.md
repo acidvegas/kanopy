@@ -204,6 +204,12 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 
 Any MCP client that supports streamable HTTP works: point it at `http://HOST:PORT/mcp` with the `X-Key` and `X-Agent` headers. For a session briefing without MCP, `GET /api/context?cwd=<dir>` with the `X-Key` header returns plain text for the project whose folder contains `dir`.
 
+A client that can only launch a local command can run kanopy over stdin/stdout on the machine where kanopy keeps its database, with `KANOPY_TOKEN` set to an API token and `KANOPY_AGENT` naming the agent:
+
+```sh
+KANOPY_TOKEN=$TOKEN KANOPY_AGENT=claude python -m kanopy.stdio
+```
+
 </details>
 
 ## MCP tools
