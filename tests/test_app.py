@@ -3,6 +3,8 @@
 # tests/test_app.py
 
 import io
+import threading
+import time
 import unittest
 
 from kanopy import accounts
@@ -78,6 +80,26 @@ class TestAuthLayer(AppBase):
 		anon = app.app.test_client()
 		self.assertEqual(anon.post('/api/projects', json={'path': 'Y'}, headers={'X-Key': self.key, 'Origin': 'https://evil.example'}).status_code, 200)
 		self.assertEqual(self.client.post('/api/projects', json={'path': 'Z'}, headers={'X-Key': 'bogus', 'Origin': 'https://evil.example'}).status_code, 401) # a bad key never falls back to the cookie
+
+
+	def test_rate_limit_holds_under_parallel_guesses(self):
+		'''Guesses fired at once still get only FAIL_LIMIT password checks.'''
+
+		calls, real = [], accounts.login
+		def slow_wrong(username, password):
+			calls.append(1)
+			time.sleep(0.2)
+			raise PermissionError('wrong username or password')
+		accounts.login = slow_wrong
+		try:
+			threads = [threading.Thread(target=lambda: app.app.test_client().post('/api/login', json={'username': 'ann', 'password': 'x'})) for _ in range(12)]
+			for t in threads:
+				t.start()
+			for t in threads:
+				t.join()
+		finally:
+			accounts.login = real
+		self.assertEqual(len(calls), app.FAIL_LIMIT)
 
 
 	def test_login_cookie_and_rate_limit(self):

@@ -103,15 +103,33 @@ def api_login() -> Response:
 		FAILS[ip] = [t for t in FAILS.get(ip, []) if now - t < FAIL_WINDOW]
 		if len(FAILS[ip]) >= FAIL_LIMIT:
 			raise PermissionError('too many failed sign-ins, try again in a few minutes')
+		FAILS[ip].append(now) # counted up front, so parallel guesses cannot all slip past the limit
 
 	try:
 		token = accounts.login(body.get('username'), body.get('password'))
 	except PermissionError:
-		with FAILS_LOCK:
-			FAILS[ip].append(now)
+		raise # a wrong password keeps its slot
+	except Exception:
+		forgive(ip, now)
 		raise
 
+	forgive(ip, now)
 	return session_response(token)
+
+
+def forgive(ip: str, at: float):
+	'''
+	Give back a sign-in slot taken up front, for a sign-in that did not fail on the password.
+
+	:param ip: Client address
+	:param at: The slot's time
+	'''
+
+	with FAILS_LOCK:
+		if at in FAILS.get(ip, []):
+			FAILS[ip].remove(at)
+		if not FAILS.get(ip):
+			FAILS.pop(ip, None)
 
 
 @app.post('/api/logout')
