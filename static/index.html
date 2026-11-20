@@ -154,7 +154,9 @@
 						</div>
 						<h3><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>My notifications</h3>
 						<div class="set-grid">
-							<label>My ntfy topic<input name="ntfy_topic" placeholder="blank = inbox only, no pushes"></label>
+							<label>My ntfy server<input name="ntfy_url" placeholder="https://ntfy.sh" spellcheck="false" autocomplete="off"></label>
+							<label>My ntfy topic<input name="ntfy_topic" placeholder="blank = inbox only, no pushes" spellcheck="false" autocomplete="off"></label>
+							<label>My access token<span class="field-row"><input name="ntfy_token" type="password" placeholder="not set" autocomplete="off"><button type="button" id="me-token-clear" class="link-btn" hidden>Clear</button></span></label>
 						</div>
 						<div class="toggles">
 							<label class="toggle"><input type="checkbox" name="notify_mention"><span class="sw"></span><span class="txt"><b>@mentions</b><small>Someone writes @you in a description or comment</small></span></label>
@@ -203,7 +205,7 @@
 					</div>
 					<form id="settings-form" class="set-card admin-only" autocomplete="off">
 						<header class="card-head">
-							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Notifications</h2><p>Pushes go to an ntfy topic. Subscribe to it in the ntfy app.</p></div>
+							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>Board notifications</h2><p>Board-wide pushes about every task go to this ntfy topic. Each person's own pushes use the server and topic in their account above.</p></div>
 							<span id="set-status" class="pill"></span>
 						</header>
 						<div class="set-grid">

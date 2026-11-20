@@ -194,6 +194,22 @@ class TestProfile(Base):
 		self.assertIsNotNone(accounts.user_by_token(key))
 
 
+	def test_own_ntfy_server(self):
+		'''Users set their own ntfy server and token; a blank token keeps the stored one, clear removes it, and the token is never returned.'''
+
+		ann = self.user('ann')
+		row = accounts.user_update(ann, {'ntfy_url': ' https://ntfy.example.com/ ', 'ntfy_token': 'tk_1'})
+		self.assertEqual(row['ntfy_url'], 'https://ntfy.example.com')
+		self.assertNotIn('ntfy_token', row)
+		self.assertTrue(accounts.ntfy_token_set(ann['id']))
+		accounts.user_update(ann, {'ntfy_token': ''})
+		self.assertTrue(accounts.ntfy_token_set(ann['id']))
+		accounts.user_update(ann, {'clear_ntfy_token': True})
+		self.assertFalse(accounts.ntfy_token_set(ann['id']))
+		with self.assertRaises(ValueError):
+			accounts.user_update(ann, {'ntfy_url': 'ftp://nope'})
+
+
 	def test_admin_reset_and_delete(self):
 		'''Resetting a password signs the user out and revokes their API tokens; deleting a user hands their projects to the admin.'''
 

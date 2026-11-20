@@ -786,6 +786,10 @@ async function accountLoad() {
 	$('#me-avatar').innerHTML = avatar(KB.me.username);
 	$('#avatar-clear').hidden = !KB.me.avatar_at;
 	form.elements.ntfy_topic.value = KB.me.ntfy_topic;
+	form.elements.ntfy_url.value   = KB.me.ntfy_url;
+	form.elements.ntfy_token.value = '';
+	form.elements.ntfy_token.placeholder = KB.me.ntfy_token_set ? 'set (blank keeps it)' : 'not set';
+	$('#me-token-clear').hidden = !KB.me.ntfy_token_set;
 	form.elements.current_password.value = form.elements.password.value = '';
 	for (const k of ['notify_mention', 'notify_assign', 'notify_activity', 'notify_due']) form.elements[k].checked = !!KB.me[k];
 	const [teams, tokens] = await Promise.all([api('GET', '/api/teams'), api('GET', '/api/tokens')]);
@@ -805,11 +809,12 @@ function accountBind() {
 	$('#profile-form').addEventListener('submit', (e) => {
 		e.preventDefault();
 		const f    = e.target.elements;
-		const body = { ntfy_topic: f.ntfy_topic.value };
+		const body = { ntfy_topic: f.ntfy_topic.value, ntfy_url: f.ntfy_url.value, ntfy_token: f.ntfy_token.value };
 		for (const k of ['notify_mention', 'notify_assign', 'notify_activity', 'notify_due']) body[k] = f[k].checked;
 		if (f.password.value) Object.assign(body, { password: f.password.value, current_password: f.current_password.value });
-		guard(async () => { KB.me = { ...KB.me, ...await api('PATCH', '/api/me', body) }; f.password.value = f.current_password.value = ''; toast('Account saved'); });
+		guard(async () => { KB.me = { ...KB.me, ...await api('PATCH', '/api/me', body) }; f.password.value = f.current_password.value = ''; accountLoad(); toast('Account saved'); });
 	});
+	$('#me-token-clear').onclick = () => guard(async () => { KB.me = { ...KB.me, ...await api('PATCH', '/api/me', { clear_ntfy_token: true }) }; accountLoad(); toast('Token removed'); });
 	$('#team-new').addEventListener('submit', (e) => {
 		e.preventDefault();
 		guard(async () => { KB.teams = (await api('POST', '/api/teams', { name: e.target.elements.name.value })).teams; e.target.reset(); teamsRender(); });

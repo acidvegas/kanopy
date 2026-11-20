@@ -18,7 +18,7 @@ INVITE_DAYS  = 7
 SESSION_DAYS = 30
 USERNAME_RE  = re.compile(r'^[a-z0-9_-]{2,32}$')
 PREFS        = ('notify_mention', 'notify_assign', 'notify_activity', 'notify_due')
-PUBLIC       = 'id, username, is_admin, ntfy_topic, notify_mention, notify_assign, notify_activity, notify_due, created, avatar_at'
+PUBLIC       = 'id, username, is_admin, ntfy_topic, ntfy_url, notify_mention, notify_assign, notify_activity, notify_due, created, avatar_at'
 AVATAR_MAX   = 512 * 1024 # bytes; the browser resizes before upload
 AVATAR_MIME  = ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
 DUMMY_HASH   = 'scrypt$16384$8$1$' + '00' * 16 + '$' + '00' * 32 # checked against for unknown usernames so a miss costs as long as a hit
@@ -676,10 +676,10 @@ def user_reset(user: dict, user_id: int, password: str):
 
 def user_update(user: dict, data: dict, session: str = None) -> dict:
 	'''
-	Update the user's own profile: password (needs the current one), ntfy topic, notification toggles. A new password signs out every other session.
+	Update the user's own profile: password (needs the current one), their own ntfy server, token and topic, notification toggles. A new password signs out every other session.
 
 	:param user: User dict
-	:param data: Any of: password + current_password, ntfy_topic, notify_* flags
+	:param data: Any of: password + current_password, ntfy_url, ntfy_token (blank keeps it), clear_ntfy_token, ntfy_topic, notify_* flags
 	:param session: Raw session token of the request, kept signed in after a password change
 	'''
 
@@ -691,6 +691,15 @@ def user_update(user: dict, data: dict, session: str = None) -> dict:
 			valid_password(data['password'])
 			db.execute('UPDATE users SET password = ? WHERE id = ?', (password_hash(data['password']), user['id']))
 			db.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], digest(session) if session else ''))
+		if 'ntfy_url' in data: # their own ntfy server; blank means ntfy.sh
+			server = (data['ntfy_url'] or '').strip().rstrip('/')
+			if server and not re.fullmatch(r'https?://\S+', server):
+				raise ValueError('the ntfy server must be an http:// or https:// address')
+			db.execute('UPDATE users SET ntfy_url = ? WHERE id = ?', (server, user['id']))
+		if data.get('ntfy_token'): # blank keeps the stored one
+			db.execute('UPDATE users SET ntfy_token = ? WHERE id = ?', (data['ntfy_token'].strip(), user['id']))
+		if data.get('clear_ntfy_token'):
+			db.execute("UPDATE users SET ntfy_token = '' WHERE id = ?", (user['id'],))
 		if 'ntfy_topic' in data:
 			topic = (data['ntfy_topic'] or '').strip()
 			if topic and not re.fullmatch(r'[\w-]{1,64}', topic):
@@ -702,6 +711,17 @@ def user_update(user: dict, data: dict, session: str = None) -> dict:
 		row = db.execute(f'SELECT {PUBLIC} FROM users WHERE id = ?', (user['id'],)).fetchone()
 
 	return dict(row)
+
+
+def ntfy_token_set(user_id: int) -> bool:
+	'''
+	Say whether a user has stored their own ntfy access token (the token itself is never sent back).
+
+	:param user_id: User id
+	'''
+
+	with kanban.connect() as db:
+		return bool(db.execute('SELECT ntfy_token FROM users WHERE id = ?', (user_id,)).fetchone()['ntfy_token'])
 
 
 def users() -> list:

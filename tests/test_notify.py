@@ -145,6 +145,25 @@ class TestPushes(Base):
 		self.assertEqual([(p['title'], p['topic']) for p in self.pushes], [(f'Due today #{t["id"]}', 'ann-topic')])
 
 
+	def test_personal_server_and_token(self):
+		'''Personal pushes use the user's own ntfy server and token, or ntfy.sh with no token, never the board's.'''
+
+		notify.save({'ntfy_topic': 'board', 'ntfy_url': 'https://push.example.com', 'ntfy_token': 'board-secret'})
+		ann, bob = self.user('ann'), self.user('bob')
+		accounts.user_update(ann, {'ntfy_topic': 'ann-topic', 'ntfy_url': 'https://ntfy.ann.example/', 'ntfy_token': 'ann-secret'})
+		accounts.user_update(bob, {'ntfy_topic': 'bob-topic'})
+		self.act(ann)
+		a = self.task('Ann', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['ann'])
+		self.act(bob)
+		b = self.task('Bob', 'his', due=self.now.strftime('%Y-%m-%d'), assignees=['bob'])
+		self.act(None)
+		notify.check()
+		got = {p['topic']: (p['server'], p['token']) for p in self.pushes if p['topic'] in ('ann-topic', 'bob-topic')}
+		self.assertEqual(got, {'ann-topic': ('https://ntfy.ann.example', 'ann-secret'), 'bob-topic': ('https://ntfy.sh', '')})
+		self.assertIn(f'Due today #{a["id"]}', [p['title'] for p in self.pushes if p['topic'] is None]) # the board topic still hears about everything
+		self.assertIn(f'Due today #{b["id"]}', [p['title'] for p in self.pushes if p['topic'] is None])
+
+
 	def test_personal_reminder_and_digest(self):
 		'''Assigned users also get their own reminder and digest.'''
 
@@ -179,12 +198,15 @@ class TestPushes(Base):
 		try:
 			notify.save({'ntfy_url': 'https://push.example/', 'ntfy_token': 'tk_9'})
 			notify.send('title', 'body', 42, tags='bell')
+			notify.send('mine', 'body', topic='ann-topic', server='https://ntfy.ann.example', token='')
 		finally:
 			notify.send, notify.urllib.request.urlopen = real, old_open
 		req, timeout = sent[0]
 		body = json.loads(req.data)
 		self.assertEqual((req.full_url, req.get_method(), timeout), ('https://push.example', 'POST', 10))
 		self.assertEqual(req.get_header('User-agent'), notify.USER_AGENT)
+		own = sent[1][0]
+		self.assertEqual((own.full_url, own.get_header('Authorization'), json.loads(own.data)['topic']), ('https://ntfy.ann.example', None, 'ann-topic')) # a personal push never carries the board's token
 		self.assertEqual(req.get_header('Authorization'), 'Bearer tk_9')
 		self.assertEqual((body['topic'], body['title'], body['tags'], body['click']), ('board', 'title', ['bell'], f'{notify.BASE_URL}/#/task/42'))
 		self.assertNotIn('python', notify.USER_AGENT.lower())
