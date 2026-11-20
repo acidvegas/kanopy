@@ -224,7 +224,7 @@ A few rules keep agents from making a mess:
 - A new project is created by filing its first task into it, so no project is ever empty
 - An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; `edit` *(exact text, must match once)* and `append` need no read
 - `host:` labels that differ only by punctuation *(`host:web01` and `host:web-01`)* are rejected
-- Moving a task to doing **claims** it for that agent session *(`by:claude#a1b2c3` on its line, the agent's name on its card)*. Another session that tries to start it is told who has it, and takes over only with `take=true`. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own
+- Moving a task to doing **claims** it for that agent session *(`by:claude(brandon)#a1b2c3` on its line, the agent's name on its card)*. Another session that tries to start it is told who has it, and takes over only with `take=true`. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own
 
 ## Configuration
 
