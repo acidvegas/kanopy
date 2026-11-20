@@ -77,18 +77,21 @@
 				<button id="toggle" class="icon" aria-label="Toggle sidebar"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
 				<div id="crumb"></div>
 				<div class="actions">
+					<span id="cal-ops" hidden>
+						<button id="cal-prev" class="icon" title="Previous month" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+						<button id="cal-today" title="This month">Today</button>
+						<button id="cal-next" class="icon" title="Next month" aria-label="Next month"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
+					</span>
+					<button id="kb-more" class="icon" title="Project actions" aria-label="Project actions" aria-expanded="false" hidden><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg></button>
+					<span id="kb-more-menu">
 					<span id="kb-project-ops" hidden>
 						<button id="kb-share" class="icon" title="Share project" aria-label="Share project"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
 						<button id="kb-rename" class="icon" title="Rename / move project" aria-label="Rename / move project"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6m-2-2 2 2-2 2"/></svg></button>
 						<button id="kb-archive" class="icon" title="Archive project" aria-label="Archive project"><svg viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg></button>
 						<button id="kb-delete" class="icon danger" title="Delete project" aria-label="Delete project"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg></button>
 					</span>
-					<span id="cal-ops" hidden>
-						<button id="cal-prev" class="icon" title="Previous month" aria-label="Previous month"><svg viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
-						<button id="cal-today" title="This month">Today</button>
-						<button id="cal-next" class="icon" title="Next month" aria-label="Next month"><svg viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg></button>
-					</span>
 					<button id="kb-activity" class="icon" title="Project activity" aria-label="Project activity" hidden><svg viewBox="0 0 24 24"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg></button>
+					</span>
 					<button id="kb-select" class="icon" title="Select tasks" aria-label="Select tasks"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg></button>
 					<button id="kb-new-task" class="icon primary" title="New task (n)" aria-label="New task (n)"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
 				</div>
