@@ -18,6 +18,7 @@ from . import notify
 
 INVITE_DAYS  = 7
 SESSION_DAYS = 30
+TOKEN_ROLES  = {'viewer': 1, 'editor': 2, 'manager': 3, 'owner': 4} # highest role an API token may use
 USERNAME_RE  = re.compile(r'^[a-z0-9_-]{2,32}$')
 PREFS        = ('notify_remind', 'notify_due', 'notify_digest', 'notify_agent', 'notify_mention', 'notify_assign', 'notify_activity') # which pushes go to the user's ntfy topic
 PUBLIC       = 'id, username, is_admin, ntfy_topic, ntfy_url, notify_remind, notify_due, notify_digest, notify_agent, notify_mention, notify_assign, notify_activity, timezone, timezone_auto, created, avatar_at'
@@ -544,22 +545,32 @@ def teams(user: dict) -> list:
 	return out
 
 
-def token_create(user: dict, name: str, read_only: bool = False) -> dict:
+def token_create(user: dict, name: str, role: str = 'owner', projects: list = None) -> dict:
 	'''
-	Create an API token for agents; the raw token is only returned here.
+	Create an API token for agents; the raw token is only returned here. A token never gets more than its user's own role.
 
 	:param user: Token owner
 	:param name: Label like claude or hermes
-	:param read_only: The token can read but never change anything
+	:param role: Highest role the token may use: viewer (read-only), editor, manager or owner (everything you can do)
+	:param projects: Project ids the token is limited to, with everything under them; empty for all your projects
 	'''
 
-	name  = (name or '').strip()[:40] or 'token'
-	token = 'bk_' + secrets.token_urlsafe(32)
+	name     = (name or '').strip()[:40] or 'token'
+	token    = 'bk_' + secrets.token_urlsafe(32)
+	projects = sorted({int(pid) for pid in projects or []})
+
+	if role not in TOKEN_ROLES:
+		raise ValueError('role must be viewer, editor, manager or owner')
 
 	with kanban.connect() as db:
-		token_id = db.execute('INSERT INTO tokens (user_id, name, token, created, read_only) VALUES (?, ?, ?, ?, ?)', (user['id'], name, digest(token), kanban.now(), int(bool(read_only)))).lastrowid
+		lv = kanban.levels(db, user)
+		for pid in projects:
+			kanban.require(db, 'projects', pid)
+			if lv is not None and not lv.get(pid):
+				raise PermissionError('you do not have access to that project')
+		token_id = db.execute('INSERT INTO tokens (user_id, name, token, created, read_only, role, projects) VALUES (?, ?, ?, ?, ?, ?, ?)', (user['id'], name, digest(token), kanban.now(), int(role == 'viewer'), role, ','.join(map(str, projects)))).lastrowid
 
-	return {'id': token_id, 'name': name, 'token': token, 'read_only': bool(read_only)}
+	return {'id': token_id, 'name': name, 'token': token, 'role': role, 'projects': projects}
 
 
 def token_delete(user: dict, token_id: int):
@@ -596,7 +607,10 @@ def tokens(user: dict) -> list:
 	'''
 
 	with kanban.connect() as db:
-		return [dict(row) for row in db.execute('SELECT id, name, created, used, read_only FROM tokens WHERE user_id = ? ORDER BY id', (user['id'],))]
+		names = kanban.paths(db)
+		rows  = db.execute('SELECT id, name, created, used, role, projects FROM tokens WHERE user_id = ? ORDER BY id', (user['id'],)).fetchall()
+
+	return [dict(row, projects=[names.get(int(pid), 'a deleted project') for pid in row['projects'].split(',') if pid]) for row in rows]
 
 
 def user_by_session(token: str) -> dict:
@@ -617,7 +631,7 @@ def user_by_session(token: str) -> dict:
 
 def user_by_token(token: str) -> dict:
 	'''
-	Return the user for an API token, or None; records when it was last used. The user dict carries read_only for the token.
+	Return the user for an API token, or None; records when it was last used. The user dict carries read_only, and for a limited token its projects and role (see kanban.levels).
 
 	:param token: Raw API token
 	'''
@@ -626,13 +640,20 @@ def user_by_token(token: str) -> dict:
 		return None
 
 	with kanban.connect() as db:
-		row = db.execute('SELECT id, user_id, read_only FROM tokens WHERE token = ?', (digest(token),)).fetchone()
+		row = db.execute('SELECT id, user_id, role, projects FROM tokens WHERE token = ?', (digest(token),)).fetchone()
 		if not row:
 			return None
 		db.execute('UPDATE tokens SET used = ? WHERE id = ?', (kanban.now(), row['id']))
 		user = db.execute(f'SELECT {PUBLIC} FROM users WHERE id = ?', (row['user_id'],)).fetchone()
 
-	return dict(user, read_only=bool(row['read_only'])) if user else None
+	if not user:
+		return None
+
+	user = dict(user, read_only=row['role'] == 'viewer')
+	if row['role'] != 'owner' or row['projects']: # a limited token: its projects and role only, and never admin powers
+		user.update(token_admin=bool(user['is_admin']), is_admin=0, token_level=TOKEN_ROLES[row['role']], token_projects={int(pid) for pid in row['projects'].split(',') if pid})
+
+	return user
 
 
 def user_tree(db, user_id: int) -> set:

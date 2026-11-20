@@ -184,8 +184,8 @@
 					</div>
 					<div class="set-card" id="set-tokens">
 						<header class="card-head">
-							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>API tokens</h2><p>For agents like Claude Code and Hermes: they act as you and see what you see. Send one as the <code>X-Key</code> header to <code>/mcp</code>.</p></div>
-							<form id="token-new" class="inline-form"><input name="name" placeholder="name, like claude"><label class="ro-check" title="Can read the board but never change it"><input type="checkbox" name="read_only"> read-only</label><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>Create</button></form>
+							<div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>API tokens</h2><p>For agents like Claude Code and Hermes: they act as you and see what you see, or only the projects and role you give the token. Send one as the <code>X-Key</code> header to <code>/mcp</code>.</p></div>
+							<form id="token-new" class="inline-form"><input name="name" placeholder="name, like claude"><select name="role" title="The most this token may do; never more than you can"><option value="owner">Full access</option><option value="manager">Manager</option><option value="editor">Editor</option><option value="viewer">Read-only</option></select><details class="tok-proj"><summary title="Projects this token can reach">All projects</summary><div class="tok-list"></div></details><button class="primary ib"><svg class="si" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="m11 12 9-9M17 6l3 3M14 9l2 2"/></svg>Create</button></form>
 						</header>
 						<div id="token-shown" class="secret" hidden></div>
 						<div id="tokens"></div>

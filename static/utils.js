@@ -841,12 +841,17 @@ function accountBind() {
 	$('#token-new').addEventListener('submit', (e) => {
 		e.preventDefault();
 		guard(async () => {
-			const t = await api('POST', '/api/tokens', { name: e.target.elements.name.value, read_only: e.target.elements.read_only.checked });
+			const projects = [...e.target.querySelectorAll('.tok-list input:checked')].map((c) => +c.value);
+			const t = await api('POST', '/api/tokens', { name: e.target.elements.name.value, role: e.target.elements.role.value, projects });
 			e.target.reset();
+			$('.tok-proj').open = false;
+			tokProjects();
 			secretShow($('#token-shown'), 'Copy this token now; it is not shown again.', t.token, `claude mcp add --transport http -s user kanopy ${location.origin}/mcp --header "X-Agent: claude" --header "X-Key: ${t.token}"`);
 			tokensRender((await api('GET', '/api/tokens')).tokens);
 		});
 	});
+	$('.tok-proj').addEventListener('toggle', (e) => { if (e.target.open && !e.target.querySelector('.tok-list input')) tokProjects(); });
+	$('.tok-list').addEventListener('change', () => { const n = $('.tok-list').querySelectorAll('input:checked').length; $('.tok-proj summary').textContent = n ? `${n} project${n === 1 ? '' : 's'}` : 'All projects'; });
 	$('#tokens').addEventListener('click', async (e) => {
 		const btn = e.target.closest('[data-token]');
 		if (!btn || !await ask({ title: 'Revoke this token?', text: 'Agents using it stop working.', ok: 'Revoke', danger: true })) return;
@@ -1054,8 +1059,14 @@ function teamsRender() {
 	</div>`).join('') || '<p class="dim">You are not in any team yet.</p>';
 }
 
+function tokProjects() {
+	$('.tok-list').innerHTML = KB.projects.filter((p) => p.role).map((p) => `<label><input type="checkbox" value="${p.id}">${esc(p.path)}</label>`).join('') || '<p class="dim">No projects yet.</p>';
+	$('.tok-proj summary').textContent = 'All projects';
+}
+
 function tokensRender(tokens) {
-	$('#tokens').innerHTML = tokens.map((t) => `<div class="row-item"><b>${esc(t.name)}</b>${t.read_only ? '<small class="pill">read-only</small>' : ''}<span class="dim">created ${new Date(t.created).toLocaleDateString()} · ${t.used ? `last used ${new Date(t.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-token="${t.id}">Revoke</button></div>`).join('') || '<p class="dim">No tokens yet.</p>';
+	const ROLE = { viewer: 'read-only', editor: 'editor', manager: 'manager' };
+	$('#tokens').innerHTML = tokens.map((t) => `<div class="row-item"><b>${esc(t.name)}</b>${ROLE[t.role] ? `<small class="pill">${ROLE[t.role]}</small>` : ''}${t.projects.length ? `<small class="pill off" title="${esc(t.projects.join(', '))}">${t.projects.length === 1 ? esc(t.projects[0]) : `${t.projects.length} projects`}</small>` : ''}<span class="dim">created ${new Date(t.created).toLocaleDateString()} · ${t.used ? `last used ${new Date(t.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-token="${t.id}">Revoke</button></div>`).join('') || '<p class="dim">No tokens yet.</p>';
 }
 
 async function trashLoad() {

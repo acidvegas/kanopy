@@ -434,9 +434,10 @@ def init(target: str = None):
 		if not db.postgres:
 			db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(database.schema(SCHEMA, db.postgres))
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tasks', 'repeat_day', 'INTEGER'), ('users', 'ntfy_url', "TEXT NOT NULL DEFAULT ''"), ('users', 'ntfy_token', "TEXT NOT NULL DEFAULT ''"), ('users', 'notify_remind', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_digest', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_agent', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'timezone', "TEXT NOT NULL DEFAULT ''"), ('users', 'timezone_auto', "TEXT NOT NULL DEFAULT ''"), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tasks', 'repeat_day', 'INTEGER'), ('tokens', 'role', "TEXT NOT NULL DEFAULT 'owner'"), ('tokens', 'projects', "TEXT NOT NULL DEFAULT ''"), ('users', 'ntfy_url', "TEXT NOT NULL DEFAULT ''"), ('users', 'ntfy_token', "TEXT NOT NULL DEFAULT ''"), ('users', 'notify_remind', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_digest', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_agent', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'timezone', "TEXT NOT NULL DEFAULT ''"), ('users', 'timezone_auto', "TEXT NOT NULL DEFAULT ''"), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
 			if column not in database.columns(db, table):
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
+		db.execute("UPDATE tokens SET role = 'viewer' WHERE read_only = 1 AND role = 'owner'") # read-only tokens from before per-token roles
 		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's
 			db.execute('PRAGMA foreign_keys = OFF')
 			db.executescript('''
@@ -653,19 +654,22 @@ def levels(db: sqlite3.Connection, user: dict = None) -> dict:
 
 	rows   = db.execute('SELECT id, parent_id, owner_id FROM projects').fetchall()
 	parent = {row['id']: row['parent_id'] for row in rows}
-	direct = {row['id']: OWN for row in rows if row['owner_id'] == user['id']}
+	direct = {row['id']: OWN for row in rows if row['owner_id'] == user['id'] or user.get('token_admin')} # an admin's limited token starts from everything
 
 	for row in db.execute('SELECT project_id, role FROM shares WHERE user_id = ? OR team_id IN (SELECT team_id FROM team_members WHERE user_id = ?)', (user['id'], user['id'])):
 		direct[row['project_id']] = max(direct.get(row['project_id'], 0), ROLES[row['role']])
 
-	out = {}
+	scope = user.get('token_projects') # a limited API token reaches only these projects and what is under them
+	cap   = user.get('token_level', OWN)
+	out   = {}
 	for pid in parent:
-		level, node = 0, pid
+		level, node, inside = 0, pid, not scope
 		while node:
-			level = max(level, direct.get(node, 0))
-			node  = parent[node]
-		if level:
-			out[pid] = level
+			level  = max(level, direct.get(node, 0))
+			inside = inside or node in scope
+			node   = parent[node]
+		if level and inside:
+			out[pid] = min(level, cap)
 
 	return out
 
@@ -733,6 +737,15 @@ def need_admin():
 
 	if user is not None and not user['is_admin']:
 		raise PermissionError('admin only')
+
+
+def need_root():
+	'''Raise PermissionError when a limited API token tries to make a top-level project, which would sit outside its projects.'''
+
+	user = ACTOR.get()
+
+	if user and 'token_level' in user:
+		raise PermissionError('this API token is limited to certain projects and cannot make top-level ones')
 
 
 def need_task(db: sqlite3.Connection, task_id: int, level: int) -> sqlite3.Row:
@@ -918,6 +931,8 @@ def project_order(parent_id: int, ids: list):
 				ancestor = db.execute('SELECT parent_id FROM projects WHERE id = ?', (ancestor,)).fetchone()['parent_id']
 			if row['parent_id'] != parent_id:
 				need_move(db, pid, parent_id)
+				if not parent_id:
+					need_root()
 			if row['parent_id'] != parent_id and db.execute('SELECT 1 FROM projects WHERE title = ? AND parent_id IS ? AND id != ?' + ('' if parent_id else ' AND owner_id IS ?'), (row['title'], parent_id, pid) + (() if parent_id else (row['owner_id'],))).fetchone(): # top-level names are unique per owner
 				raise ValueError(f'a project named {row["title"]} already exists there')
 			db.execute('UPDATE projects SET parent_id = ?, position = ? WHERE id = ?', (parent_id, pos, pid))
@@ -950,8 +965,8 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 			parent = None
 			for part in parts[:-1]:
 				row = db.execute('SELECT id FROM projects WHERE title = ? AND parent_id = ?', (part, parent)).fetchone() if parent else top_project(db, part)
-				if not row and parent:
-					need(db, parent, MANAGE)
+				if not row:
+					need(db, parent, MANAGE) if parent else need_root()
 				parent = row['id'] if row else db.execute('INSERT INTO projects (title, parent_id, color, position, owner_id) VALUES (?, ?, ?, ?, ?)', (part, parent, pick_color(db, parent), next_position(db, parent), owner)).lastrowid
 
 			if parent:
@@ -971,13 +986,11 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 						raise ValueError('cannot move a project into itself')
 					ancestor = db.execute('SELECT parent_id FROM projects WHERE id = ?', (ancestor,)).fetchone()['parent_id']
 				if parent != db.execute('SELECT parent_id FROM projects WHERE id = ?', (project_id,)).fetchone()['parent_id']:
-					if parent:
-						need(db, parent, MANAGE)
+					need(db, parent, MANAGE) if parent else need_root()
 					need_move(db, project_id, parent)
 				db.execute('UPDATE projects SET title = ?, parent_id = ? WHERE id = ?', (parts[-1], parent, project_id))
 			else:
-				if parent:
-					need(db, parent, MANAGE)
+				need(db, parent, MANAGE) if parent else need_root()
 				project_id = db.execute('INSERT INTO projects (title, parent_id, color, position, owner_id) VALUES (?, ?, ?, ?, ?)', (parts[-1], parent, pick_color(db, parent), next_position(db, parent), owner)).lastrowid
 		elif not project_id:
 			raise ValueError('path is required')
