@@ -876,6 +876,27 @@ class TestTrash(Base):
 		self.assertEqual(kanban.trash_restore(entry['id'])['links'], [])
 
 
+	def test_links_to_reused_ids_dropped(self):
+		'''A link whose task id was reused by a newer task (SQLite reuses ids) is not restored, nor one that would point at itself.'''
+
+		a, b = self.task(title='a'), self.task(title='b')
+		kanban.link_add(a['id'], 'blocked', b['id'])
+		kanban.task_delete(b['id'])
+		c = self.task(title='c')
+		with kanban.connect() as db:
+			db.execute("UPDATE tasks SET created = '2000-01-01T00:00:00+00:00' WHERE id = ?", (c['id'],)) # tell it apart from b within the same second
+		kanban.task_delete(a['id'])
+		entry = next(e for e in kanban.trash_list() if e['task_id'] == a['id'])
+		self.assertEqual(kanban.trash_restore(entry['id'])['links'], [])
+		x, y = self.task(title='x'), self.task(title='y')
+		kanban.link_add(x['id'], 'blocked', y['id'])
+		kanban.task_delete(x['id'])
+		kanban.task_delete(y['id'])
+		self.task(title='z') # takes x's old id, so x comes back under y's
+		restored = kanban.trash_restore(next(e for e in kanban.trash_list() if e['task_id'] == x['id'])['id'])
+		self.assertEqual(restored['links'], [])
+
+
 	def test_project_gone(self):
 		'''A task whose project was deleted cannot be restored.'''
 
