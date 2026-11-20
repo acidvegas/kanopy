@@ -687,6 +687,10 @@ class TestRepeat(Base):
 			kanban.repeat_dates('2026-01-01', '2026-06-01')
 		with self.assertRaises(ValueError):
 			kanban.repeat_dates('bad', '2026-01-01')
+		with self.assertRaises(ValueError):
+			kanban.repeat_dates('9999-12-01', '9999-12-31') # far-off windows are refused rather than computed
+		later = date.today() + timedelta(days=4 * 365)
+		self.assertEqual(len(kanban.repeat_dates(later.isoformat(), (later + timedelta(days=2)).isoformat())[t['id']]), 3)
 
 
 class TestSearch(Base):
