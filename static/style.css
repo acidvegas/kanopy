@@ -144,6 +144,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 
 #kb-filter { width: 100%; padding: .5rem .75rem; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); outline: none; }
 #kb-filter:focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+#kb-filter:not(:placeholder-shown) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, var(--raised)); } /* a filter is on */
 #sidebar .credit { margin: -.35rem -.75rem -1rem; padding: .35rem .75rem; border-top: 1px solid var(--line); display: flex; justify-content: center; }
 #sidebar .credit a { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted); font-size: .72rem; text-decoration: none; }
 #sidebar .credit a:hover { color: var(--text); }
@@ -153,6 +154,7 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 .item .count { font-size: .72rem; font-weight: 600; color: var(--muted); background: var(--raised); border: 1px solid var(--line); border-radius: 999px; padding: 0 .45rem; }
 .item.active .count { color: var(--accent); }
 .chev-btn, .chev-pad { width: 16px; height: 16px; flex: none; display: grid; place-items: center; }
+.dot.none { background: transparent; box-shadow: none; border: 1.5px solid var(--muted); } /* a project with no colour keeps the row lined up */
 .chev-btn svg { transition: transform .15s; }
 .item.open .chev-btn svg { transform: rotate(90deg); }
 .link-btn { background: none; border: none; color: var(--muted); font-size: .8rem; padding: .4rem .5rem; text-align: left; width: 100%; }
@@ -320,6 +322,8 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 .lbl-row .chip { font-size: .8rem; padding: .15rem .55rem; }
 .lbl-row .swatch { width: 20px; height: 20px; flex: none; }
 .lbl-count { font-size: .78rem; color: var(--muted); text-decoration: none; white-space: nowrap; }
+.lbl-name { display: contents; }
+@media (max-width: 800px) { .lbl-name { display: flex; flex-direction: column; align-items: flex-start; gap: .15rem; min-width: 0; } } /* the count goes under the name so long names fit beside the buttons */
 .lbl-count:hover { color: var(--accent); }
 .lbl-row .spacer { flex: 1; }
 .lbl-row .icon.small { padding: .2rem; background: transparent; border-color: transparent; color: var(--muted); }
@@ -520,6 +524,7 @@ p.small code { font-family: var(--mono); font-size: .78rem; background: var(--co
 .tp-head .proj { display: inline-flex; align-items: center; gap: .35rem; color: var(--muted); font-size: .85rem; text-decoration: none; }
 .tp-head .proj:hover { color: var(--accent); }
 .tp-head .proj .dot { width: 8px; height: 8px; box-shadow: none; }
+.tp-head .st { white-space: nowrap; }
 .tp-head .st { margin-left: 0; }
 .tp-head .pos { font-size: .78rem; }
 .icon.btn { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 8px; border: 1px solid var(--line); background: var(--raised); color: var(--text); text-decoration: none; }
@@ -621,6 +626,7 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .row-item { display: flex; align-items: center; gap: .6rem; padding: .5rem .2rem; border-bottom: 1px solid var(--line); font-size: .86rem; flex-wrap: wrap; }
 .row-item:last-child { border-bottom: none; }
 .row-item .link-btn { width: auto; }
+.row-acts { display: inline-flex; gap: .6rem; white-space: nowrap; } /* a row's buttons wrap together */
 .link-btn.danger { color: var(--danger); }
 .secret { display: flex; flex-direction: column; gap: .45rem; padding: .8rem; border: 1px solid color-mix(in srgb, var(--ok) 40%, var(--line)); background: color-mix(in srgb, var(--ok) 7%, var(--bg)); border-radius: 10px; }
 .secret p { margin: 0; font-size: .84rem; }
