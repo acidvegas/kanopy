@@ -116,7 +116,7 @@ def activity(project_id: int, before: int = 0, limit: int = 100) -> list:
 		need(db, project_id, VIEW)
 		lv     = levels(db)
 		scope  = [pid for pid in subtree(db, project_id) if lv is None or lv.get(pid)]
-		return [dict(r) for r in db.execute(f'SELECT e.id, e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) AND (? = 0 OR e.id < ?) ORDER BY e.id DESC LIMIT ?', (*scope, before, before, limit))]
+		return mask_moves(db, [dict(r) for r in db.execute(f'SELECT e.id, e.task_id, t.title, e.at, e.actor, e.agent, e.field, e.old, e.new FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({",".join("?" * len(scope))}) AND (? = 0 OR e.id < ?) ORDER BY e.id DESC LIMIT ?', (*scope, before, before, limit))])
 
 
 def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = True):
@@ -654,6 +654,29 @@ def marks(values) -> str:
 	'''
 
 	return ', '.join('?' * len(values))
+
+
+def mask_moves(db: sqlite3.Connection, events: list) -> list:
+	'''
+	Hide the paths of projects the signed-in user cannot see in "moved" history events, so a task's history never names someone's private project.
+
+	:param db: Open database connection
+	:param events: History event dicts with field, old and new
+	'''
+
+	lv = levels(db)
+
+	if lv is None:
+		return events
+
+	names = paths(db)
+	seen  = {names[pid] for pid, level in lv.items() if level}
+
+	for e in events:
+		if e['field'] == 'project':
+			e['old'], e['new'] = (value if value is None or value in seen else 'a private project' for value in (e['old'], e['new']))
+
+	return events
 
 
 def me() -> int:
@@ -1357,7 +1380,7 @@ def task(task_id: int) -> dict:
 		data['attachments'] = [dict(r) for r in db.execute('SELECT id, name, mime, size, created FROM attachments WHERE task_id = ? ORDER BY id', (task_id,))]
 		data['links']       = [{k: r[k] for k in ('kind', 'id', 'title', 'status')} for r in db.execute('SELECT k.kind, t.id, t.title, t.status, t.project_id FROM links k JOIN tasks t ON t.id = k.other_id WHERE k.task_id = ? ORDER BY k.kind, t.id', (task_id,)) if lv is None or lv.get(r['project_id'])] # hide tasks the user cannot see
 		data['comments']    = [dict(r) for r in db.execute('SELECT id, author, body, created FROM comments WHERE task_id = ? ORDER BY id', (task_id,))]
-		data['history']     = [dict(r) for r in db.execute('SELECT id, at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id DESC', (task_id,))]
+		data['history']     = mask_moves(db, [dict(r) for r in db.execute('SELECT id, at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id DESC', (task_id,))])
 
 	return data
 
