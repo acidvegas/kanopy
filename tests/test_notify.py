@@ -18,44 +18,49 @@ from .base import Base
 
 
 class TestSettings(Base):
-	'''Notification settings.'''
+	'''Board notification times.'''
 
 	def test_defaults_and_save(self):
-		'''Unset keys fall back to defaults; unknown keys are ignored.'''
+		'''Unset keys fall back to defaults; unknown keys, including the old board-wide ntfy ones, are ignored.'''
 
 		self.assertEqual(notify.settings(), notify.DEFAULTS)
-		notify.save({'ntfy_topic': ' board ', 'timezone': 'America/New_York', 'bogus': 'x'})
+		notify.save({'timezone': 'America/New_York', 'due_time': '08:30', 'ntfy_topic': 'board', 'bogus': 'x'})
 		conf = notify.settings()
-		self.assertEqual((conf['ntfy_topic'], conf['timezone']), ('board', 'America/New_York'))
+		self.assertEqual((conf['timezone'], conf['due_time']), ('America/New_York', '08:30'))
+		self.assertNotIn('ntfy_topic', kanban.setting_values())
 		self.assertNotIn('bogus', kanban.setting_values())
 
 
 	def test_validation(self):
 		'''Every setting is checked.'''
 
-		for bad in ({'notify_due': 'yes'}, {'due_time': '25:00'}, {'digest_time': '9am'}, {'timezone': 'Mars/Base'}, {'archive_days': '-1'}, {'archive_days': '9999'}, {'ntfy_url': 'ftp://x'}):
+		for bad in ({'due_time': '25:00'}, {'digest_time': '9am'}, {'timezone': 'Mars/Base'}, {'archive_days': '-1'}, {'archive_days': '9999'}):
 			with self.assertRaises(ValueError, msg=bad):
 				notify.save(bad)
 
 
-	def test_token_kept_and_cleared(self):
-		'''An empty token keeps the saved one; clear_token removes it.'''
+	def test_board_ntfy_moves_to_first_admin(self):
+		'''An old board-wide ntfy setup moves into the first admin's own account on start, and the board keys are dropped.'''
 
-		notify.save({'ntfy_token': 'tk_1'})
-		notify.save({'ntfy_token': ''})
-		self.assertEqual(notify.settings()['ntfy_token'], 'tk_1')
-		notify.save({'clear_token': True})
-		self.assertEqual(notify.settings()['ntfy_token'], '')
+		root = self.user('root', admin=True)
+		kanban.settings_save({'ntfy_url': 'https://push.example', 'ntfy_topic': 'BRAIN', 'ntfy_token': 'tk_1', 'notify_agent_done': '1'})
+		kanban.init()
+		with kanban.connect() as db:
+			row = db.execute('SELECT ntfy_url, ntfy_topic, ntfy_token FROM users WHERE id = ?', (root['id'],)).fetchone()
+		self.assertEqual(tuple(row), ('https://push.example', 'BRAIN', 'tk_1'))
+		self.assertFalse({'ntfy_url', 'ntfy_topic', 'ntfy_token', 'notify_agent_done'} & set(kanban.setting_values()))
 
 
 class TestPushes(Base):
-	'''Scheduled pushes.'''
+	'''Scheduled pushes, each to a person's own topic at their own local time.'''
 
 	def setUp(self):
-		'''A board topic in UTC with every push due from midnight.'''
+		'''Me (admin, UTC) with a topic; due and digest pushes due from midnight.'''
 
 		super().setUp()
-		notify.save({'ntfy_topic': 'board', 'timezone': 'UTC', 'due_time': '00:00', 'digest_time': '00:00'})
+		notify.save({'due_time': '00:00', 'digest_time': '00:00'})
+		self.me  = self.user('me', admin=True)
+		accounts.user_update(self.me, {'ntfy_topic': 'my-topic', 'timezone': 'UTC'})
 		self.now = datetime.now(timezone.utc)
 
 
@@ -65,28 +70,80 @@ class TestPushes(Base):
 		return [p['title'] for p in self.pushes]
 
 
-	def test_reminder_due_and_digest_once(self):
-		'''Reminders, due-today and the digest each go out once.'''
+	def mine(self, title='task', **fields) -> dict:
+		'''A task assigned to me.'''
 
-		r = self.task(title='remind', remind_at=self.now.strftime('%Y-%m-%dT%H:%M'))
-		d = self.task(title='due', due=self.now.strftime('%Y-%m-%d'))
-		self.task(title='late', due='2000-01-01')
-		self.task(title='ok', due='2000-01-01', status='done')
+		return self.task(title=title, assignees=['me'], **fields)
+
+
+	def test_reminder_due_and_digest_once(self):
+		'''Reminders, due-today and the digest each go out once, only for tasks assigned to you.'''
+
+		r = self.mine('remind', remind_at=self.now.strftime('%Y-%m-%dT%H:%M'))
+		d = self.mine('due', due=self.now.strftime('%Y-%m-%d'))
+		self.mine('late', due='2000-01-01')
+		self.mine('ok', due='2000-01-01', status='done')
+		self.task(title='nobody', due=self.now.strftime('%Y-%m-%d')) # unassigned: no one is pushed
 		notify.check()
 		notify.check()
 		self.assertEqual(sorted(self.titles()), sorted([f'Reminder #{r["id"]}', f'Due today #{d["id"]}', '1 overdue']))
+		self.assertEqual({p['topic'] for p in self.pushes}, {'my-topic'})
+
+
+	def test_switches(self):
+		'''Each push type has its own switch.'''
+
+		self.mine('remind', remind_at=self.now.strftime('%Y-%m-%dT%H:%M'))
+		self.mine('due', due=self.now.strftime('%Y-%m-%d'))
+		self.mine('late', due='2000-01-01')
+		accounts.user_update(self.me, {'notify_remind': False, 'notify_due': False, 'notify_digest': False})
+		notify.check()
+		self.assertEqual(self.titles(), [])
+		accounts.user_update(self.me, {'notify_digest': True})
+		notify.check()
+		self.assertEqual(self.titles(), ['1 overdue'])
+
+
+	def test_no_topic_no_pushes(self):
+		'''Someone with no ntfy topic gets no pushes.'''
+
+		accounts.user_update(self.me, {'ntfy_topic': ''})
+		self.mine('due', due=self.now.strftime('%Y-%m-%d'))
+		notify.check()
+		self.assertEqual(self.titles(), [])
+
+
+	def test_own_timezone(self):
+		'''A reminder fires at the right moment in each person's timezone: picked, else the one their browser reported.'''
+
+		tokyo = datetime.now(timezone.utc).astimezone(__import__('zoneinfo').ZoneInfo('Asia/Tokyo')).strftime('%Y-%m-%dT%H:%M')
+		accounts.user_update(self.me, {'timezone': '', 'timezone_auto': 'Asia/Tokyo'})
+		other = self.user('ny', admin=True)
+		accounts.user_update(other, {'ntfy_topic': 'ny-topic', 'timezone': 'America/New_York', 'timezone_auto': 'Asia/Tokyo'})
+		t = self.task(title='call', remind_at=tokyo, assignees=['me', 'ny'])
+		notify.check()
+		self.assertEqual([(p['title'], p['topic']) for p in self.pushes], [(f'Reminder #{t["id"]}', 'my-topic')]) # 9am Tokyo is not 9am in New York
+
+
+	def test_old_reminders_skipped(self):
+		'''Reminders more than a day old and in the future are not sent.'''
+
+		self.mine(remind_at=(self.now - timedelta(days=2)).strftime('%Y-%m-%dT%H:%M'))
+		self.mine(remind_at=(self.now + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M'))
+		notify.check()
+		self.assertEqual(self.titles(), [])
 
 
 	def test_failed_push_does_not_block_others(self):
 		'''A push that fails is skipped for this pass and retried later, and the pushes after it still go out.'''
 
-		a = self.task(title='a', due=self.now.strftime('%Y-%m-%d'))
-		b = self.task(title='b', due=self.now.strftime('%Y-%m-%d'))
+		a = self.mine('a', due=self.now.strftime('%Y-%m-%d'))
+		b = self.mine('b', due=self.now.strftime('%Y-%m-%d'))
 		record = notify.send
-		def flaky(title, *args, **kwargs):
+		def flaky(user, title, *args, **kwargs):
 			if title == f'Due today #{a["id"]}':
 				raise OSError('ntfy down')
-			record(title, *args, **kwargs)
+			record(user, title, *args, **kwargs)
 		notify.send = flaky
 		notify.check()
 		self.assertIn(f'Due today #{b["id"]}', self.titles())
@@ -95,92 +152,24 @@ class TestPushes(Base):
 		self.assertIn(f'Due today #{a["id"]}', self.titles())
 
 
-	def test_old_reminders_skipped(self):
-		'''Reminders more than a day old and in the future are not sent.'''
+	def test_access_and_server(self):
+		'''Pushes skip tasks the person can no longer see, and use their own server and token, or ntfy.sh with none.'''
 
-		self.task(remind_at=(self.now - timedelta(days=2)).strftime('%Y-%m-%dT%H:%M'))
-		self.task(remind_at=(self.now + timedelta(hours=2)).strftime('%Y-%m-%dT%H:%M'))
-		notify.check()
-		self.assertEqual(self.titles(), [])
-
-
-	def test_toggles_and_no_topic(self):
-		'''Turned-off kinds and a missing board topic send nothing board-wide.'''
-
-		self.task(due=self.now.strftime('%Y-%m-%d'))
-		notify.save({'notify_due': '0'})
-		notify.check()
-		self.assertEqual(self.titles(), [])
-		notify.save({'notify_due': '1', 'ntfy_topic': ''})
-		notify.check()
-		self.assertEqual(self.titles(), [])
-
-
-	def test_admin_personal_pushes(self):
-		'''Admins with their own topic get personal pushes too, unless that topic is the board topic.'''
-
-		root = self.user('root', admin=True)
-		accounts.user_update(root, {'ntfy_topic': 'root-topic'})
-		t = self.task('Root', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['root'])
-		notify.check()
-		self.assertIn((f'Due today #{t["id"]}', 'root-topic'), [(p['title'], p['topic']) for p in self.pushes])
-		self.pushes.clear()
-		accounts.user_update(root, {'ntfy_topic': 'board'})
-		with kanban.connect() as db:
-			db.execute('DELETE FROM sent')
-		notify.check()
-		self.assertEqual([p['topic'] for p in self.pushes if p['title'] == f'Due today #{t["id"]}'], [None]) # once, on the board topic
-
-
-	def test_personal_pushes(self):
-		'''Non-admins with a topic get pushes for tasks assigned to them that they can still see.'''
-
-		notify.save({'ntfy_topic': ''})
-		ann = self.user('ann')
-		accounts.user_update(ann, {'ntfy_topic': 'ann-topic'})
-		self.act(ann)
-		t = self.task('Ann', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['ann'])
-		self.act(None)
-		notify.check()
-		self.assertEqual([(p['title'], p['topic']) for p in self.pushes], [(f'Due today #{t["id"]}', 'ann-topic')])
-
-
-	def test_personal_server_and_token(self):
-		'''Personal pushes use the user's own ntfy server and token, or ntfy.sh with no token, never the board's.'''
-
-		notify.save({'ntfy_topic': 'board', 'ntfy_url': 'https://push.example.com', 'ntfy_token': 'board-secret'})
 		ann, bob = self.user('ann'), self.user('bob')
-		accounts.user_update(ann, {'ntfy_topic': 'ann-topic', 'ntfy_url': 'https://ntfy.ann.example/', 'ntfy_token': 'ann-secret'})
-		accounts.user_update(bob, {'ntfy_topic': 'bob-topic'})
+		accounts.user_update(ann, {'ntfy_topic': 'ann-topic', 'ntfy_url': 'https://ntfy.ann.example/', 'ntfy_token': 'ann-secret', 'timezone': 'UTC'})
+		accounts.user_update(bob, {'ntfy_topic': 'bob-topic', 'timezone': 'UTC'})
 		self.act(ann)
-		a = self.task('Ann', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['ann'])
+		self.task('Ann', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['ann'])
 		self.act(bob)
-		b = self.task('Bob', 'his', due=self.now.strftime('%Y-%m-%d'), assignees=['bob'])
+		self.task('Bob', 'his', due=self.now.strftime('%Y-%m-%d'), assignees=['bob'])
 		self.act(None)
 		notify.check()
-		got = {p['topic']: (p['server'], p['token']) for p in self.pushes if p['topic'] in ('ann-topic', 'bob-topic')}
-		self.assertEqual(got, {'ann-topic': ('https://ntfy.ann.example', 'ann-secret'), 'bob-topic': ('https://ntfy.sh', '')})
-		self.assertIn(f'Due today #{a["id"]}', [p['title'] for p in self.pushes if p['topic'] is None]) # the board topic still hears about everything
-		self.assertIn(f'Due today #{b["id"]}', [p['title'] for p in self.pushes if p['topic'] is None])
-
-
-	def test_personal_reminder_and_digest(self):
-		'''Assigned users also get their own reminder and digest.'''
-
-		notify.save({'ntfy_topic': ''})
-		ann = self.user('ann')
-		accounts.user_update(ann, {'ntfy_topic': 'ann-topic'})
-		self.act(ann)
-		t = self.task('Ann', 'mine', remind_at=self.now.strftime('%Y-%m-%dT%H:%M'), assignees=['ann'])
-		self.task('Ann', 'late', due='2000-01-01', assignees=['ann'])
-		self.act(None)
-		notify.check()
-		self.assertEqual(sorted(p['title'] for p in self.pushes), sorted([f'Reminder #{t["id"]}', '1 overdue']))
-		self.assertEqual({p['topic'] for p in self.pushes}, {'ann-topic'})
+		got = {p['topic']: (p['server'], p['token']) for p in self.pushes}
+		self.assertEqual(got, {'ann-topic': ('https://ntfy.ann.example', 'ann-secret'), 'bob-topic': ('', '')}) # send() turns a blank server into ntfy.sh
 
 
 	def test_send_request(self):
-		'''send posts JSON to the ntfy server with a browser User-Agent, the bearer token and a click link.'''
+		'''send posts JSON to the person's server with a browser User-Agent, their token and a click link; no server means ntfy.sh.'''
 
 		sent = []
 
@@ -196,19 +185,17 @@ class TestPushes(Base):
 		real, notify.send = notify.send, self.old[3]
 		old_open, notify.urllib.request.urlopen = notify.urllib.request.urlopen, urlopen
 		try:
-			notify.save({'ntfy_url': 'https://push.example/', 'ntfy_token': 'tk_9'})
-			notify.send('title', 'body', 42, tags='bell')
-			notify.send('mine', 'body', topic='ann-topic', server='https://ntfy.ann.example', token='')
+			notify.send({'ntfy_url': 'https://push.example/', 'ntfy_topic': 'mine', 'ntfy_token': 'tk_9'}, 'title', 'body', 42, tags='bell')
+			notify.send({'ntfy_url': '', 'ntfy_topic': 'theirs', 'ntfy_token': ''}, 'hi', 'body')
 		finally:
 			notify.send, notify.urllib.request.urlopen = real, old_open
 		req, timeout = sent[0]
 		body = json.loads(req.data)
 		self.assertEqual((req.full_url, req.get_method(), timeout), ('https://push.example', 'POST', 10))
 		self.assertEqual(req.get_header('User-agent'), notify.USER_AGENT)
-		own = sent[1][0]
-		self.assertEqual((own.full_url, own.get_header('Authorization'), json.loads(own.data)['topic']), ('https://ntfy.ann.example', None, 'ann-topic')) # a personal push never carries the board's token
 		self.assertEqual(req.get_header('Authorization'), 'Bearer tk_9')
-		self.assertEqual((body['topic'], body['title'], body['tags'], body['click']), ('board', 'title', ['bell'], f'{notify.BASE_URL}/#/task/42'))
+		self.assertEqual((body['topic'], body['title'], body['tags'], body['click']), ('mine', 'title', ['bell'], f'{notify.BASE_URL}/#/task/42'))
+		self.assertEqual((sent[1][0].full_url, sent[1][0].get_header('Authorization')), ('https://ntfy.sh', None))
 		self.assertNotIn('python', notify.USER_AGENT.lower())
 
 
@@ -248,22 +235,20 @@ class TestPushes(Base):
 			self.assertEqual([r[0] for r in db.execute('SELECT key FROM sent')], ['new'])
 
 
-	def test_agent_done_toggle(self):
-		'''The agent-done push follows its setting.'''
+	def test_agent_done(self):
+		'''The agent-done push goes to the person whose token the agent used, if they have a topic and the switch is on.'''
 
 		t = self.task()
+		self.act(self.me)
 		notify.agent_done(kanban.task(t['id']), 'claude')
-		notify.save({'notify_agent_done': '0'})
+		accounts.user_update(self.me, {'notify_agent': False})
 		notify.agent_done(kanban.task(t['id']), 'claude')
-		self.assertEqual(self.titles(), [f'claude finished #{t["id"]}'])
-
-
-	def test_agent_done_needs_topic(self):
-		'''With no board topic set, the agent-done push is skipped.'''
-
-		notify.save({'ntfy_topic': ''})
-		notify.agent_done(kanban.task(self.task()['id']), 'claude')
-		self.assertEqual(self.titles(), [])
+		self.assertEqual([(p['title'], p['topic']) for p in self.pushes], [(f'claude finished #{t["id"]}', 'my-topic')])
+		self.act(self.user('quiet', admin=True)) # no topic
+		notify.agent_done(kanban.task(t['id']), 'claude')
+		self.act(None)
+		notify.agent_done(kanban.task(t['id']), 'claude')
+		self.assertEqual(len(self.pushes), 1)
 
 
 class TestTaskEvents(Base):
@@ -338,7 +323,7 @@ class TestTaskEvents(Base):
 
 
 	def test_self_prefs_and_access(self):
-		'''No notifications for your own changes, turned-off kinds, or tasks you cannot see.'''
+		'''No notifications for your own changes; a turned-off kind still reaches the inbox but is not pushed.'''
 
 		self.act(self.bob)
 		before = kanban.task(self.t['id'])
@@ -348,7 +333,11 @@ class TestTaskEvents(Base):
 		accounts.user_update(self.bob, {'notify_mention': False})
 		before = kanban.task(self.t['id'])
 		notify.task_event(before, kanban.task_update(self.t['id'], {'description': '@bob'}))
-		self.assertEqual(self.inbox(), [])
+		self.assertEqual(self.inbox(), [f'ann mentioned you in #{self.t["id"]}'])
+		self.assertEqual(self.pushes, [])
+		self.pushes.clear()
+		with kanban.connect() as db:
+			db.execute('DELETE FROM notifications')
 		self.act(None)
 		notify.task_event(None, kanban.task(self.t['id']))
 		self.assertEqual(self.inbox(), [])

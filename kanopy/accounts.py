@@ -10,6 +10,8 @@ import urllib.parse
 
 from datetime import datetime, timedelta, timezone
 
+from zoneinfo import ZoneInfo
+
 from . import kanban
 from . import notify
 
@@ -17,8 +19,8 @@ from . import notify
 INVITE_DAYS  = 7
 SESSION_DAYS = 30
 USERNAME_RE  = re.compile(r'^[a-z0-9_-]{2,32}$')
-PREFS        = ('notify_mention', 'notify_assign', 'notify_activity', 'notify_due')
-PUBLIC       = 'id, username, is_admin, ntfy_topic, ntfy_url, notify_mention, notify_assign, notify_activity, notify_due, created, avatar_at'
+PREFS        = ('notify_remind', 'notify_due', 'notify_digest', 'notify_agent', 'notify_mention', 'notify_assign', 'notify_activity') # which pushes go to the user's ntfy topic
+PUBLIC       = 'id, username, is_admin, ntfy_topic, ntfy_url, notify_remind, notify_due, notify_digest, notify_agent, notify_mention, notify_assign, notify_activity, timezone, timezone_auto, created, avatar_at'
 AVATAR_MAX   = 512 * 1024 # bytes; the browser resizes before upload
 AVATAR_MIME  = ('image/png', 'image/jpeg', 'image/webp', 'image/gif')
 DUMMY_HASH   = 'scrypt$16384$8$1$' + '00' * 16 + '$' + '00' * 32 # checked against for unknown usernames so a miss costs as long as a hit
@@ -679,7 +681,7 @@ def user_update(user: dict, data: dict, session: str = None) -> dict:
 	Update the user's own profile: password (needs the current one), their own ntfy server, token and topic, notification toggles. A new password signs out every other session.
 
 	:param user: User dict
-	:param data: Any of: password + current_password, ntfy_url, ntfy_token (blank keeps it), clear_ntfy_token, ntfy_topic, notify_* flags
+	:param data: Any of: password + current_password, ntfy_url, ntfy_token (blank keeps it), clear_ntfy_token, ntfy_topic, timezone, timezone_auto, notify_* flags
 	:param session: Raw session token of the request, kept signed in after a password change
 	'''
 
@@ -705,6 +707,15 @@ def user_update(user: dict, data: dict, session: str = None) -> dict:
 			if topic and not re.fullmatch(r'[\w-]{1,64}', topic):
 				raise ValueError('ntfy topics are letters, digits, dashes and underscores')
 			db.execute('UPDATE users SET ntfy_topic = ? WHERE id = ?', (topic, user['id']))
+		for key in ('timezone', 'timezone_auto'): # the one they picked, and the one their browser reports
+			if key in data:
+				zone = (data[key] or '').strip()
+				if zone:
+					try:
+						ZoneInfo(zone)
+					except Exception:
+						raise ValueError(f'unknown timezone {zone}') from None
+				db.execute(f'UPDATE users SET {key} = ? WHERE id = ?', (zone, user['id']))
 		for key in PREFS:
 			if key in data:
 				db.execute(f'UPDATE users SET {key} = ? WHERE id = ?', (int(bool(data[key])), user['id']))

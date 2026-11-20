@@ -113,7 +113,7 @@ Labels use a `namespace:value` form. **Global** labels are shared and managed by
 
 ### Notifications
 
-Pushes go out through [ntfy](https://ntfy.sh) at reminder time, on the morning a task is due, as a daily overdue digest, and when an agent finishes a task. Mentions, assignments and activity on your tasks also land in an in-app inbox. Each kind can be turned on or off.
+Each person can get pushes through [ntfy](https://ntfy.sh) on their own server and topic: at reminder time, on the morning a task assigned to them is due, as a daily overdue digest, when an agent using their token finishes a task, and for mentions, assignments and activity on their tasks. Each kind has its own switch, and pushes follow each person's timezone *(picked, or taken from their browser)*. Mentions, assignments and activity always land in the in-app inbox too. Someone with no topic set just gets no pushes.
 
 ### Everything else
 
@@ -239,7 +239,7 @@ Settings live in `.env`:
 | `KANOPY_DATABASE`     | `data/kanban.db` | A `postgresql://user:pass@host/db` URL to use PostgreSQL instead of SQLite                |
 | `KANOPY_UPDATE_CHECK` | `1`              | `0` stops the server asking GitHub for the latest release *(shown to admins in Settings)* |
 
-Everything else *(ntfy, notification times, timezone, auto-archive)* is set on the Settings page. Data, attachments and backups live in `data/`.
+Everything else is set on the Settings page: each person's ntfy and timezone in their account, the board's push times and auto-archive by an admin. Data, attachments and backups live in `data/`.
 
 ### SQLite or PostgreSQL
 

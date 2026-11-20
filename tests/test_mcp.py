@@ -9,7 +9,6 @@ from datetime import datetime, timedelta, timezone
 from kanopy import accounts
 from kanopy import kanban
 from kanopy import mcp_server
-from kanopy import notify
 
 from .base import Base, ToolError
 
@@ -262,12 +261,15 @@ class TestTools(Base):
 	def test_done_warns_unticked_and_pushes(self):
 		'''Marking done with unticked items says so, and the agent-done push goes out.'''
 
-		notify.save({'ntfy_topic': 'board'})
+		me  = self.user('me', admin=True)
+		accounts.user_update(me, {'ntfy_topic': 'my-topic'})
+		self.act(me)
 		t   = self.task(description='- [x] a\n- [ ] b')
 		out = self.mcp('save_task', {'id': t['id'], 'status': 'done', 'comment': 'finished'})
 		self.assertIn('1/2 checklist items are unticked', out)
 		self.assertEqual(self.pushes[0]['title'], f'claude finished #{t["id"]}')
 		self.assertEqual(kanban.task(t['id'])['comments'][0]['author'], 'claude')
+		self.assertEqual(self.pushes[0]['topic'], 'my-topic')
 
 
 	def test_bulk_ids(self):

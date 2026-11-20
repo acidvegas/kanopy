@@ -43,7 +43,7 @@ TRASH_DAYS = 30 # days a deleted task can be restored
 TYPES    = {'bug': '#f87171', 'ci': None, 'cleanup': None, 'decommission': None, 'dependency': None, 'deploy': None, 'design': None, 'docs': None, 'event': '#22d3ee', 'feature': None, 'goal': '#22d3ee', 'habit': '#22d3ee', 'hardware': None, 'idea': None, 'learning': '#22d3ee', 'migration': None, 'note': '#22d3ee', 'performance': None, 'purchase': '#22d3ee', 'question': '#22d3ee', 'release': None, 'repo': None, 'research': None, 'review': None, 'security': '#f87171', 'support': None, 'test': None} # global type: labels a fresh install starts with; red flags trouble, cyan is life and thoughts
 
 SCHEMA = '''
-CREATE TABLE IF NOT EXISTS users          (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ntfy_topic TEXT NOT NULL DEFAULT '', notify_mention INTEGER NOT NULL DEFAULT 1, notify_assign INTEGER NOT NULL DEFAULT 1, notify_activity INTEGER NOT NULL DEFAULT 1, notify_due INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL, avatar BLOB, avatar_mime TEXT, avatar_at TEXT, ntfy_url TEXT NOT NULL DEFAULT '', ntfy_token TEXT NOT NULL DEFAULT '');
+CREATE TABLE IF NOT EXISTS users          (id INTEGER PRIMARY KEY, username TEXT NOT NULL UNIQUE, password TEXT NOT NULL, is_admin INTEGER NOT NULL DEFAULT 0, ntfy_topic TEXT NOT NULL DEFAULT '', notify_mention INTEGER NOT NULL DEFAULT 1, notify_assign INTEGER NOT NULL DEFAULT 1, notify_activity INTEGER NOT NULL DEFAULT 1, notify_due INTEGER NOT NULL DEFAULT 1, created TEXT NOT NULL, avatar BLOB, avatar_mime TEXT, avatar_at TEXT, ntfy_url TEXT NOT NULL DEFAULT '', ntfy_token TEXT NOT NULL DEFAULT '', notify_remind INTEGER NOT NULL DEFAULT 1, notify_digest INTEGER NOT NULL DEFAULT 1, notify_agent INTEGER NOT NULL DEFAULT 1, timezone TEXT NOT NULL DEFAULT '', timezone_auto TEXT NOT NULL DEFAULT '');
 CREATE TABLE IF NOT EXISTS projects (
 	id          INTEGER PRIMARY KEY,
 	parent_id   INTEGER REFERENCES projects(id),
@@ -411,7 +411,7 @@ def init(target: str = None):
 		if not db.postgres:
 			db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(database.schema(SCHEMA, db.postgres))
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tasks', 'repeat_day', 'INTEGER'), ('users', 'ntfy_url', "TEXT NOT NULL DEFAULT ''"), ('users', 'ntfy_token', "TEXT NOT NULL DEFAULT ''"), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tasks', 'repeat_day', 'INTEGER'), ('users', 'ntfy_url', "TEXT NOT NULL DEFAULT ''"), ('users', 'ntfy_token', "TEXT NOT NULL DEFAULT ''"), ('users', 'notify_remind', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_digest', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'notify_agent', 'INTEGER NOT NULL DEFAULT 1'), ('users', 'timezone', "TEXT NOT NULL DEFAULT ''"), ('users', 'timezone_auto', "TEXT NOT NULL DEFAULT ''"), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
 			if column not in database.columns(db, table):
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
 		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's
@@ -426,6 +426,10 @@ def init(target: str = None):
 			''')
 			db.execute('PRAGMA foreign_keys = ON')
 		db.execute('CREATE UNIQUE INDEX IF NOT EXISTS labels_name ON labels (name, COALESCE(owner_id, 0))')
+		board = dict(db.execute("SELECT key, value FROM settings WHERE key IN ('ntfy_url', 'ntfy_topic', 'ntfy_token')").fetchall())
+		if board.get('ntfy_topic'): # the old board-wide ntfy moves into the first admin's own account, the one who set it up
+			db.execute("UPDATE users SET ntfy_url = ?, ntfy_topic = ?, ntfy_token = ? WHERE id = (SELECT MIN(id) FROM users WHERE is_admin = 1) AND ntfy_topic = ''", (board.get('ntfy_url', ''), board['ntfy_topic'], board.get('ntfy_token', '')))
+		db.execute("DELETE FROM settings WHERE key IN ('ntfy_url', 'ntfy_topic', 'ntfy_token', 'notify_remind', 'notify_due', 'notify_digest', 'notify_agent_done')") # pushes are per person now
 		if not db.execute('SELECT 1 FROM projects').fetchone():
 			db.execute("INSERT INTO projects (title) VALUES ('Inbox')")
 			db.executemany('INSERT INTO labels (name, color) VALUES (?, ?)', [('type:' + t, c) for t, c in TYPES.items()])
