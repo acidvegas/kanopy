@@ -758,8 +758,9 @@ def json_body() -> dict:
 @app.errorhandler(PermissionError)
 @app.errorhandler(ValueError)
 @app.errorhandler(TypeError)
+@app.errorhandler(AttributeError)
 def error(exc: Exception) -> tuple:
-	'''Return lookup errors as 404, permission errors as 403 and validation errors (bad values or types) as 400.'''
+	'''Return lookup errors as 404, permission errors as 403 and validation errors (bad values or types, like a number where text belongs) as 400.'''
 
 	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 400
 

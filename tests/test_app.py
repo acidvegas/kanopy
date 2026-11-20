@@ -111,6 +111,8 @@ class TestAuthLayer(AppBase):
 		self.assertEqual((r.status_code, r.json['error']['code']), (400, -32600))
 		self.assertTrue(self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'P', 'title': 't', 'add_labels': [5]}}).json['result']['isError'])
 		self.assertTrue(self.rpc('tools/call', {'name': 'list_tasks', 'arguments': [1]}).json['result']['isError'])
+		self.assertEqual(self.client.patch('/api/me', json={'ntfy_topic': 5}).status_code, 400)
+		self.assertEqual(self.client.post('/api/tasks', json={'project_id': 1, 'title': 't', 'labels': [1]}).status_code, 400)
 
 
 	def test_login_cookie_and_rate_limit(self):
