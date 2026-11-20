@@ -47,6 +47,7 @@ TOOLS = [
 		'due'          : {**STR, 'description': 'overdue, today, week, any, none'},
 		'assignee'     : {**STR, 'description': 'username or me'},
 		'team'         : {**STR, 'description': 'projects shared with this team'},
+		'ready'        : {**BOOL, 'description': 'only todo tasks with no unfinished blockers'},
 		'changed'      : {**STR, 'description': 'since YYYY-MM-DD or Nd; newest first, any status'},
 		'limit'        : {**INT, 'description': 'default 50'}
 	}, []),
@@ -457,6 +458,11 @@ def list_tasks(args: dict) -> str:
 	if args.get('team'):
 		scope = team_projects(args['team'])
 		out   = [t for t in out if t['project_id'] in scope]
+
+	if args.get('ready'): # what an agent can start now
+		with kanban.connect() as db:
+			stuck = {row[0] for row in db.execute("SELECT l.task_id FROM links l JOIN tasks o ON o.id = l.other_id WHERE l.kind = 'blocked' AND o.status != 'done'")}
+		out = [t for t in out if t['status'] == 'todo' and t['id'] not in stuck]
 
 	if not out:
 		return 'no matching tasks'

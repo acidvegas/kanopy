@@ -344,6 +344,18 @@ class TestTools(Base):
 			with self.assertRaises(ToolError):
 				self.mcp('list_tasks', bad)
 
+	def test_list_tasks_ready(self):
+		'''ready lists todo tasks whose blockers are all done.'''
+
+		free, stuck, blocker = self.task('A', 'free'), self.task('A', 'stuck'), self.task('A', 'blocker')
+		self.task('A', 'busy', status='doing')
+		kanban.link_add(stuck['id'], 'blocked', blocker['id'])
+		ready = lambda: [l.split()[0] for l in self.mcp('list_tasks', {'ready': True}).splitlines() if l.startswith('#')]
+		self.assertEqual(sorted(ready()), sorted([f'#{free["id"]}', f'#{blocker["id"]}']))
+		kanban.task_update(blocker['id'], {'status': 'done'})
+		self.assertIn(f'#{stuck["id"]}', ready())
+
+
 	def test_list_tasks_team(self):
 		'''team= lists tasks on projects shared with that team and their sub-projects, for members only.'''
 
