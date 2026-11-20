@@ -1272,7 +1272,7 @@ function kbDrawer() {
 	el.setAttribute('aria-label', `Task #${t.id}: ${t.title}`);
 	if (!same && !el.contains(document.activeElement)) el.focus({ preventScroll: true }); // keyboard focus moves into a newly opened task
 	if (draft) el.querySelector('.comment-input').value = draft;
-	if (edit !== undefined && t.role >= 2) { kbAction('edit-desc'); el.querySelector('.desc-input').value = edit; }
+	if (edit !== undefined && t.role >= 2) { const base = KB.descBase; kbAction('edit-desc'); KB.descBase = base; el.querySelector('.desc-input').value = edit; } // a reopened edit keeps the text it started from, so a conflicting save still warns
 }
 
 function kbClose() {
