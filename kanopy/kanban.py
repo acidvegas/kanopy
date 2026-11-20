@@ -1473,7 +1473,7 @@ def trash(db: sqlite3.Connection, task_id: int):
 		'assignees'   : assignees_map(db, task_id).get(task_id, []),
 		'comments'    : rows('SELECT author, body, created FROM comments WHERE task_id = ? ORDER BY id'),
 		'attachments' : [dict(r, data=base64.b64encode(r['data']).decode()) for r in rows('SELECT name, mime, size, data, created FROM attachments WHERE task_id = ? ORDER BY id')],
-		'links'       : rows('SELECT kind, other_id FROM links WHERE task_id = ?'),
+		'links'       : rows('SELECT l.kind, l.other_id, t.created AS other_created FROM links l JOIN tasks t ON t.id = l.other_id WHERE l.task_id = ?'), # created tells the original apart from a later task that reused its id
 		'events'      : rows('SELECT at, actor, agent, field, old, new FROM task_events WHERE task_id = ? ORDER BY id')
 	}
 
@@ -1507,7 +1507,7 @@ def trash_purge(days: int = TRASH_DAYS) -> int:
 
 def trash_restore(trash_id: int) -> dict:
 	'''
-	Bring a trashed task back into its project, under its old id when that is still free. Links come back only to tasks that still exist.
+	Bring a trashed task back into its project, under its old id when that is still free. Links come back only to the same tasks, if they still exist.
 
 	:param trash_id: Trash entry id
 	'''
@@ -1526,7 +1526,8 @@ def trash_restore(trash_id: int) -> dict:
 		db.executemany('INSERT INTO comments (task_id, author, body, created) VALUES (?, ?, ?, ?)', [(new, c['author'], c['body'], c['created']) for c in data['comments']])
 		db.executemany('INSERT INTO attachments (task_id, name, mime, size, data, created) VALUES (?, ?, ?, ?, ?, ?)', [(new, a['name'], a['mime'], a['size'], base64.b64decode(a['data']), a['created']) for a in data['attachments']])
 		for link in data['links']:
-			if db.execute('SELECT 1 FROM tasks WHERE id = ?', (link['other_id'],)).fetchone():
+			other = db.execute('SELECT created FROM tasks WHERE id = ?', (link['other_id'],)).fetchone()
+			if other and link['other_id'] != new and link.get('other_created', other['created']) == other['created']: # SQLite reuses ids, so skip a different task that took the old one
 				db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (new, link['kind'], link['other_id']))
 				db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (link['other_id'], INVERSE[link['kind']], new))
 		db.executemany('INSERT INTO task_events (task_id, at, actor, agent, field, old, new) VALUES (?, ?, ?, ?, ?, ?, ?)', [(new, e['at'], e['actor'], e['agent'], e['field'], e['old'], e['new']) for e in data['events']])
