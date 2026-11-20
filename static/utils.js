@@ -312,7 +312,8 @@ function kbBar() {
 	if (page) $('#crumb').textContent = page;
 	if (KB.view === 'activity') $('#crumb').insertAdjacentHTML('beforeend', '<span class="sep">/</span><span>Activity</span>');
 	document.title = `${page || (p ? p.title : 'All tasks')}${KB.view === 'activity' ? ' activity' : ''} · Kanopy`;
-	$('#kb-project-ops').hidden = !p || !!page || p.role < 3;
+	$('#kb-project-ops').hidden = !p || !!page || p.role < 1; // anyone who can see a project can export it
+	for (const id of ['#kb-share', '#kb-rename', '#kb-archive']) $(id).hidden = !p || p.role < 3;
 	$('#kb-delete').hidden      = !p || p.role < 4;
 	$('#nav-inbox').classList.toggle('active', KB.view === 'inbox');
 	$('#kb-new-task').hidden    = !!page || KB.view === 'activity';
@@ -1481,6 +1482,7 @@ function kbBind() {
 	$('#search-filters').addEventListener('submit', (e) => e.preventDefault());
 	$('#search-filters').addEventListener('reset', () => setTimeout(() => guard(searchRun)));
 	$('#settings-form').addEventListener('submit', (e) => { e.preventDefault(); guard(setSave); });
+	$('#export-all').onclick = () => { location.href = '/api/export'; };
 	$('#me-test').onclick = () => guard(async () => { await api('POST', '/api/me/test'); toast('Test push sent'); });
 	$('#kb-desc').addEventListener('click', (e) => {
 		const box = $('#kb-desc');
@@ -1535,6 +1537,7 @@ function kbBind() {
 		const path = await ask({ title: 'Rename / move project', value: p.path, ok: 'Save', path: true });
 		if (path && path !== p.path) await guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { path }); await kbLoad(); if (KB.task) await kbRefreshTask(KB.task.id); });
 	};
+	$('#kb-export').onclick = () => { location.href = `/api/export?project=${KB.project}`; };
 	$('#kb-archive').onclick = async () => {
 		const p = project(KB.project);
 		await guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { archived: !p.archived }); await kbLoad(); toast(p.archived ? 'Unarchived' : 'Archived'); });

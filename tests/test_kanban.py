@@ -420,6 +420,23 @@ class TestPermissions(Base):
 		self.sub = next(p['id'] for p in kanban.projects() if p['path'] == 'Ann/sub')
 
 
+	def test_export(self):
+		'''Export holds only what the user can see: a shared sub-project without its parent, its tasks with comments, and no links to hidden tasks.'''
+
+		hidden = self.task('Ann', 'parent task')
+		kanban.link_add(self.t['id'], 'blocked', hidden['id'])
+		kanban.comment_add(self.t['id'], 'ann', 'note')
+		accounts.share_add(self.sub, 'viewer', 'bob')
+		self.assertEqual(len(kanban.export()['tasks']), 2)
+		self.act(self.bob)
+		data = kanban.export()
+		self.assertEqual([p['path'] for p in data['projects']], ['Ann/sub'])
+		self.assertEqual([(t['title'], t['comments'][0]['body'], t['links']) for t in data['tasks']], [('secret', 'note', [])])
+		self.assertEqual(kanban.export(self.sub)['projects'][0]['id'], self.sub)
+		with self.assertRaises(PermissionError):
+			kanban.export(self.pid)
+
+
 	def test_no_access(self):
 		'''A user sees nothing of a project not shared with them.'''
 

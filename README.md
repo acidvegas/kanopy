@@ -121,6 +121,7 @@ Each person can get pushes through [ntfy](https://ntfy.sh) on their own server a
 - Works on a phone, including drag and drop
 - Markdown editor with a toolbar, preview, shortcuts and `@mention` autocomplete
 - Daily database backups to `data/backups`, newest 3 kept
+- Export a project, or everything you can see, as one JSON file *(project menu, or Settings)*
 - `GET /health` answers `ok` while the database responds *(no sign-in; the Docker image uses it as its health check)*
 
 ## Accounts and sharing

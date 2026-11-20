@@ -150,6 +150,17 @@ class TestAuthLayer(AppBase):
 			kanban.connect = real
 
 
+	def test_export_download(self):
+		'''/api/export downloads JSON named after the project, or everything as kanopy-export.json.'''
+
+		pid = self.client.post('/api/projects', json={'path': 'Code/My App'}).json['id']
+		r   = self.client.get(f'/api/export?project={pid}')
+		self.assertEqual((r.status_code, r.headers['Content-Disposition']), (200, 'attachment; filename="kanopy-code-my-app.json"'))
+		self.assertEqual([p['path'] for p in r.json['projects']], ['Code/My App'])
+		self.assertIn('kanopy-export.json', self.client.get('/api/export').headers['Content-Disposition'])
+		self.assertEqual(app.app.test_client().get('/api/export').status_code, 401)
+
+
 	def test_expired_fail_entries_dropped(self):
 		'''Addresses whose failed sign-ins have all expired are forgotten on the next sign-in.'''
 
