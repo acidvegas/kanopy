@@ -583,7 +583,7 @@ def link_add(task_id: int, kind: str, other_id: int) -> dict:
 
 	with connect() as db:
 		need_task(db, task_id, EDIT)
-		need_task(db, other_id, VIEW)
+		need_task(db, other_id, EDIT) # the link and its history land on the other task too
 		if db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (task_id, kind, other_id)).rowcount:
 			record(db, task_id, 'link', None, f'{kind}:{other_id}')
 		if db.execute('INSERT OR IGNORE INTO links VALUES (?, ?, ?)', (other_id, INVERSE[kind], task_id)).rowcount:
@@ -604,6 +604,7 @@ def link_remove(task_id: int, kind: str, other_id: int) -> dict:
 
 	with connect() as db:
 		need_task(db, task_id, EDIT)
+		need_task(db, other_id, EDIT)
 		if db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (task_id, kind, other_id)).rowcount:
 			record(db, task_id, 'link', f'{kind}:{other_id}', None)
 		if db.execute('DELETE FROM links WHERE task_id = ? AND kind = ? AND other_id = ?', (other_id, INVERSE.get(kind, kind), task_id)).rowcount:

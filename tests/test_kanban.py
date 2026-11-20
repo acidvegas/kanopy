@@ -362,6 +362,24 @@ class TestLinks(Base):
 		self.assertEqual(kanban.task(theirs['id'])['links'], [])
 
 
+	def test_links_need_edit_on_both(self):
+		'''A viewer cannot add or remove links on a task they can only see.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		seen = self.task('Ann', 'seen')
+		accounts.share_add(seen['project_id'], 'viewer', 'bob')
+		self.act(bob)
+		mine = self.task('Bob', 'mine')
+		with self.assertRaises(PermissionError):
+			kanban.link_add(mine['id'], 'blocking', seen['id'])
+		self.act(None)
+		kanban.link_add(mine['id'], 'blocking', seen['id'])
+		self.act(bob)
+		with self.assertRaises(PermissionError):
+			kanban.link_remove(mine['id'], 'blocking', seen['id'])
+
+
 class TestPermissions(Base):
 	'''Ownership, shares, teams and roles.'''
 
