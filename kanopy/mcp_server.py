@@ -3,6 +3,7 @@
 # kanopy/mcp_server.py
 
 import re
+import threading
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -21,6 +22,7 @@ MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
 SEEN         = {} # (user id, agent, session, task id) -> hash of the description that agent last read or wrote, for the stale-write check
 SEEN_MAX     = 50_000 # past this the oldest reads are forgotten (that agent just has to read the task again)
+SAVE_LOCK    = threading.Lock() # serializes save_task's read-check-write on existing tasks
 REL_NAMES    = (('blocking', 'blocks'), ('blocked', 'blocked-by'), ('parenttask', 'parent'), ('subtask', 'subtasks'), ('related', 'related'), ('precedes', 'precedes'), ('follows', 'follows'), ('duplicateof', 'duplicate-of'), ('duplicates', 'duplicates'))
 
 STR  = {'type': 'string'}
@@ -140,6 +142,8 @@ def call(name: str, args: dict, agent: str) -> str:
 		return save_task(args, agent)
 
 	if name == 'comment':
+		if not str(args.get('text') or '').strip():
+			raise ValueError('text is empty')
 		extras(int(args['id']), {'comment': args.get('text', '')}, agent)
 		return f'commented on #{args["id"]}'
 
@@ -411,16 +415,18 @@ def line(t: dict, rels: dict, project: bool = True) -> str:
 
 def links_map(db, ids: list) -> dict:
 	'''
-	Return task id -> {kind: [other ids]} for the links of the given tasks.
+	Return task id -> {kind: [other ids]} for the links of the given tasks, leaving out tasks the user cannot see.
 
 	:param db: Open database connection
 	:param ids: Task ids
 	'''
 
 	out = {}
+	lv  = kanban.levels(db)
 
-	for row in db.execute(f'SELECT task_id, kind, other_id FROM links WHERE task_id IN ({kanban.marks(ids)}) ORDER BY other_id', list(ids)) if ids else ():
-		out.setdefault(row['task_id'], {}).setdefault(row['kind'], []).append(row['other_id'])
+	for row in db.execute(f'SELECT k.task_id, k.kind, k.other_id, t.project_id FROM links k JOIN tasks t ON t.id = k.other_id WHERE k.task_id IN ({kanban.marks(ids)}) ORDER BY k.other_id', list(ids)) if ids else ():
+		if lv is None or lv.get(row['project_id']):
+			out.setdefault(row['task_id'], {}).setdefault(row['kind'], []).append(row['other_id'])
 
 	return out
 
@@ -621,7 +627,7 @@ def save_task(args: dict, agent: str) -> str:
 		for task_id in args['ids']:
 			try:
 				out.append(save_task({**args, 'id': task_id, 'ids': None}, agent))
-			except (LookupError, PermissionError, ValueError, TypeError) as exc:
+			except (LookupError, PermissionError, ValueError, TypeError, AttributeError) as exc:
 				out.append(f'#{task_id} error: {exc}')
 		return '\n'.join(out)
 
@@ -644,24 +650,25 @@ def save_task(args: dict, agent: str) -> str:
 	unassign = {n.strip().lower().lstrip('@') for n in args.get('unassign') or []}
 
 	if args.get('id'):
-		t = kanban.task(int(args['id']))
-		if args.get('status') == 'doing' and t['status'] == 'doing' and t['claimed_by'] and t['claimed_by'] != kanban.claimant():
-			if not args.get('take'):
-				raise ValueError(f'#{t["id"]} is already being worked on by {t["claimed_by"]} (last change {t["updated"][:16]}); pick another task, or ask the user before taking it over with take=true')
-			fields['claim'] = True
-		elif args.get('status') == 'doing' and t['status'] == 'doing' and not t['claimed_by']:
-			fields['claim'] = True
-		if 'description' in args and SEEN.get(seen_key(t['id'], agent)) != hash(t['description']): # never read (or read before a restart) counts as stale
-			raise ValueError(f'#{t["id"]} description changed since you last read it, or you have not read it; get_task it first and make your edit on that text')
-		if add or remove:
-			fields['labels'] = [l for l in t['labels'] if l not in remove] + add
-		if assign or unassign:
-			fields['assignees'] = [a for a in t['assignees'] if a not in unassign] + assign
-		if args.get('edit') or args.get('append'):
-			fields['description'] = edit_description(fields.get('description', t['description']), args.get('edit') or [], args.get('append'))
-		if args.get('check'):
-			fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
-		saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
+		with SAVE_LOCK: # the claim and stale-description checks and the write happen as one step, so two agents never both claim a task
+			t = kanban.task(int(args['id']))
+			if args.get('status') == 'doing' and t['status'] == 'doing' and t['claimed_by'] and t['claimed_by'] != kanban.claimant():
+				if not args.get('take'):
+					raise ValueError(f'#{t["id"]} is already being worked on by {t["claimed_by"]} (last change {t["updated"][:16]}); pick another task, or ask the user before taking it over with take=true')
+				fields['claim'] = True
+			elif args.get('status') == 'doing' and t['status'] == 'doing' and not t['claimed_by']:
+				fields['claim'] = True
+			if 'description' in args and SEEN.get(seen_key(t['id'], agent)) != hash(t['description']): # never read (or read before a restart) counts as stale
+				raise ValueError(f'#{t["id"]} description changed since you last read it, or you have not read it; get_task it first and make your edit on that text')
+			if add or remove:
+				fields['labels'] = [l for l in t['labels'] if l not in remove] + add
+			if assign or unassign:
+				fields['assignees'] = [a for a in t['assignees'] if a not in unassign] + assign
+			if args.get('edit') or args.get('append'):
+				fields['description'] = edit_description(fields.get('description', t['description']), args.get('edit') or [], args.get('append'))
+			if args.get('check'):
+				fields['description'] = check_item(fields.get('description', t['description']), str(args['check']), args.get('checked', True))
+			saved = with_project(fields, new_path, lambda: kanban.task_update(t['id'], fields))
 		seen(t['id'], agent, saved['description'])
 		notify.task_event(t, saved)
 		out = task_line(t['id'])

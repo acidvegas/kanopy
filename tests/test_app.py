@@ -114,6 +114,28 @@ class TestAuthLayer(AppBase):
 		self.assertTrue(self.rpc('tools/call', {'name': 'list_tasks', 'arguments': [1]}).json['result']['isError'])
 		self.assertEqual(self.client.patch('/api/me', json={'ntfy_topic': 5}).status_code, 400)
 		self.assertEqual(self.client.post('/api/tasks', json={'project_id': 1, 'title': 't', 'labels': [1]}).status_code, 400)
+		self.assertEqual(self.client.post('/api/tasks', json={'project_id': [1], 'title': 't'}).status_code, 400)
+		self.assertEqual(self.client.post('/api/tasks', json={'project_id': 1, 'title': 't', 'description': {'a': 1}}).status_code, 400)
+		self.assertEqual(self.client.get('/api/tasks/99999999999999999999').status_code, 400)
+		self.assertTrue(self.rpc('tools/call', {'name': 'get_task', 'arguments': {'ids': [10**30]}}).json['result']['isError'])
+		self.assertTrue(self.rpc('tools/call', {'name': 'comment', 'arguments': {'id': 424242, 'text': ' '}}).json['result']['isError'])
+		self.assertEqual(self.rpc('tools/call', {'name': 'save_task', 'arguments': {'ids': [1, 2], 'add_labels': [5]}}).json['result']['content'][0]['text'].count(' error: '), 2) # each id reports its own error
+
+
+	def test_duplicate_is_409(self):
+		'''A create that loses a race to the same name hits the unique rule and gets a 409, not a 500.'''
+
+		def insert(user, name): # no name check, as when another request inserted it between the check and the insert
+			with kanban.connect() as db:
+				db.execute('INSERT INTO teams (name, created) VALUES (?, ?)', (name, kanban.now()))
+
+		real, accounts.team_create = accounts.team_create, insert
+		try:
+			insert(None, 'crew')
+			r = self.client.post('/api/teams', json={'name': 'crew'})
+		finally:
+			accounts.team_create = real
+		self.assertEqual((r.status_code, r.json['error']), (409, 'that already exists'))
 
 
 	def test_expired_fail_entries_dropped(self):
@@ -261,6 +283,7 @@ class TestRoutes(AppBase):
 		self.assertIsNone(c.delete('/api/me/avatar').json['avatar_at'])
 		self.assertEqual(c.post(f'/api/users/{self.ann["id"]}/password', json={'password': 'resetpassword'}).json, {'ok': True})
 		self.assertIn('ann', [u['username'] for u in c.get('/api/users').json['users']])
+		self.assertEqual(set(c.get(f'/api/users/{self.ann["id"]}/footprint').json), {'projects', 'tasks', 'shared', 'tags'})
 		self.assertNotIn('ann', [u['username'] for u in c.delete(f'/api/users/{self.ann["id"]}').json['users']])
 		self.assertEqual(c.get('/api/notifications').json, {'notifications': [], 'unread': 0})
 		self.assertEqual(c.post('/api/notifications/read', json={}).json['unread'], 0)

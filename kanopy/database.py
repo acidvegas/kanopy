@@ -2,6 +2,7 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # kanopy/database.py
 
+import contextlib
 import queue
 import re
 import sqlite3
@@ -79,13 +80,17 @@ class Connection:
 		:param params: Positional parameters
 		'''
 
+		check(params)
+
 		if not self.postgres:
-			cur = self.raw.execute(sql, params)
+			with duplicates():
+				cur = self.raw.execute(sql, params)
 			return Cursor(cur, cur.lastrowid, self)
 
 		sql, returning = translate(sql)
 		cur            = self.raw.cursor()
-		cur.execute(sql, tuple(params) if params else None)
+		with duplicates():
+			cur.execute(sql, tuple(params) if params else None)
 		row  = cur.fetchone() if returning and cur.description else None # no row when ON CONFLICT DO NOTHING skipped the insert
 		last = row[0] if row else None
 
@@ -100,12 +105,18 @@ class Connection:
 		:param rows: Parameter tuples
 		'''
 
+		rows = list(rows)
+		for row in rows:
+			check(row)
+
 		if not self.postgres:
-			return Cursor(self.raw.executemany(sql, rows), None, self)
+			with duplicates():
+				return Cursor(self.raw.executemany(sql, rows), None, self)
 
 		sql, returning = translate(sql)
 		cur            = self.raw.cursor()
-		cur.executemany(re.sub(r' RETURNING id$', '', sql) if returning else sql, list(rows))
+		with duplicates():
+			cur.executemany(re.sub(r' RETURNING id$', '', sql) if returning else sql, rows)
 
 		return Cursor(cur, None, self)
 
@@ -235,6 +246,40 @@ def schema(script: str, postgres: bool) -> str:
 	script = re.sub(r'\bREAL\b', 'DOUBLE PRECISION', script)
 
 	return script
+
+
+class Duplicate(ValueError):
+	'''A write hit a unique rule, like two people creating the same name at once.'''
+
+
+@contextlib.contextmanager
+def duplicates():
+	'''Turn either backend's unique-constraint error into Duplicate.'''
+
+	try:
+		yield
+	except sqlite3.IntegrityError as exc:
+		if 'UNIQUE' not in str(exc):
+			raise
+		raise Duplicate('that already exists') from exc
+	except Exception as exc:
+		if type(exc).__name__ != 'UniqueViolation': # psycopg.errors.UniqueViolation, without importing psycopg for SQLite boards
+			raise
+		raise Duplicate('that already exists') from exc
+
+
+def check(params):
+	'''
+	Raise TypeError for a value no column holds (a list or object from request JSON) and ValueError for a whole number past 64 bits, so bad input is a 400 on both backends instead of a database error.
+
+	:param params: Positional parameters
+	'''
+
+	for value in params or ():
+		if isinstance(value, int) and not -2**63 <= value < 2**63:
+			raise ValueError('number out of range')
+		if value is not None and not isinstance(value, (str, int, float, bytes, memoryview)):
+			raise TypeError(f'expected text or a number, not {type(value).__name__}')
 
 
 def translate(sql: str) -> tuple:

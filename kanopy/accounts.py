@@ -635,12 +635,51 @@ def user_by_token(token: str) -> dict:
 	return dict(user, read_only=bool(row['read_only'])) if user else None
 
 
-def user_delete(user: dict, user_id: int):
+def user_tree(db, user_id: int) -> set:
 	'''
-	Delete a user (admin only); their projects move to the admin, renamed "Name (username)" where the admin already has that name.
+	Return the ids of every project in the trees a user owns at the top level, sub-projects others made in them included.
+
+	:param db: Open database connection
+	:param user_id: User id
+	'''
+
+	out = set()
+	for row in db.execute('SELECT id FROM projects WHERE owner_id = ? AND parent_id IS NULL', (user_id,)).fetchall():
+		out |= kanban.subtree(db, row['id'])
+
+	return out
+
+
+def user_footprint(user: dict, user_id: int) -> dict:
+	'''
+	Return what deleting a user would remove (admin only): their projects and tasks, how many of those projects are shared, and how many tags their personal labels put on other people's tasks.
+
+	:param user: Admin
+	:param user_id: User id
+	'''
+
+	need_admin(user)
+
+	with kanban.connect() as db:
+		if not db.execute('SELECT 1 FROM users WHERE id = ?', (user_id,)).fetchone():
+			raise LookupError('user not found')
+		tree   = sorted(user_tree(db, user_id))
+		ids    = tree or [0] # IN () is not valid SQL
+		marks  = kanban.marks(ids)
+		tasks  = db.execute(f'SELECT COUNT(*) FROM tasks WHERE project_id IN ({marks})', ids).fetchone()[0]
+		shared = db.execute(f'SELECT COUNT(DISTINCT project_id) FROM shares WHERE project_id IN ({marks})', ids).fetchone()[0]
+		tags   = db.execute(f'SELECT COUNT(*) FROM task_labels JOIN labels ON labels.id = task_labels.label_id JOIN tasks ON tasks.id = task_labels.task_id WHERE labels.owner_id = ? AND tasks.project_id NOT IN ({marks})', [user_id] + ids).fetchone()[0]
+
+	return {'projects': len(tree), 'tasks': tasks, 'shared': shared, 'tags': tags}
+
+
+def user_delete(user: dict, user_id: int, keep_labels: bool = True):
+	'''
+	Delete a user (admin only) with the projects they own and every task in them. Sub-projects they own inside other people's trees pass to that tree's owner. Their personal labels pass to the admin (merged by name) when kept, so other people's tasks keep their tags.
 
 	:param user: Admin
 	:param user_id: User to delete
+	:param keep_labels: Keep their personal labels as the admin's, else remove them everywhere
 	'''
 
 	need_admin(user)
@@ -649,11 +688,23 @@ def user_delete(user: dict, user_id: int):
 		raise ValueError('you cannot delete yourself')
 
 	with kanban.connect() as db:
-		gone = db.execute('SELECT username FROM users WHERE id = ?', (user_id,)).fetchone()
-		if not gone:
+		if not db.execute('SELECT 1 FROM users WHERE id = ?', (user_id,)).fetchone():
 			raise LookupError('user not found')
-		db.execute("UPDATE projects SET title = title || ' (' || ? || ')' WHERE owner_id = ? AND parent_id IS NULL AND title IN (SELECT title FROM projects WHERE owner_id = ? AND parent_id IS NULL)", (gone['username'], user_id, user['id'])) # keep the admin's top-level names unique
-		db.execute('UPDATE projects SET owner_id = ? WHERE owner_id = ?', (user['id'], user_id))
+		tree = sorted(user_tree(db, user_id))
+		if tree:
+			marks = kanban.marks(tree)
+			db.execute(f'DELETE FROM tasks WHERE project_id IN ({marks})', tree)
+			db.execute(f'DELETE FROM trash WHERE project_id IN ({marks})', tree)
+			db.execute(f'DELETE FROM projects WHERE id IN ({marks})', tree)
+		for row in db.execute('SELECT id FROM projects WHERE owner_id = ?', (user_id,)).fetchall(): # their sub-projects in other people's trees
+			db.execute('UPDATE projects SET owner_id = ? WHERE id = ?', (kanban.root_owner(db, row['id']), row['id']))
+		if keep_labels:
+			for row in db.execute('SELECT id, name FROM labels WHERE owner_id = ?', (user_id,)).fetchall():
+				same = db.execute('SELECT id FROM labels WHERE name = ? AND owner_id = ?', (row['name'], user['id'])).fetchone()
+				if same:
+					db.execute('INSERT INTO task_labels (task_id, label_id) SELECT task_id, ? FROM task_labels WHERE label_id = ? AND task_id NOT IN (SELECT task_id FROM task_labels WHERE label_id = ?)', (same['id'], row['id'], same['id']))
+				else:
+					db.execute('UPDATE labels SET owner_id = ? WHERE id = ?', (user['id'], row['id']))
 		db.execute('DELETE FROM users WHERE id = ?', (user_id,))
 
 

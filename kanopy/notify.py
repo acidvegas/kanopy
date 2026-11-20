@@ -310,6 +310,10 @@ def webhook(event: str, before: dict, after: dict, comment: str = ''):
 	if not (urls := webhook_urls(after['project_id'])):
 		return
 
+	for change in changes:
+		if change['field'] == 'project' and not set(urls) <= set(webhook_urls(before['project_id'])): # the old project is not shared with these teams
+			change['old'] = 'a private project'
+
 	task = {key: after[key] for key in ('id', 'title', 'project', 'status', 'priority', 'due', 'assignees', 'labels')}
 
 	webhook_post(urls, {'event': event, 'actor': actor['username'], 'agent': kanban.AGENT.get(), 'task': dict(task, url=f'{BASE_URL}/#/task/{after["id"]}'), 'changes': changes, 'comment': comment})

@@ -398,6 +398,19 @@ class TestWebhooks(Base):
 		self.assertEqual(self.events()[-1], 'deleted')
 
 
+	def test_move_hides_private_path(self):
+		'''A move from a project the team cannot see posts "a private project" as the old path; a move within the team's tree keeps both.'''
+
+		t = self.task('Secret/plans', 'scan')
+		before = kanban.task(t['id'])
+		notify.task_event(before, kanban.task_update(t['id'], {'project_id': self.nt}))
+		self.assertEqual(self.hits[-1][1]['changes'], [{'field': 'project', 'old': 'a private project', 'new': 'Work'}])
+		sub    = kanban.project_save('Work/api')['id']
+		before = kanban.task(t['id'])
+		notify.task_event(before, kanban.task_update(t['id'], {'project_id': sub}))
+		self.assertEqual(self.hits[-1][1]['changes'], [{'field': 'project', 'old': 'Work', 'new': 'Work/api'}])
+
+
 	def test_post_pins_address_and_moves_key(self):
 		'''The real poster connects to the address webhook_address checked without looking the host up again, keeps the hostname in the Host header, and sends key= as a Bearer header.'''
 
