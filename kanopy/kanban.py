@@ -359,7 +359,7 @@ def claimant() -> str:
 	actor = ACTOR.get()
 	name  = AGENT.get()
 
-	if name and actor and not actor['is_admin']:
+	if name and actor:
 		name += f' ({actor["username"]})'
 
 	name = name or (actor['username'] if actor else 'system')

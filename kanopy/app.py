@@ -745,7 +745,7 @@ def mcp() -> tuple:
 	agent   = re.sub(r'[^a-z0-9_-]', '', request.headers.get('X-Agent', 'agent').lower())[:32] or 'agent'
 	kanban.AGENT.set(agent)
 	kanban.SESSION.set(session or None)
-	agent   = agent if g.user['is_admin'] else f'{agent} ({g.user["username"]})'
+	agent   = f'{agent} ({g.user["username"]})'
 	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')))
 	resp    = Response(json.dumps(reply), mimetype='application/json') if reply else Response('', 202)
 
