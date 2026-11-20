@@ -44,6 +44,7 @@ FAIL_LIMIT  = 5
 FAIL_WINDOW = 900 # seconds
 HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
+TOKEN_DENY = re.compile(r'^/api/(invites|me|tokens|teams|shares|users|settings|version|projects/\d+/shares)(/|$)') # account and admin endpoints: API tokens get the board only, so one can never mint another
 OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 THREADS = 16 # requests served at once; open pages poll every 15s, so many viewers need more than waitress's default 4
@@ -333,7 +334,7 @@ def api_token_create() -> dict:
 
 	body = json_body()
 
-	return accounts.token_create(g.user, body.get('name'), bool(body.get('read_only')))
+	return accounts.token_create(g.user, body.get('name'), body.get('role') or ('viewer' if body.get('read_only') else 'owner'), body.get('projects'))
 
 
 @app.delete('/api/tokens/<int:token_id>')
@@ -720,6 +721,9 @@ def auth():
 	if not g.user and not path.startswith(OPEN):
 		return {'error': 'sign in first'}, 401
 
+	if g.user and 'X-Key' in request.headers and TOKEN_DENY.match(path):
+		return {'error': 'API tokens can only use the board; sign in to manage your account'}, 403
+
 	if g.user and g.user.get('read_only') and path.startswith('/api/') and request.method not in ('GET', 'HEAD', 'OPTIONS'):
 		return {'error': 'this API token is read-only'}, 403
 
@@ -869,7 +873,7 @@ def mcp() -> tuple:
 	kanban.AGENT.set(agent)
 	kanban.SESSION.set(session or None)
 	agent   = f'{agent} ({g.user["username"]})'
-	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')))
+	reply   = mcp_server.handle(msg, agent, bool(g.user.get('read_only')), g.user.get('token_level', 4))
 	params  = msg.get('params') if isinstance(msg.get('params'), dict) else {}
 	g.mcp_write = bool(reply) and msg.get('method') == 'tools/call' and not reply.get('result', {}).get('isError') and not mcp_server.reads_only(params.get('name'), params.get('arguments') if isinstance(params.get('arguments'), dict) else {})
 	resp    = Response(json.dumps(reply), mimetype='application/json') if reply else Response('', 202)

@@ -478,7 +478,7 @@ class TestMcpEndpoint(AppBase):
 	def test_read_only_token(self):
 		'''A read-only token can read over REST and MCP but every write is refused.'''
 
-		ro   = accounts.token_create(self.ann, 'reader', read_only=True)['token']
+		ro   = accounts.token_create(self.ann, 'reader', 'viewer')['token']
 		anon = app.app.test_client()
 		self.assertEqual(anon.get('/api/projects', headers={'X-Key': ro}).status_code, 200)
 		r = anon.post('/api/projects', json={'path': 'Nope'}, headers={'X-Key': ro})
@@ -487,7 +487,50 @@ class TestMcpEndpoint(AppBase):
 		self.assertTrue(out['isError'])
 		self.assertEqual(len(self.rpc('tools/list', key=ro).json['result']['tools']), 5)
 		self.assertTrue(self.client.get('/api/tokens').json is not None)
-		self.assertEqual(accounts.tokens(self.ann)[-1]['read_only'], 1)
+		self.assertEqual(accounts.tokens(self.ann)[-1]['role'], 'viewer')
+
+
+	def test_limited_token(self):
+		'''A token limited to one project and the editor role sees and edits only that project, never above editor, never account endpoints, and cannot make top-level projects.'''
+
+		self.act(self.ann)
+		work  = kanban.project_save('Work')['id']
+		kanban.project_save('Private')
+		inner = self.task('Work/api', 'inner')
+		self.act(None)
+		key  = accounts.token_create(self.ann, 'scoped', 'editor', [work])['token']
+		anon = app.app.test_client()
+		self.assertEqual(sorted(p['path'] for p in anon.get('/api/projects', headers={'X-Key': key}).json['projects']), ['Work', 'Work/api'])
+		self.assertEqual({p['role'] for p in anon.get('/api/projects', headers={'X-Key': key}).json['projects']}, {kanban.EDIT})
+		self.assertIn('[Work/api] new', self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Work/api', 'title': 'new'}}, key=key).json['result']['content'][0]['text'])
+		self.assertTrue(self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Private', 'title': 'x'}}, key=key).json['result']['isError'])
+		self.assertTrue(self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Elsewhere', 'title': 'x'}}, key=key).json['result']['isError'])
+		self.assertEqual(anon.delete(f'/api/projects/{work}', headers={'X-Key': key}).status_code, 403) # owner-only, above the token's role
+		self.assertNotIn('save_project', [t['name'] for t in self.rpc('tools/list', key=key).json['result']['tools']])
+		r = anon.post('/api/tokens', json={'name': 'escape'}, headers={'X-Key': key})
+		self.assertEqual(r.status_code, 403)
+		self.assertEqual(anon.get('/api/me', headers={'X-Key': self.key}).status_code, 403) # even a full token stays off account endpoints
+		self.assertEqual(self.rpc('tools/call', {'name': 'get_task', 'arguments': {'id': inner['id']}}, key=key).json['result'].get('isError'), None)
+		self.assertEqual(accounts.tokens(self.ann)[-1]['projects'], ['Work'])
+
+
+	def test_token_create_checks(self):
+		'''Tokens take only known roles and projects the user can see; an admin's limited token is not an admin.'''
+
+		with self.assertRaises(ValueError):
+			accounts.token_create(self.ann, 'x', 'god')
+		self.act(self.root)
+		theirs = kanban.project_save('RootOnly')['id']
+		self.act(None)
+		with self.assertRaises(PermissionError):
+			accounts.token_create(self.ann, 'x', 'editor', [theirs])
+		key  = accounts.token_create(self.root, 'scoped', 'manager', [theirs])['token']
+		user = accounts.user_by_token(key)
+		self.assertEqual((user['is_admin'], user['token_level']), (0, kanban.MANAGE))
+		self.act(user)
+		self.assertEqual([p['path'] for p in kanban.projects()], ['RootOnly'])
+		with self.assertRaises(PermissionError):
+			kanban.need_admin()
 
 
 	def test_tools_list_and_call(self):

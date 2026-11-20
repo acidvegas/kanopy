@@ -298,13 +298,14 @@ def get_task(task_id: int, agent: str, all_comments: bool = False) -> str:
 	return '\n'.join(out)
 
 
-def handle(msg: dict, agent: str, read_only: bool = False) -> dict:
+def handle(msg: dict, agent: str, read_only: bool = False, level: int = 4) -> dict:
 	'''
 	Answer one MCP JSON-RPC message; returns None for notifications.
 
 	:param msg: Decoded JSON-RPC request
 	:param agent: Agent tag from the X-Agent header
 	:param read_only: The token may only read: write tools are hidden and refused
+	:param level: Highest role the token may use (kanban.VIEW .. kanban.OWN); below manager, save_project is hidden
 	'''
 
 	method = msg.get('method', '')
@@ -318,7 +319,7 @@ def handle(msg: dict, agent: str, read_only: bool = False) -> dict:
 	elif method == 'ping':
 		result = {}
 	elif method == 'tools/list':
-		result = {'tools': [{'name': n, 'description': d, 'inputSchema': {'type': 'object', 'properties': p, 'required': r, 'additionalProperties': False}} for n, d, p, r in TOOLS if not read_only or n in READ_TOOLS + ('inbox', 'labels')]}
+		result = {'tools': [{'name': n, 'description': d, 'inputSchema': {'type': 'object', 'properties': p, 'required': r, 'additionalProperties': False}} for n, d, p, r in TOOLS if (not read_only or n in READ_TOOLS + ('inbox', 'labels')) and (level >= kanban.MANAGE or n != 'save_project')]}
 	elif method == 'tools/call':
 		params = msg.get('params') or {}
 		try:

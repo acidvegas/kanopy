@@ -87,7 +87,7 @@ What kanopy does for agents on top of that:
 - **No lost edits.** An agent cannot replace a description it has not read, and `edit` and `append` change one line without resending the rest. If an agent does make a mess, the last 10 versions of a description can be restored, and deleted tasks sit in a 30-day trash.
 - **Cheap on tokens.** Tools answer in compact text with one line per task instead of JSON. Fifty tasks come back in about 1,200 tokens.
 - **Context at session start.** A Claude Code hook briefs each new session on the project for the current directory and its open tasks, flagging work left in Doing.
-- **Rules and limits.** Agents get your working rules when they connect, can be given read-only tokens, and you get a push when one finishes a task.
+- **Rules and limits.** Agents get your working rules when they connect, can be given tokens limited to certain projects and a role, and you get a push when one finishes a task.
 
 ## Features
 
@@ -142,7 +142,7 @@ A team owner can give the team an https **webhook URL**. Every change made on a 
 
 ## Connecting agents
 
-kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history. A token can be made **read-only**: the agent then sees only the reading tools and every change is refused, over MCP and the REST API alike.
+kanopy serves MCP at `/mcp` *(streamable HTTP, stateless)*. Each agent authenticates with a personal API token from **Settings, API tokens**, acts as that user and sees only what they can. The `X-Agent` header names the agent in comments and history. A token can be limited to **certain projects** *(and everything under them)* and to a **highest role**: read-only, editor, manager or full access. It never gets more than its user's own role, a limited token cannot make top-level projects or use admin powers, and the agent only sees the tools it can use. Tokens reach the board only, never account or admin endpoints, so one token can never create another.
 
 Agents get a short set of working rules on connect from `agents/instructions.example.txt`. Copy it to `agents/instructions.txt` *(untracked)* to describe your own project layout.
 
