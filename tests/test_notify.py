@@ -116,6 +116,22 @@ class TestPushes(Base):
 		self.assertEqual(self.titles(), [])
 
 
+	def test_admin_personal_pushes(self):
+		'''Admins with their own topic get personal pushes too, unless that topic is the board topic.'''
+
+		root = self.user('root', admin=True)
+		accounts.user_update(root, {'ntfy_topic': 'root-topic'})
+		t = self.task('Root', 'mine', due=self.now.strftime('%Y-%m-%d'), assignees=['root'])
+		notify.check()
+		self.assertIn((f'Due today #{t["id"]}', 'root-topic'), [(p['title'], p['topic']) for p in self.pushes])
+		self.pushes.clear()
+		accounts.user_update(root, {'ntfy_topic': 'board'})
+		with kanban.connect() as db:
+			db.execute('DELETE FROM sent')
+		notify.check()
+		self.assertEqual([p['topic'] for p in self.pushes if p['title'] == f'Due today #{t["id"]}'], [None]) # once, on the board topic
+
+
 	def test_personal_pushes(self):
 		'''Non-admins with a topic get pushes for tasks assigned to them that they can still see.'''
 

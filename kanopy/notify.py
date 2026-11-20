@@ -94,11 +94,12 @@ def check():
 			once('digest', today, lambda: send(title, body, tags='warning'))
 
 	with kanban.connect() as db:
-		people = [dict(row) for row in db.execute("SELECT id, username, is_admin, ntfy_topic FROM users WHERE is_admin = 0 AND notify_due = 1 AND ntfy_topic != ''")]
+		people = [dict(row) for row in db.execute("SELECT id, username, is_admin, ntfy_topic FROM users WHERE notify_due = 1 AND ntfy_topic != '' AND ntfy_topic != ?", (conf['ntfy_topic'],))] # the board topic already gets everything
 		access = {person['id']: kanban.levels(db, person) for person in people}
 
 	for person in people:
-		mine  = [t for t in open_ if person['username'] in t['assignees'] and access[person['id']].get(t['project_id'])] # skip tasks they lost access to
+		seen  = access[person['id']]
+		mine  = [t for t in open_ if person['username'] in t['assignees'] and (seen is None or seen.get(t['project_id']))] # skip tasks they lost access to; admins see all
 		topic = person['ntfy_topic']
 		for t in mine:
 			if t['remind_at'] and floor < t['remind_at'][:16] <= stamp:
