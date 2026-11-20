@@ -77,6 +77,24 @@ class TestPushes(Base):
 		self.assertEqual(sorted(self.titles()), sorted([f'Reminder #{r["id"]}', f'Due today #{d["id"]}', '1 overdue']))
 
 
+	def test_failed_push_does_not_block_others(self):
+		'''A push that fails is skipped for this pass and retried later, and the pushes after it still go out.'''
+
+		a = self.task(title='a', due=self.now.strftime('%Y-%m-%d'))
+		b = self.task(title='b', due=self.now.strftime('%Y-%m-%d'))
+		record = notify.send
+		def flaky(title, *args, **kwargs):
+			if title == f'Due today #{a["id"]}':
+				raise OSError('ntfy down')
+			record(title, *args, **kwargs)
+		notify.send = flaky
+		notify.check()
+		self.assertIn(f'Due today #{b["id"]}', self.titles())
+		notify.send = record
+		notify.check()
+		self.assertIn(f'Due today #{a["id"]}', self.titles())
+
+
 	def test_old_reminders_skipped(self):
 		'''Reminders more than a day old and in the future are not sent.'''
 
@@ -167,12 +185,12 @@ class TestPushes(Base):
 
 
 	def test_once_retries_failed_push(self):
-		'''A push that raises is not recorded, so the next pass retries it.'''
+		'''A push that raises is logged, not recorded, so the next pass retries it.'''
 
 		def boom():
 			raise OSError('down')
 
-		with self.assertRaises(OSError):
+		with self.assertLogs(level='WARNING'):
 			notify.once('due', 'k', boom)
 		calls = []
 		notify.once('due', 'k', lambda: calls.append(1))
