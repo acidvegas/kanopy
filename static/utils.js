@@ -1162,6 +1162,8 @@ function kbDrawer() {
 	if (!same) KB.commentsShown = 30; // each task opens on its newest comments
 	const draft = same ? old.querySelector('.comment-input')?.value : '';
 	const edit  = same ? old.querySelector('.desc-input')?.value : undefined;
+	const typed = same && old.contains(document.activeElement) && document.activeElement.matches('input[type=text], input:not([type]), input[type=search], textarea:not(.desc-input, .comment-input)') ? document.activeElement : null; // a field mid-typing survives the redraw
+	const keep  = typed && { sel: typed.dataset.field ? `[data-field="${typed.dataset.field}"]` : '.' + typed.classList[0], value: typed.value, from: typed.selectionStart, to: typed.selectionEnd };
 	const page  = KB.view === 'task';
 	const opts  = (items, value) => items.map(([v, label]) => `<option value="${esc(v)}"${String(v) === String(value) ? ' selected' : ''}>${esc(label)}</option>`).join('');
 	const title = `<textarea class="title" rows="1" data-field="title" spellcheck="false">${esc(t.title)}</textarea>`;
@@ -1273,6 +1275,8 @@ function kbDrawer() {
 	if (!same && !el.contains(document.activeElement)) el.focus({ preventScroll: true }); // keyboard focus moves into a newly opened task
 	if (draft) el.querySelector('.comment-input').value = draft;
 	if (edit !== undefined && t.role >= 2) { const base = KB.descBase; kbAction('edit-desc'); KB.descBase = base; el.querySelector('.desc-input').value = edit; } // a reopened edit keeps the text it started from, so a conflicting save still warns
+	const back = keep && el.querySelector(keep.sel);
+	if (back && !back.disabled) { back.value = keep.value; back.focus({ preventScroll: true }); back.setSelectionRange(keep.from, keep.to); }
 }
 
 function kbClose() {
@@ -1313,6 +1317,7 @@ async function kbAction(act, el) {
 	if (act === 'link') {
 		const other = parseInt(pane().querySelector('.link-other').value.replace('#', ''), 10);
 		if (!other) return toast('Enter a task id', true);
+		pane().querySelector('.link-other').value = '';
 		return guard(async () => kbTaskSaved(await api('POST', `/api/tasks/${t.id}/links`, { kind: pane().querySelector('.link-kind').value, other })));
 	}
 	if (act === 'comment') {
@@ -1596,11 +1601,13 @@ function paneBind(drawer) {
 		const el = e.target;
 		if (el.matches('.label-input')) {
 			const name = el.value.trim().toLowerCase();
+			el.value = ''; // cleared now, so the redraw does not bring it back
 			if (name) kbPatch({ labels: [...KB.task.labels, name] });
 			return;
 		}
 		if (el.matches('.assign-input')) {
 			const name = el.value.trim().toLowerCase().replace(/^@/, '');
+			el.value = '';
 			if (name) kbPatch({ assignees: [...KB.task.assignees, name] });
 			return;
 		}
