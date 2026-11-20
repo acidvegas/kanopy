@@ -225,7 +225,7 @@ function kbTree() {
 		if ((p.archived && !KB.archived && p.id !== KB.project) || (keep ? !keep.has(p.path) : hidden(p))) continue;
 		const depth = p.path.split('/').length - 1;
 		const chev  = parent(p) ? `<i class="chev-btn" data-path="${esc(p.path)}">${ICONS.chev}</i>` : '<i class="chev-pad"></i>';
-		const dot   = p.color ? `<i class="dot" style="--c:${p.color}"></i>` : '';
+		const dot   = p.color ? `<i class="dot" style="--c:${p.color}"></i>` : '<i class="dot none"></i>';
 		nav.insertAdjacentHTML('beforeend', `<a class="item project${p.id === KB.project ? ' active' : ''}${p.archived ? ' archived' : ''}${KB.collapsed.has(p.path) ? '' : ' open'}" href="#/${kbView()}/${p.id}" draggable="true" style="--depth:${depth}">${chev}${dot}<span>${esc(p.title)}</span>${p.open ? `<b class="count">${p.open}</b>` : ''}</a>`);
 	}
 	const archived = KB.projects.filter((p) => p.archived).length;
@@ -459,8 +459,8 @@ function lblGroups(groups, mine) {
 			<div class="lbl-list">${list.map((l) => `
 				<div class="lbl-row" data-name="${esc(l.name)}">
 					<button class="swatch${l.color ? '' : ' none'}" style="--c:${l.color || 'transparent'}" data-act="lcolor" title="Change color" aria-label="Change color"${mine ? '' : ' disabled'}></button>
-					${chip(l.name)}
-					<a class="lbl-count" href="#/board/all" data-act="lfilter">${l.count} task${l.count === 1 ? '' : 's'}</a>
+					<span class="lbl-name">${chip(l.name)}
+					<a class="lbl-count" href="#/board/all" data-act="lfilter">${l.count} task${l.count === 1 ? '' : 's'}</a></span>
 					<span class="spacer"></span>
 					${mine ? `<button class="icon small" data-act="lrename" title="Rename / merge" aria-label="Rename / merge">${SVG.edit}</button>
 					<button class="icon small danger" data-act="ldelete" title="Delete label" aria-label="Delete label">${SVG.trash}</button>` : ''}
@@ -1050,7 +1050,7 @@ async function trashLoad() {
 async function usersLoad() {
 	const [users, invites] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/invites')]);
 	const now = new Date().toISOString();
-	$('#users').innerHTML = users.users.map((u) => `<div class="row-item">${avatar(u.username)}<b>${esc(u.username)}</b>${u.is_admin ? '<small class="pill">admin</small>' : ''}<span class="dim">joined ${new Date(u.created).toLocaleDateString()}</span><span class="spacer"></span>${u.id === KB.me.id ? '' : `<button type="button" class="link-btn" data-user-act="reset" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button><button type="button" class="link-btn danger" data-user-act="delete" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button>`}</div>`).join('');
+	$('#users').innerHTML = users.users.map((u) => `<div class="row-item">${avatar(u.username)}<b>${esc(u.username)}</b>${u.is_admin ? '<small class="pill">admin</small>' : ''}<span class="dim">joined ${new Date(u.created).toLocaleDateString()}</span><span class="spacer"></span>${u.id === KB.me.id ? '' : `<span class="row-acts"><button type="button" class="link-btn" data-user-act="reset" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button><button type="button" class="link-btn danger" data-user-act="delete" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button></span>`}</div>`).join('');
 	$('#invites').innerHTML = invites.invites.map((i) => `<div class="row-item"><span>Created ${new Date(i.created).toLocaleString()}</span><span class="dim">${i.used ? `used by ${esc(i.used_by || 'a deleted user')}` : i.expires < now ? 'expired' : `pending, expires ${new Date(i.expires).toLocaleDateString()}`}</span><span class="spacer"></span>${!i.used && i.expires >= now ? `<button type="button" class="link-btn danger" data-invite="${i.id}">Revoke</button>` : ''}</div>`).join('') || '<p class="dim">No invites yet.</p>';
 }
 
