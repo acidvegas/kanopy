@@ -260,7 +260,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 <li>A new project is created by filing its first task into it, so no project is ever empty</li>
 <li>An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; <code>edit</code> <em>(exact text, must match once)</em> and <code>append</code> need no read</li>
 <li><code>host:</code> labels that differ only by punctuation <em>(<code>host:web01</code> and <code>host:web-01</code>)</em> are rejected</li>
-<li>Moving a task to doing <strong>claims</strong> it for that agent session <em>(<code>by:claude#a1b2c3</code> on its line, the agent's name on its card)</em>. Another session that tries to start it is told who has it, and takes over only with <code>take=true</code>. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own</li>
+<li>Moving a task to doing <strong>claims</strong> it for that agent session <em>(<code>by:claude(brandon)#a1b2c3</code> on its line, the agent's name on its card)</em>. Another session that tries to start it is told who has it, and takes over only with <code>take=true</code>. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own</li>
 </ul>
 <h2 id="configuration">Configuration<a class="anchor" href="#configuration" aria-label="Link to this section">#</a></h2>
 <p>Settings live in <code>.env</code>:</p>
@@ -302,7 +302,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 </table></div>
 <p>Everything else <em>(ntfy, notification times, timezone, auto-archive)</em> is set on the Settings page. Data, attachments and backups live in <code>data/</code>.</p>
 <h3 id="sqlite-or-postgresql">SQLite or PostgreSQL<a class="anchor" href="#sqlite-or-postgresql" aria-label="Link to this section">#</a></h3>
-<p>SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with <code>venv/bin/pip install "psycopg[binary]"</code> <em>(the Docker image already has it)</em>, set <code>KANOPY_DATABASE</code> and restart. Daily backups to <code>data/backups</code> cover SQLite only; back PostgreSQL up with <code>pg_dump</code>.</p>
+<p>SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with <code>venv/bin/pip install "psycopg[binary]==3.3.9"</code> <em>(the Docker image already has it)</em>, set <code>KANOPY_DATABASE</code> and restart. Daily backups to <code>data/backups</code> cover SQLite only; back PostgreSQL up with <code>pg_dump</code>.</p>
 <p>A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:</p>
 <pre><code class="language-sh">venv/bin/python -m kanopy.migrate data/kanban.db postgresql://kanopy:secret@localhost/kanopy
 venv/bin/python -m kanopy.migrate postgresql://kanopy:secret@localhost/kanopy data/new.db
