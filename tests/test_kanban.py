@@ -125,6 +125,15 @@ class TestBulkAndReorder(Base):
 		self.assertEqual([t['id'] for t in kanban.tasks() if t['status'] == 'doing'], [c['id'], b['id'], a['id']])
 
 
+	def test_reorder_into_filled_column(self):
+		'''A card dropped at the top of a column that already has cards stays at the top.'''
+
+		a, b = (self.task(title=n, status='doing') for n in 'ab')
+		c = self.task(title='c')
+		kanban.reorder('doing', [c['id'], a['id'], b['id']])
+		self.assertEqual([t['id'] for t in kanban.tasks() if t['status'] == 'doing'], [c['id'], a['id'], b['id']])
+
+
 class TestHistory(Base):
 	'''Task history and project activity.'''
 

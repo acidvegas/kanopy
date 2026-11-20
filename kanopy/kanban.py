@@ -953,12 +953,12 @@ def reorder(status: str, ids: list):
 				order.append(task_id)
 		order[last:last] = queue # cards new to this column go right after the last visible one
 
-		for pos, task_id in enumerate(order):
-			db.execute('UPDATE tasks SET position = ? WHERE id = ?', (pos, task_id))
 		for task_id, row in rows.items():
 			if row['status'] != status:
-				set_status(db, task_id, status)
+				set_status(db, task_id, status) # moves the card to the bottom, so positions are written after
 				touch(db, task_id)
+		for pos, task_id in enumerate(order):
+			db.execute('UPDATE tasks SET position = ? WHERE id = ?', (pos, task_id))
 
 
 def repeat_dates(start: str, end: str) -> dict:
