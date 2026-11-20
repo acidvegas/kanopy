@@ -168,7 +168,7 @@ def loop():
 
 def once(kind: str, key: str, push):
 	'''
-	Run push() unless this notification was already sent, then record it. A failed push is retried next pass.
+	Run push() unless this notification was already sent, then record it. A failed push is logged and retried next pass, without holding up the others.
 
 	:param kind: remind, due or digest
 	:param key: Unique key within the kind
@@ -179,7 +179,11 @@ def once(kind: str, key: str, push):
 		if db.execute('SELECT 1 FROM sent WHERE kind = ? AND key = ?', (kind, key)).fetchone():
 			return
 
-	push()
+	try:
+		push()
+	except Exception as exc:
+		logging.warning('ntfy %s push %s failed: %s', kind, key, exc)
+		return
 
 	with kanban.connect() as db:
 		db.execute('INSERT OR IGNORE INTO sent (kind, key, at) VALUES (?, ?, ?)', (kind, key, kanban.now()))
