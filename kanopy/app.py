@@ -639,15 +639,18 @@ def api_task_update(task_id: int) -> dict:
 
 @app.get('/api/tasks')
 def api_tasks() -> dict:
-	'''Return task cards for all projects or one project subtree; done_limit keeps only that many finished tasks, newest first, and reports how many there are.'''
+	'''Return task cards for all projects or one project subtree; done_limit keeps only that many finished tasks, newest first, and reports how many there are; brief=1 returns slim rows.'''
 
 	project = request.args.get('project', type=int)
 	limit   = request.args.get('done_limit', type=int)
 
+	if request.args.get('brief'): # id, title, project and status only, for the link box
+		return {'tasks': kanban.tasks(project, brief=True)}
+
 	if limit is None:
 		return {'tasks': kanban.tasks(project)}
 
-	return {'tasks': kanban.tasks(project, done_limit=limit), 'done_total': len(kanban.tasks(project, statuses=['done'], brief=True))}
+	return {'tasks': kanban.tasks(project, done_limit=limit), 'done_total': kanban.done_count(project)}
 
 
 @app.get('/api/trash')

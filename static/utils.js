@@ -1635,7 +1635,7 @@ function paneBind(drawer) {
 		drawer.classList.remove('drop-files');
 		fileUpload(e.dataTransfer.files);
 	});
-	drawer.addEventListener('focusin', (e) => { if (e.target.matches('.link-other')) guard(async () => { KB.allTasks = (await api('GET', '/api/tasks')).tasks; linkSuggest(); }); });
+	drawer.addEventListener('focusin', (e) => { if (e.target.matches('.link-other')) guard(async () => { if (KB.allTasksAt !== KB.revision) { KB.allTasks = (await api('GET', '/api/tasks?brief=1')).tasks; KB.allTasksAt = KB.revision; } linkSuggest(); }); }); // slim rows, fetched again only after the board changed
 	drawer.addEventListener('focusout', (e) => { if (e.target.matches('.link-other')) drawer.querySelector('.link-sugg').hidden = true; });
 	drawer.addEventListener('mousedown', (e) => {
 		const item = e.target.closest('.sugg');
