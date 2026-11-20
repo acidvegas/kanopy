@@ -232,20 +232,15 @@ def archive_done(days: int) -> int:
 		return db.execute("UPDATE tasks SET archived = 1 WHERE status = 'done' AND archived = 0 AND done_at < ?", (cutoff,)).rowcount
 
 
-def assignees_map(db: sqlite3.Connection, task_id: int = None) -> dict:
+def assignees_map(db: sqlite3.Connection, task_id: int) -> dict:
 	'''
-	Return task id -> assignee usernames, for one task or all.
+	Return {task id: assignee usernames} for one task, the shape summary() takes.
 
 	:param db: Open database connection
-	:param task_id: Limit to one task
+	:param task_id: Task id
 	'''
 
-	out = {}
-
-	for row in db.execute('SELECT a.task_id, u.username FROM task_assignees a JOIN users u ON u.id = a.user_id' + (' WHERE a.task_id = ?' if task_id else '') + ' ORDER BY u.username', (task_id,) if task_id else ()):
-		out.setdefault(row['task_id'], []).append(row['username'])
-
-	return out
+	return {task_id: [row['username'] for row in db.execute('SELECT u.username FROM task_assignees a JOIN users u ON u.id = a.user_id WHERE a.task_id = ? ORDER BY u.username', (task_id,))]}
 
 
 def attachment_add(task_id: int, name: str, mime: str, data: bytes) -> dict:
