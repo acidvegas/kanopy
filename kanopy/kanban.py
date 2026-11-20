@@ -985,15 +985,19 @@ def repeat_dates(start: str, end: str) -> dict:
 	if (end - start).days > 62:
 		raise ValueError('ask for at most 62 days')
 
+	today = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
+
+	if abs((start - today).days) > 5 * 366 or abs((end - today).days) > 5 * 366:
+		raise ValueError('ask for dates within 5 years of today')
+
 	with connect() as db:
 		lv   = levels(db)
 		rows = [r for r in db.execute("SELECT id, project_id, due, remind_at, repeat, repeat_day FROM tasks WHERE repeat IS NOT NULL AND status != 'done' AND archived = 0 AND COALESCE(due, remind_at) IS NOT NULL") if lv is None or lv.get(r['project_id'])]
 
-	today = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
-	out   = {}
+	out = {}
 	for r in rows:
 		base = date.fromisoformat((r['due'] or r['remind_at'])[:10])
-		day  = max(base, today) # an overdue task's next copy comes after today, so nothing is projected before it
+		day  = max(base, today, start - timedelta(days=1)) # an overdue task's next copy comes after today, and nothing before the window is needed
 		while (day := repeat_next(r['repeat'], base, day, r['repeat_day'])) <= end:
 			if day >= start:
 				out.setdefault(r['id'], []).append(day.isoformat())
