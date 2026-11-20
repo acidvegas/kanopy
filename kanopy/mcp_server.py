@@ -7,6 +7,7 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from . import __version__
 from . import accounts
 from . import kanban
 from . import notify
@@ -308,7 +309,7 @@ def handle(msg: dict, agent: str, read_only: bool = False) -> dict:
 		return None
 
 	if method == 'initialize':
-		result = {'protocolVersion': (msg.get('params') or {}).get('protocolVersion') or PROTOCOL, 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'kanopy', 'version': '1.0.0'}, 'instructions': INSTRUCTIONS}
+		result = {'protocolVersion': (msg.get('params') or {}).get('protocolVersion') or PROTOCOL, 'capabilities': {'tools': {}}, 'serverInfo': {'name': 'kanopy', 'version': __version__}, 'instructions': INSTRUCTIONS}
 	elif method == 'ping':
 		result = {}
 	elif method == 'tools/list':

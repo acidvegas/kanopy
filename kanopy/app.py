@@ -10,6 +10,7 @@ import secrets
 import threading
 import time
 import urllib.parse
+import urllib.request
 
 from pathlib import Path
 
@@ -28,6 +29,7 @@ try:
 except ImportError:
 	raise ImportError('missing waitress library (pip install waitress)')
 
+from . import __version__
 from . import accounts
 from . import kanban
 from . import mcp_server
@@ -46,6 +48,9 @@ PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 THREADS = 16 # requests served at once; open pages poll every 15s, so many viewers need more than waitress's default 4
 STATIC = Path(__file__).parent.parent / 'static'
 URL    = os.environ.get('KANOPY_URL', '').rstrip('/') # public address when behind a reverse proxy
+RELEASES     = 'https://api.github.com/repos/acidvegas/kanopy/releases/latest'
+UPDATE_CHECK = os.environ.get('KANOPY_UPDATE_CHECK', '1') != '0' # 0 turns off the admin's "update available" check
+LATEST       = {'tag': None, 'at': -1e9} # newest release tag and when it was last asked for (monotonic)
 
 notify.BASE_URL = URL or f'http://{HOST}:{PORT}'
 
@@ -557,6 +562,16 @@ def api_revision() -> dict:
 	return {'revision': kanban.revision()}
 
 
+@app.get('/api/version')
+def api_version() -> dict:
+	'''Return the running version and the newest GitHub release, for the admin's update notice.'''
+
+	accounts.need_admin(g.user)
+	latest = latest_release()
+
+	return {'current': __version__, 'latest': latest, 'outdated': bool(latest) and version_key(latest) > version_key(__version__), 'check': UPDATE_CHECK}
+
+
 @app.get('/api/settings')
 def api_settings() -> dict:
 	'''Return notification settings; the ntfy token is never sent back, only whether one is set.'''
@@ -745,6 +760,35 @@ def housekeep_loop():
 		except Exception as exc:
 			logging.warning('housekeeping failed: %s', exc)
 		time.sleep(3600)
+
+
+def latest_release() -> str:
+	'''Return the newest release tag on GitHub, asked at most every 12 hours (every hour after a failure), or None.'''
+
+	if not UPDATE_CHECK:
+		return None
+
+	now = time.monotonic()
+
+	if now - LATEST['at'] < (43200 if LATEST['tag'] else 3600):
+		return LATEST['tag']
+
+	LATEST['at'] = now
+	req = urllib.request.Request(RELEASES, headers={'User-Agent': notify.USER_AGENT, 'Accept': 'application/vnd.github+json'})
+
+	try:
+		with urllib.request.urlopen(req, timeout=5) as resp:
+			LATEST['tag'] = json.load(resp).get('tag_name') or None
+	except Exception as exc:
+		logging.warning('update check failed: %s', exc)
+
+	return LATEST['tag']
+
+
+def version_key(tag: str) -> tuple:
+	'''Turn v1.1.10 or 1.1.10 into (1, 1, 10) so versions compare as numbers.'''
+
+	return tuple(int(part) for part in re.findall(r'\d+', tag)[:3])
 
 
 def json_body() -> dict:

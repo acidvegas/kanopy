@@ -230,13 +230,14 @@ A few rules keep agents from making a mess:
 
 Settings live in `.env`:
 
-| Variable          | Default          | Purpose                                                                     |
-|-------------------|------------------|-----------------------------------------------------------------------------|
-| `KANOPY_HOST`     | `127.0.0.1`      | Address to listen on                                                        |
-| `KANOPY_PORT`     | `8000`           | Port to listen on                                                           |
-| `KANOPY_URL`      |                  | Public address when behind a reverse proxy                                  |
-| `KANOPY_KEY`      |                  | Optional; stored as the admin's API token on start, for older agent configs |
-| `KANOPY_DATABASE` | `data/kanban.db` | A `postgresql://user:pass@host/db` URL to use PostgreSQL instead of SQLite  |
+| Variable              | Default          | Purpose                                                                                   |
+|-----------------------|------------------|-------------------------------------------------------------------------------------------|
+| `KANOPY_HOST`         | `127.0.0.1`      | Address to listen on                                                                      |
+| `KANOPY_PORT`         | `8000`           | Port to listen on                                                                         |
+| `KANOPY_URL`          |                  | Public address when behind a reverse proxy                                                |
+| `KANOPY_KEY`          |                  | Optional; stored as the admin's API token on start, for older agent configs               |
+| `KANOPY_DATABASE`     | `data/kanban.db` | A `postgresql://user:pass@host/db` URL to use PostgreSQL instead of SQLite                |
+| `KANOPY_UPDATE_CHECK` | `1`              | `0` stops the server asking GitHub for the latest release *(shown to admins in Settings)* |
 
 Everything else *(ntfy, notification times, timezone, auto-archive)* is set on the Settings page. Data, attachments and backups live in `data/`.
 
