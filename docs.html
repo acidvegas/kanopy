@@ -219,7 +219,7 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 </tr>
 <tr>
 <td><code>list_tasks</code></td>
-<td>Tasks filtered by project, team, labels, text <em>(with the matching line)</em>, status, priority or due date; <code>changed</code> lists recent activity</td>
+<td>Tasks filtered by project, team, labels, text <em>(with the matching line)</em>, status, priority or due date; <code>ready</code> lists what can start now <em>(todo, no open blockers)</em>; <code>changed</code> lists recent activity</td>
 </tr>
 <tr>
 <td><code>get_task</code></td>
@@ -297,6 +297,11 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 <td><code>KANOPY_DATABASE</code></td>
 <td><code>data/kanban.db</code></td>
 <td>A <code>postgresql://user:pass@host/db</code> URL to use PostgreSQL instead of SQLite</td>
+</tr>
+<tr>
+<td><code>KANOPY_UPDATE_CHECK</code></td>
+<td><code>1</code></td>
+<td><code>0</code> stops the server asking GitHub for the latest release <em>(shown to admins in Settings)</em></td>
 </tr>
 </tbody>
 </table></div>
