@@ -315,10 +315,12 @@ def handle(msg: dict, agent: str, read_only: bool = False) -> dict:
 	elif method == 'tools/call':
 		params = msg.get('params') or {}
 		try:
+			if not isinstance(params, dict) or not isinstance(params.get('arguments') or {}, dict):
+				raise TypeError('params and arguments must be objects')
 			if read_only and not reads_only(params.get('name'), params.get('arguments') or {}):
 				raise PermissionError('this API token is read-only')
 			result = {'content': [{'type': 'text', 'text': call(params.get('name'), params.get('arguments') or {}, agent)}]}
-		except (LookupError, PermissionError, ValueError, TypeError) as exc:
+		except (LookupError, PermissionError, ValueError, TypeError, AttributeError) as exc: # AttributeError: a value of the wrong type, like a number in a list of labels
 			result = {'content': [{'type': 'text', 'text': f'error: {exc}'}], 'isError': True}
 	else:
 		return {'jsonrpc': '2.0', 'id': rid, 'error': {'code': -32601, 'message': f'method not found: {method}'}}
