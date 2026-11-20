@@ -115,6 +115,14 @@ class TestAuthLayer(AppBase):
 		self.assertEqual(self.client.post('/api/tasks', json={'project_id': 1, 'title': 't', 'labels': [1]}).status_code, 400)
 
 
+	def test_expired_fail_entries_dropped(self):
+		'''Addresses whose failed sign-ins have all expired are forgotten on the next sign-in.'''
+
+		app.FAILS['192.0.2.9'] = [time.monotonic() - app.FAIL_WINDOW - 1]
+		app.app.test_client().post('/api/login', json={'username': 'ann', 'password': 'wrong'})
+		self.assertNotIn('192.0.2.9', app.FAILS)
+
+
 	def test_login_cookie_and_rate_limit(self):
 		'''Sign-in sets an HttpOnly SameSite cookie; five failures lock the address out.'''
 

@@ -212,6 +212,20 @@ class TestTools(Base):
 			self.mcp('save_task', {'id': t['id'], 'description': 'stale from a'}) # per session
 
 
+	def test_seen_is_capped(self):
+		'''The read record keeps only the newest SEEN_MAX entries.'''
+
+		old, mcp_server.SEEN_MAX = mcp_server.SEEN_MAX, 3
+		try:
+			mcp_server.SEEN.clear()
+			ids = [self.task(title=f't{i}')['id'] for i in range(5)]
+			for i in ids:
+				self.mcp('get_task', {'ids': [i]})
+			self.assertEqual([k[-1] for k in mcp_server.SEEN], ids[-3:])
+		finally:
+			mcp_server.SEEN_MAX = old
+
+
 	def test_edit_append_check_together(self):
 		'''edit, append and check apply in that order in one call.'''
 

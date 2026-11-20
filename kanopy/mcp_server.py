@@ -19,6 +19,7 @@ READ_TOOLS   = ('list_projects', 'list_tasks', 'get_task') # tools that never ch
 MAX_TEXT     = 20_000 # characters of an attachment returned to an agent
 PROTOCOL     = '2025-06-18'
 SEEN         = {} # (user id, agent, session, task id) -> hash of the description that agent last read or wrote, for the stale-write check
+SEEN_MAX     = 50_000 # past this the oldest reads are forgotten (that agent just has to read the task again)
 REL_NAMES    = (('blocking', 'blocks'), ('blocked', 'blocked-by'), ('parenttask', 'parent'), ('subtask', 'subtasks'), ('related', 'related'), ('precedes', 'precedes'), ('follows', 'follows'), ('duplicateof', 'duplicate-of'), ('duplicates', 'duplicates'))
 
 STR  = {'type': 'string'}
@@ -718,7 +719,11 @@ def seen(task_id: int, agent: str, description: str):
 	:param description: Description text
 	'''
 
-	SEEN[seen_key(task_id, agent)] = hash(description)
+	key = seen_key(task_id, agent)
+	SEEN.pop(key, None) # re-inserted at the end, so the oldest reads are the first to go
+	SEEN[key] = hash(description)
+	while len(SEEN) > SEEN_MAX:
+		SEEN.pop(next(iter(SEEN), None), None)
 
 
 def seen_key(task_id: int, agent: str) -> tuple:

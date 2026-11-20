@@ -99,6 +99,8 @@ def api_login() -> Response:
 	now  = time.monotonic()
 
 	with FAILS_LOCK:
+		for old in [key for key, times in FAILS.items() if key != ip and all(now - t >= FAIL_WINDOW for t in times)]:
+			del FAILS[old] # addresses whose failures have all expired
 		FAILS[ip] = [t for t in FAILS.get(ip, []) if now - t < FAIL_WINDOW]
 		if len(FAILS[ip]) >= FAIL_LIMIT:
 			raise PermissionError('too many failed sign-ins, try again in a few minutes')
