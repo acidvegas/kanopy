@@ -331,7 +331,8 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 @media (max-width: 800px) {
 	#calendar { padding: .5rem; }
 	.ev span { display: none; }
-	.ev { justify-content: center; padding: .15rem; }
+	.ev { justify-content: center; padding: .15rem; min-height: 18px; }
+	.ev:not(:has(.dot))::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--muted); } /* a project with no colour still gets a dot */
 	.day .num { width: 1.3rem; height: 1.3rem; }
 }
 
@@ -622,6 +623,13 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .secret .link-btn { align-self: flex-end; width: auto; }
 #share-dlg { width: min(520px, calc(100vw - 2rem)); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem; }
 #share-dlg::backdrop { background: rgb(0 0 0 / .55); }
+#day-dlg { width: min(520px, calc(100vw - 2rem)); background: var(--panel); }
+#day-dlg::backdrop { background: rgb(0 0 0 / .55); }
+#day-dlg h3 { margin: 0 0 .6rem; }
+#day-list { display: flex; flex-direction: column; gap: .3rem; max-height: 60dvh; overflow-y: auto; margin-bottom: .8rem; }
+#day-list .sugg { min-height: 48px; }
+#day-list .sugg .title { white-space: normal; }
+#day-list .done .title { text-decoration: line-through; color: var(--muted); }
 .share { display: flex; flex-direction: column; gap: .7rem; }
 .share h3 { margin: 0; font-size: 1rem; }
 .share h3 span { color: var(--accent); }

@@ -364,6 +364,21 @@ function kbRender() {
 
 /* ---------- calendar ---------- */
 
+function calDay(key) {
+	const list = (KB.calEvents || {})[key] || [];
+	if (!list.length) return;
+	$('#day-title').textContent = new Date(key + 'T00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+	$('#day-list').innerHTML = list.map(({ t, kind, future }) => {
+		const c = tint(t.project_id);
+		return `<button type="button" class="sugg ${t.status}" data-id="${t.id}">
+			<span class="id">#${t.id}</span>
+			<span class="sugg-text"><span class="title">${kind === 'remind' ? `<b>${t.remind_at.slice(11, 16)}</b> ` : ''}${esc(t.title)}${future ? ' <small class="dim">(repeat)</small>' : ''}</span><span class="proj">${c ? `<i class="dot" style="--c:${c}"></i>` : ''}${esc(t.project)}</span></span>
+			<span class="st st-${t.status}">${STATUS[t.status]}</span>
+		</button>`;
+	}).join('');
+	$('#day-dlg').showModal();
+}
+
 function kbCalendar() {
 	const m      = KB.month;
 	const start  = new Date(m.getFullYear(), m.getMonth(), 1 - new Date(m.getFullYear(), m.getMonth(), 1).getDay());
@@ -375,6 +390,7 @@ function kbCalendar() {
 		if (t.remind_at) (events[t.remind_at.slice(0, 10)] ??= []).push({ t, kind: 'remind' });
 		if (KB.repeats?.range === range) for (const day of KB.repeats.dates[t.id] || []) (events[day] ??= []).push({ t, kind: t.due ? 'due' : 'remind', future: true });
 	}
+	KB.calEvents = events; // for the day list phones open
 	if (KB.repeats?.range !== range || KB.repeats.seq !== KB.loadSeq) repeatsLoad(range); // upcoming repeats, fetched per month and board load
 	$('#cal-title').textContent = m.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
 	let html = [0, 1, 2, 3, 4, 5, 6].map((i) => `<div class="dow">${new Date(2026, 1, i + 1).toLocaleDateString(undefined, { weekday: 'short' })}</div>`).join('');
@@ -1468,8 +1484,16 @@ function kbBind() {
 	$('#lbl-new').onclick   = () => lblNew(false);
 	$('#lbl-new-global').onclick = () => lblNew(true);
 	$('#cal-grid').addEventListener('click', (e) => {
-		const ev = e.target.closest('.ev');
+		const ev  = e.target.closest('.ev');
+		const day = e.target.closest('.day');
+		if (narrow() && day) return calDay(day.querySelector('.evs').dataset.date); // phones list the whole day, titles and all
 		if (ev) location.hash = taskHref(ev.dataset.id);
+	});
+	$('#day-list').addEventListener('click', (e) => {
+		const btn = e.target.closest('[data-id]');
+		if (!btn) return;
+		$('#day-dlg').close();
+		location.hash = taskHref(btn.dataset.id);
 	});
 	$('#labels').addEventListener('click', (e) => {
 		const btn = e.target.closest('[data-act]');
