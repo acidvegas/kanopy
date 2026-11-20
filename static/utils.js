@@ -11,7 +11,7 @@ const ICONS = { chev: '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6
 async function api(method, url, body) {
 	const headers = body ? { 'Content-Type': 'application/json' } : {};
 	const res     = await fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
-	if (res.headers.get('X-Revision')) KB.revision = +res.headers.get('X-Revision'); // our own changes are already on screen
+	if (res.headers.get('X-Revision-Was') !== null && +res.headers.get('X-Revision-Was') === KB.revision) KB.revision = +res.headers.get('X-Revision'); // our own write is already on screen; reads and others' changes leave it for the poll
 	if (res.status === 401 && !url.startsWith('/api/login')) {
 		KB.me = null;
 		authShow('login');
