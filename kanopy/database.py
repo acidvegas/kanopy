@@ -37,6 +37,7 @@ class Connection:
 			self.raw = sqlite3.connect(self.target, timeout=10)
 			self.raw.row_factory = sqlite3.Row
 			self.raw.execute('PRAGMA foreign_keys = ON')
+			self.raw.create_function('LOWER', 1, lambda v: v.lower() if isinstance(v, str) else v, deterministic=True) # SQLite's own LOWER only knows A-Z; search lowercases with Python
 
 
 	def __del__(self):

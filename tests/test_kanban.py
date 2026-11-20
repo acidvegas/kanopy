@@ -692,6 +692,14 @@ class TestRepeat(Base):
 class TestSearch(Base):
 	'''Task search.'''
 
+	def test_non_ascii_case(self):
+		'''Search ignores case for non-English letters too.'''
+
+		t = self.task(title='Ärger mit Öl')
+		self.assertEqual([h['id'] for h in kanban.search('ärger')], [t['id']])
+		self.assertEqual([h['id'] for h in kanban.search('ÖL')], [t['id']])
+
+
 	def test_words_and_snippets(self):
 		'''Every word must appear somewhere; the snippet shows where it matched.'''
 
