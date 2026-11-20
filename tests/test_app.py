@@ -300,6 +300,10 @@ class TestRoutes(AppBase):
 		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
 		self.rpc('tools/call', {'name': 'list_tasks', 'arguments': {}})
 		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
+		self.rpc('tools/call', {'name': 'labels', 'arguments': {}})
+		self.rpc('tools/call', {'name': 'inbox', 'arguments': {}})
+		self.rpc('tools/call', {'name': 'save_task', 'arguments': {'id': 99999, 'title': 'x'}}) # fails: no such task
+		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 1)
 		self.rpc('tools/call', {'name': 'save_task', 'arguments': {'project': 'Ann', 'title': 'x'}})
 		self.assertEqual(self.client.get('/api/revision').json['revision'], start + 2)
 
