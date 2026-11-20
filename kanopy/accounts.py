@@ -651,7 +651,7 @@ def user_delete(user: dict, user_id: int):
 
 def user_reset(user: dict, user_id: int, password: str):
 	'''
-	Set another user's password (admin only) and sign them out everywhere.
+	Set another user's password (admin only), sign them out everywhere and revoke their API tokens.
 
 	:param user: Admin
 	:param user_id: User id
@@ -665,14 +665,16 @@ def user_reset(user: dict, user_id: int, password: str):
 		if not db.execute('UPDATE users SET password = ? WHERE id = ?', (password_hash(password), user_id)).rowcount:
 			raise LookupError('user not found')
 		db.execute('DELETE FROM sessions WHERE user_id = ?', (user_id,))
+		db.execute('DELETE FROM tokens WHERE user_id = ?', (user_id,)) # a reset means the account may be in the wrong hands
 
 
-def user_update(user: dict, data: dict) -> dict:
+def user_update(user: dict, data: dict, session: str = None) -> dict:
 	'''
-	Update the user's own profile: password (needs the current one), ntfy topic, notification toggles.
+	Update the user's own profile: password (needs the current one), ntfy topic, notification toggles. A new password signs out every other session.
 
 	:param user: User dict
 	:param data: Any of: password + current_password, ntfy_topic, notify_* flags
+	:param session: Raw session token of the request, kept signed in after a password change
 	'''
 
 	with kanban.connect() as db:
@@ -682,6 +684,7 @@ def user_update(user: dict, data: dict) -> dict:
 				raise PermissionError('current password is wrong')
 			valid_password(data['password'])
 			db.execute('UPDATE users SET password = ? WHERE id = ?', (password_hash(data['password']), user['id']))
+			db.execute('DELETE FROM sessions WHERE user_id = ? AND token != ?', (user['id'], digest(session) if session else ''))
 		if 'ntfy_topic' in data:
 			topic = (data['ntfy_topic'] or '').strip()
 			if topic and not re.fullmatch(r'[\w-]{1,64}', topic):
