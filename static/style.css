@@ -575,6 +575,10 @@ p.small code { font-family: var(--mono); font-size: .78rem; background: var(--co
 	:is(#drawer, #taskpage) input.assign-input { width: 160px; }
 	:is(#drawer, #taskpage) .fields input { min-width: 0; width: 100%; }
 	:is(#drawer, #taskpage) .fields label:has([data-field=remind_at]) { grid-column: 1 / -1; } /* date + time needs the full row at 16px */
+	input[type=checkbox] { width: 22px; height: 22px; } /* checklist ticks are the main touch on a task */
+	:is(.chip, .person) button { min-width: 32px; min-height: 32px; display: inline-grid; place-items: center; }
+	.md-bar button, .desc-toggle { min-height: 36px; min-width: 36px; }
+	.link-btn { min-height: 32px; }
 }
 .selecting .card .open-new { visibility: hidden; } /* keep its space so cards do not resize; the checkbox sits here */
 
