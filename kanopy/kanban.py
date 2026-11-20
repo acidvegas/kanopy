@@ -934,7 +934,7 @@ def projects() -> list:
 			while pid and pid not in keep:
 				keep.add(pid)
 				pid = parent[pid]
-		rows = [dict(row, open=row['open'] if row['role'] else 0) for row in rows if row['id'] in keep]
+		rows = [row if row['role'] else dict(row, open=0, description='', folder='', owner_id=None) for row in rows if row['id'] in keep] # a parent shown only for the tree gives away nothing but its name
 
 	kids = {}
 	for row in rows:
