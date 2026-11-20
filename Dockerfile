@@ -1,5 +1,7 @@
 FROM python:3.13-slim
 
+LABEL io.modelcontextprotocol.server.name="io.github.acidvegas/kanopy"
+
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt "psycopg[binary]==3.3.9"

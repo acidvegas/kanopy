@@ -1,0 +1,79 @@
+{
+	"$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+	"name": "io.github.acidvegas/kanopy",
+	"title": "kanopy",
+	"description": "Self-hosted kanban board built for AI agents, with a built-in MCP server.",
+	"repository": {
+		"url": "https://github.com/acidvegas/kanopy",
+		"source": "github"
+	},
+	"websiteUrl": "https://acidvegas.github.io/kanopy/",
+	"version": "1.2.3",
+	"remotes": [
+		{
+			"type": "streamable-http",
+			"url": "https://{host}/mcp",
+			"variables": {
+				"host": {
+					"description": "Address of your kanopy server, like kanopy.example.com",
+					"isRequired": true
+				}
+			},
+			"headers": [
+				{
+					"name": "X-Key",
+					"description": "API token from kanopy's Settings, API tokens",
+					"isRequired": true,
+					"isSecret": true
+				},
+				{
+					"name": "X-Agent",
+					"description": "Agent name shown in comments and history",
+					"default": "agent"
+				}
+			]
+		}
+	],
+	"packages": [
+		{
+			"registryType": "oci",
+			"identifier": "ghcr.io/acidvegas/kanopy:1.2.3",
+			"transport": {
+				"type": "stdio"
+			},
+			"runtimeHint": "docker",
+			"runtimeArguments": [
+				{
+					"type": "named",
+					"name": "-v",
+					"value": "{data_dir}:/app/data",
+					"variables": {
+						"data_dir": {
+							"description": "Your kanopy data directory, holding kanban.db",
+							"format": "filepath",
+							"isRequired": true
+						}
+					}
+				}
+			],
+			"packageArguments": [
+				{ "type": "positional", "value": "python" },
+				{ "type": "positional", "value": "-m" },
+				{ "type": "positional", "value": "kanopy.stdio" }
+			],
+			"environmentVariables": [
+				{
+					"name": "KANOPY_TOKEN",
+					"description": "API token from kanopy's Settings, API tokens",
+					"isRequired": true,
+					"isSecret": true
+				},
+				{
+					"name": "KANOPY_AGENT",
+					"description": "Agent name shown in comments and history",
+					"default": "agent"
+				}
+			]
+		}
+	]
+}
