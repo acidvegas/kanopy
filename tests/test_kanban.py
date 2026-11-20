@@ -125,6 +125,22 @@ class TestBulkAndReorder(Base):
 		self.assertEqual([t['id'] for t in kanban.tasks() if t['status'] == 'doing'], [c['id'], b['id'], a['id']])
 
 
+	def test_reorder_around_view_only_cards(self):
+		'''View-only cards in a column stay put instead of blocking the reorder, and cannot be dragged to another column.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		v = self.task('Seen', 'v')
+		a, b = self.task('Shared', 'a'), self.task('Shared', 'b')
+		accounts.share_add(v['project_id'], 'viewer', 'bob')
+		accounts.share_add(a['project_id'], 'editor', 'bob')
+		self.act(bob)
+		kanban.reorder('todo', [b['id'], v['id'], a['id']])
+		self.assertEqual([t['id'] for t in kanban.tasks() if t['status'] == 'todo'], [v['id'], b['id'], a['id']])
+		with self.assertRaises(PermissionError):
+			kanban.reorder('doing', [v['id']])
+
+
 	def test_reorder_into_filled_column(self):
 		'''A card dropped at the top of a column that already has cards stays at the top.'''
 

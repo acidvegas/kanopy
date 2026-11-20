@@ -933,16 +933,22 @@ def reorder(status: str, ids: list):
 	Put tasks into a status column in the given order.
 
 	:param status: Target status column
-	:param ids: The visible task ids in that column, top to bottom; cards not listed (filtered out, other projects) keep their place
+	:param ids: The visible task ids in that column, top to bottom; cards not listed (filtered out, other projects) and view-only cards already in the column keep their place
 	'''
 
 	if status not in STATUSES:
 		raise ValueError(f'status must be one of: {", ".join(STATUSES)}')
 
 	with connect() as db:
-		rows   = {task_id: need_task(db, task_id, EDIT) for task_id in ids}
+		rows = {}
+		lv   = levels(db)
+		for task_id in ids:
+			row = need_task(db, task_id, VIEW)
+			if row['status'] == status and lv is not None and lv.get(row['project_id'], 0) < EDIT:
+				continue # a view-only card stays where it is
+			rows[task_id] = need_task(db, task_id, EDIT)
 		column = [row['id'] for row in db.execute('SELECT id FROM tasks WHERE status = ? AND archived = 0 ORDER BY position, id', (status,))]
-		queue  = list(ids)
+		queue  = [task_id for task_id in ids if task_id in rows]
 		order  = []
 		last   = 0
 		for task_id in column:
