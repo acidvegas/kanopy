@@ -37,14 +37,14 @@ def copy(source: str, dest: str, log=print) -> dict:
 			dst.execute(f'DELETE FROM {table}')
 		for table in TABLES:
 			cols = [c for c in database.columns(src, table) if c in database.columns(dst, table)]
-			rows = src.execute(f'SELECT {", ".join(cols)} FROM {table}').fetchall()
-			if table == 'projects': # a parent can have a higher id than its child, so parents are linked in a second pass
-				at   = cols.index('parent_id')
-				rows = [tuple(None if i == at else v for i, v in enumerate(r)) for r in rows]
-			for start in range(0, len(rows), BATCH):
-				dst.executemany(f'INSERT INTO {table} ({", ".join(cols)}) VALUES ({kanban.marks(cols)})', [tuple(r) for r in rows[start:start + BATCH]])
-			counts[table] = len(rows)
-			log(f'{table:<15} {len(rows):>8}')
+			cur  = src.execute(f'SELECT {", ".join(cols)} FROM {table}')
+			at   = cols.index('parent_id') if table == 'projects' else None # a parent can have a higher id than its child, so parents are linked in a second pass
+			done = 0
+			while rows := cur.fetchmany(BATCH): # a batch at a time, so big attachment tables never sit in memory whole
+				dst.executemany(f'INSERT INTO {table} ({", ".join(cols)}) VALUES ({kanban.marks(cols)})', [tuple(None if i == at else v for i, v in enumerate(r)) for r in rows])
+				done += len(rows)
+			counts[table] = done
+			log(f'{table:<15} {done:>8}')
 		dst.executemany('UPDATE projects SET parent_id = ? WHERE id = ?', [(r['parent_id'], r['id']) for r in src.execute('SELECT id, parent_id FROM projects WHERE parent_id IS NOT NULL')])
 		if dst.postgres: # identity counters continue after the copied ids
 			for table in sorted(database.ID_TABLES):

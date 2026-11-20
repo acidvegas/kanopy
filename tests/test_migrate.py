@@ -77,6 +77,16 @@ class TestMigrate(Base):
 		self.round_trip(str(Path(self.dir.name) / 'copy.db'))
 
 
+	def test_small_batches(self):
+		'''Tables bigger than one batch copy whole, a batch at a time.'''
+
+		old, migrate.BATCH = migrate.BATCH, 2
+		try:
+			self.round_trip(str(Path(self.dir.name) / 'copy.db'))
+		finally:
+			migrate.BATCH = old
+
+
 	@unittest.skipUnless(POSTGRES, 'needs KANOPY_TEST_DATABASE')
 	def test_postgres_and_sqlite(self):
 		'''A board survives PostgreSQL to SQLite and back to PostgreSQL.'''
