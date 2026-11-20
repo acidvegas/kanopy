@@ -155,6 +155,10 @@ class Cursor:
 		return self.cur.fetchone() if self.cur.description else None
 
 
+	def fetchmany(self, size: int) -> list:
+		return self.cur.fetchmany(size) if self.cur.description else []
+
+
 class Row(tuple):
 	'''A result row readable by column name or index, like sqlite3.Row.'''
 
