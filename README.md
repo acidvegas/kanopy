@@ -242,7 +242,7 @@ Everything else *(ntfy, notification times, timezone, auto-archive)* is set on t
 
 ### SQLite or PostgreSQL
 
-SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with `venv/bin/pip install "psycopg[binary]"` *(the Docker image already has it)*, set `KANOPY_DATABASE` and restart. Daily backups to `data/backups` cover SQLite only; back PostgreSQL up with `pg_dump`.
+SQLite is the default and handles a team of dozens of people and agents on tens of thousands of tasks. PostgreSQL is there for larger boards: install its driver with `venv/bin/pip install "psycopg[binary]==3.3.9"` *(the Docker image already has it)*, set `KANOPY_DATABASE` and restart. Daily backups to `data/backups` cover SQLite only; back PostgreSQL up with `pg_dump`.
 
 A board moves between the two in either direction. The source is left as it was and the destination must be a new, empty database:
 
