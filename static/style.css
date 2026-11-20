@@ -726,3 +726,5 @@ img.av { object-fit: cover; padding: 0; background: var(--raised); }
 .set-card h3 .si { width: 14px; height: 14px; }
 button.ib { display: inline-flex; align-items: center; gap: .4rem; }
 button.ib .si { width: 15px; height: 15px; }
+#version-text.warn { color: var(--warn); }
+#version-text.warn a { color: inherit; }

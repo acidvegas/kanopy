@@ -587,7 +587,18 @@ async function searchRun() {
 
 /* ---------- settings ---------- */
 
+async function versionLoad() {
+	const v   = await api('GET', '/api/version');
+	const box = $('#version-text');
+	const tag = (t) => t.replace(/^v/, '');
+	box.classList.toggle('warn', v.outdated);
+	box.innerHTML = v.outdated
+		? `Running ${esc(v.current)}. <b>${esc(tag(v.latest))} is out</b>: <a href="https://github.com/acidvegas/kanopy/releases/latest" target="_blank" rel="noopener">see what changed</a> and update.`
+		: v.latest ? `Running ${esc(v.current)}, the latest release.` : `Running ${esc(v.current)}. ${v.check ? 'Could not reach GitHub to check for a newer release.' : 'The update check is off (KANOPY_UPDATE_CHECK=0).'}`;
+}
+
 async function setLoad() {
+	versionLoad().catch(() => {});
 	const conf = await api('GET', '/api/settings');
 	const form = $('#settings-form');
 	for (const el of form.elements) {

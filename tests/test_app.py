@@ -3,6 +3,7 @@
 # tests/test_app.py
 
 import io
+import json
 import threading
 import time
 import unittest
@@ -296,6 +297,43 @@ class TestRoutes(AppBase):
 		self.assertEqual(self.client.post('/api/settings/test').json, {'ok': True})
 		self.assertEqual(self.pushes[-1]['title'], 'kanopy test')
 		self.assertEqual(app.app.test_client().put('/api/settings', json={}, headers={'X-Key': self.key}).status_code, 403)
+
+
+	def test_version_check(self):
+		'''Admins see the running version against the newest GitHub release; the answer is cached, failures stay quiet, and the check can be turned off.'''
+
+		calls, reply = [], {'tag_name': 'v99.0.0'}
+		class Resp(io.BytesIO):
+			def __enter__(self): return self
+			def __exit__(self, *a): pass
+		def fake(req, timeout):
+			calls.append(req.full_url)
+			if isinstance(reply, Exception):
+				raise reply
+			return Resp(json.dumps(reply).encode())
+		real, app.urllib.request.urlopen = app.urllib.request.urlopen, fake
+		try:
+			app.LATEST.update(tag=None, at=-1e9)
+			v = self.client.get('/api/version').json
+			self.assertEqual((v['current'], v['latest'], v['outdated']), (app.__version__, 'v99.0.0', True))
+			self.client.get('/api/version')
+			self.assertEqual(len(calls), 1) # cached
+			app.LATEST.update(tag=None, at=-1e9)
+			reply = {'tag_name': 'v' + app.__version__}
+			self.assertFalse(self.client.get('/api/version').json['outdated'])
+			app.LATEST.update(tag=None, at=-1e9)
+			reply = OSError('offline')
+			with self.assertLogs(level='WARNING'):
+				self.assertEqual(self.client.get('/api/version').json['latest'], None)
+			app.LATEST.update(tag=None, at=-1e9)
+			app.UPDATE_CHECK = False
+			before = len(calls)
+			self.assertEqual(self.client.get('/api/version').json, {'current': app.__version__, 'latest': None, 'outdated': False, 'check': False})
+			self.assertEqual(len(calls), before)
+		finally:
+			app.urllib.request.urlopen, app.UPDATE_CHECK = real, True
+			app.LATEST.update(tag=None, at=-1e9)
+		self.assertEqual(app.app.test_client().get('/api/version', headers={'X-Key': self.key}).status_code, 403)
 
 
 	def test_revision(self):
