@@ -138,6 +138,18 @@ class TestAuthLayer(AppBase):
 		self.assertEqual((r.status_code, r.json['error']), (409, 'that already exists'))
 
 
+	def test_health(self):
+		'''/health answers ok without signing in, and 503 when the database is unreachable.'''
+
+		r = app.app.test_client().get('/health')
+		self.assertEqual((r.status_code, r.get_data(as_text=True)), (200, 'ok'))
+		real, kanban.connect = kanban.connect, lambda *a, **k: (_ for _ in ()).throw(OSError('down'))
+		try:
+			self.assertEqual(app.app.test_client().get('/health').status_code, 503)
+		finally:
+			kanban.connect = real
+
+
 	def test_expired_fail_entries_dropped(self):
 		'''Addresses whose failed sign-ins have all expired are forgotten on the next sign-in.'''
 

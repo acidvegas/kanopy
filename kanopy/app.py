@@ -826,6 +826,19 @@ def error(exc: Exception) -> tuple:
 	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 409 if isinstance(exc, database.Duplicate) else 400
 
 
+@app.get('/health')
+def health() -> tuple:
+	'''Answer ok when the database responds, for Docker and uptime monitors; no sign-in needed.'''
+
+	try:
+		with kanban.connect() as db:
+			db.execute('SELECT 1').fetchone()
+	except Exception as exc:
+		return f'database unreachable: {type(exc).__name__}', 503, {'Content-Type': 'text/plain'}
+
+	return 'ok', 200, {'Content-Type': 'text/plain'}
+
+
 @app.get('/')
 def index():
 	'''Serve the single page app.'''
