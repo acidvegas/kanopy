@@ -464,13 +464,15 @@ class TestPermissions(Base):
 
 
 	def test_tree_shows_parent_without_access(self):
-		'''Sharing only a sub-project shows its parent in the tree with role 0 and no counts.'''
+		'''Sharing only a sub-project shows its parent in the tree with role 0, no counts and none of its details.'''
 
+		kanban.project_save('Ann', project_id=self.pid, description='private notes', folder='~/dev/secret')
 		accounts.share_add(self.sub, 'viewer', 'bob')
 		self.act(self.bob)
 		rows = {p['path']: p for p in kanban.projects()}
 		self.assertEqual(rows['Ann']['role'], 0)
 		self.assertEqual(rows['Ann']['open'], 0)
+		self.assertEqual((rows['Ann']['description'], rows['Ann']['folder'], rows['Ann']['owner_id']), ('', '', None))
 		self.assertEqual(rows['Ann/sub']['role'], kanban.VIEW)
 
 
