@@ -643,6 +643,16 @@ class TestRepeat(Base):
 		self.assertTrue(ann)
 
 
+	def test_dates_stored_padded(self):
+		'''Unpadded due and reminder dates are stored zero-padded, so a repeating task can still be completed.'''
+
+		t = self.task(due='2027-1-5', remind_at='2027-1-5T9:5', repeat='weekly')
+		got = kanban.task(t['id'])
+		self.assertEqual((got['due'], got['remind_at']), ('2027-01-05', '2027-01-05T09:05'))
+		kanban.task_update(t['id'], {'status': 'done'})
+		self.assertEqual(kanban.task(t['id'])['status'], 'done')
+
+
 	def test_repeat_dates(self):
 		'''Calendar projections list upcoming dates inside the window only.'''
 
