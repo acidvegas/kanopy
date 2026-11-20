@@ -153,6 +153,22 @@ class TestBulkAndReorder(Base):
 class TestHistory(Base):
 	'''Task history and project activity.'''
 
+	def test_moves_hide_private_projects(self):
+		'''A task moved out of a private project does not name that project to people who cannot see it.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		t = self.task('Secret', 'x')
+		shared = kanban.project_save('Shared')['id']
+		accounts.share_add(shared, 'editor', 'bob')
+		kanban.task_update(t['id'], {'project_id': shared})
+		move = lambda: next(e for e in kanban.task(t['id'])['history'] if e['field'] == 'project')
+		self.assertEqual((move()['old'], move()['new']), ('Secret', 'Shared'))
+		self.act(bob)
+		self.assertEqual((move()['old'], move()['new']), ('a private project', 'Shared'))
+		self.assertEqual(next(e for e in kanban.activity(shared) if e['field'] == 'project')['old'], 'a private project')
+
+
 	def test_changes_are_recorded_with_actor_and_agent(self):
 		'''Each field change is an event naming the user and the MCP agent.'''
 
