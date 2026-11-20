@@ -203,6 +203,13 @@ class TestTools(Base):
 		self.assertEqual(kanban.task(t['id'])['description'], 'changed in the web UI\n\nmore')
 		with self.assertRaises(ToolError):
 			self.mcp('save_task', {'id': t['id'], 'description': 'x'}, agent='third') # per agent
+		self.mcp('get_task', {'ids': [t['id']]}) # two sessions of the same agent both read it
+		kanban.SESSION.set('b')
+		self.mcp('get_task', {'ids': [t['id']]})
+		self.mcp('save_task', {'id': t['id'], 'description': 'from b'})
+		kanban.SESSION.set(None)
+		with self.assertRaises(ToolError):
+			self.mcp('save_task', {'id': t['id'], 'description': 'stale from a'}) # per session
 
 
 	def test_edit_append_check_together(self):
