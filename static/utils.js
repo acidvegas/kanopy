@@ -313,6 +313,8 @@ function kbBar() {
 	$('#kb-new-task').hidden    = !!page || KB.view === 'activity';
 	$('#kb-activity').hidden    = !p || !!page;
 	$('#kb-activity').classList.toggle('on', KB.view === 'activity');
+	$('#kb-more').hidden = $('#kb-project-ops').hidden && $('#kb-activity').hidden;
+	$('#bar').classList.remove('more-open');
 	$('#kb-select').hidden      = KB.view !== 'board';
 	$('#kb-select').classList.toggle('on', KB.selecting);
 	$('#nav-search').classList.toggle('active', KB.view === 'search');
@@ -858,6 +860,8 @@ function accountBind() {
 		const sel = e.target.closest('[data-share-role]');
 		if (sel) guard(async () => shareRender((await api('POST', `/api/projects/${KB.project}/shares`, { [sel.dataset.kind === 'team' ? 'team' : 'username']: sel.dataset.name, role: sel.value })).shares));
 	});
+	$('#kb-more').onclick = (e) => { e.stopPropagation(); $('#kb-more').setAttribute('aria-expanded', $('#bar').classList.toggle('more-open')); };
+	document.addEventListener('click', (e) => { if (!e.target.closest('#kb-more')) { $('#bar').classList.remove('more-open'); $('#kb-more').setAttribute('aria-expanded', 'false'); } }); // any tap, in the menu or outside it, closes it
 	$('#kb-activity').onclick = () => location.hash = KB.view === 'activity' ? `#/board/${KB.project}` : `#/activity/${KB.project}`;
 	$('#activity').addEventListener('click', (e) => { const btn = e.target.closest('#activity-more'); if (btn && !btn.disabled) { btn.disabled = true; guard(() => activityLoad(true)).finally(() => btn.disabled = false); } });
 	$('#inbox').addEventListener('click', (e) => {

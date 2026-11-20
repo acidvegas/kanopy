@@ -159,6 +159,15 @@ dialog button.primary.danger { background: var(--danger); color: #fff; }
 .link-btn:hover { color: var(--accent); background: none; }
 #kb-project-ops { display: flex; gap: .4rem; }
 #kb-project-ops[hidden] { display: none; }
+#kb-more { display: none; } /* phones fold the project actions into this menu */
+#kb-more-menu { display: contents; }
+@media (max-width: 800px) {
+	#bar { position: relative; }
+	#kb-more:not([hidden]) { display: inline-flex; }
+	#kb-more-menu { display: none; position: absolute; top: calc(100% + .3rem); right: .75rem; z-index: 40; flex-direction: column; gap: .4rem; padding: .5rem; background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: 0 8px 24px rgb(0 0 0 / .35); }
+	#bar.more-open #kb-more-menu { display: flex; }
+	#kb-more-menu #kb-project-ops { flex-direction: column; }
+}
 #kb-archive.on { color: var(--accent); border-color: var(--accent); }
 
 /* board */
