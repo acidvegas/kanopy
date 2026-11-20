@@ -538,6 +538,27 @@ class TestProjects(Base):
 			self.assertIn(beds, kanban.subtree(db, ann_life))
 
 
+	def test_owner_names_stay_unique(self):
+		'''A manager renaming someone's project, or an admin inheriting a deleted user's projects, never gives one owner two roots with the same name.'''
+
+		root, ann, bob = self.user('root', admin=True), self.user('ann'), self.user('bob')
+		self.act(ann)
+		kanban.project_save('Life')
+		team = kanban.project_save('Team')['id']
+		accounts.share_add(team, 'manager', 'bob')
+		self.act(bob)
+		with self.assertRaises(ValueError):
+			kanban.project_save('Life', project_id=team) # ann already has a Life
+		self.act(root)
+		kanban.project_save('Work')
+		self.act(bob)
+		kanban.project_save('Work')
+		self.act(None)
+		accounts.user_delete(root, bob['id'])
+		self.act(root)
+		self.assertEqual(sorted(p['path'] for p in kanban.projects() if p['owner_id'] == root['id'] and not p['parent_id']), ['Work', 'Work (bob)'])
+
+
 	def test_shared_top_level_resolves_by_name(self):
 		'''A project shared with someone is reached by its name when they have none of their own, over MCP too.'''
 
