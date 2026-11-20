@@ -666,6 +666,16 @@ class TestRepeat(Base):
 		self.assertEqual(kanban.repeat_dates('2027-04-01', '2027-05-31')[t['id']], ['2027-04-30', '2027-05-31'])
 
 
+	def test_overdue_repeat_projects_from_today(self):
+		'''An overdue repeating task shows its upcoming copies only after today, not on the days it already missed.'''
+
+		today = datetime.now(timezone.utc).date()
+		t = self.task(title='water', due=(today - timedelta(days=10)).isoformat(), repeat='daily')
+		got = kanban.repeat_dates((today - timedelta(days=15)).isoformat(), (today + timedelta(days=2)).isoformat())[t['id']]
+		self.assertEqual(got, [(today + timedelta(days=1)).isoformat(), (today + timedelta(days=2)).isoformat()])
+		self.assertEqual(kanban.repeat_next('daily', date(2000, 1, 1), today), today + timedelta(days=1)) # years overdue, still instant
+
+
 	def test_repeat_dates(self):
 		'''Calendar projections list upcoming dates inside the window only.'''
 

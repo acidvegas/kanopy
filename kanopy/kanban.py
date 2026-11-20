@@ -971,7 +971,7 @@ def reorder(status: str, ids: list):
 
 def repeat_dates(start: str, end: str) -> dict:
 	'''
-	Return task id -> upcoming dates (YYYY-MM-DD) between start and end for every open repeating task the user can see, projected from its due date (or reminder).
+	Return task id -> upcoming dates (YYYY-MM-DD) between start and end for every open repeating task the user can see, projected from its due date (or reminder) and never before tomorrow.
 
 	:param start: First day, YYYY-MM-DD
 	:param end: Last day, YYYY-MM-DD
@@ -989,9 +989,11 @@ def repeat_dates(start: str, end: str) -> dict:
 		lv   = levels(db)
 		rows = [r for r in db.execute("SELECT id, project_id, due, remind_at, repeat, repeat_day FROM tasks WHERE repeat IS NOT NULL AND status != 'done' AND archived = 0 AND COALESCE(due, remind_at) IS NOT NULL") if lv is None or lv.get(r['project_id'])]
 
-	out = {}
+	today = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
+	out   = {}
 	for r in rows:
-		base = day = date.fromisoformat((r['due'] or r['remind_at'])[:10])
+		base = date.fromisoformat((r['due'] or r['remind_at'])[:10])
+		day  = max(base, today) # an overdue task's next copy comes after today, so nothing is projected before it
 		while (day := repeat_next(r['repeat'], base, day, r['repeat_day'])) <= end:
 			if day >= start:
 				out.setdefault(r['id'], []).append(day.isoformat())
@@ -1017,7 +1019,8 @@ def repeat_next(spec: str, base: date, today: date, anchor: int = None) -> date:
 
 	unit = next(u for u, word in REPEATS.items() if spec == word or spec.endswith(f' {u}s'))
 	n    = 1 if spec in REPEATS.values() else int(spec.split()[1])
-	k    = 1
+	gone = (today - base).days // (n * (7 if unit == 'week' else 1)) if unit in ('day', 'week') else ((today.year - base.year) * 12 + today.month - base.month) // (n * (12 if unit == 'year' else 1))
+	k    = max(1, gone) # jump close to today instead of counting every step from base
 
 	while True:
 		if unit in ('day', 'week'):
