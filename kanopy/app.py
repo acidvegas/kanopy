@@ -826,6 +826,17 @@ def error(exc: Exception) -> tuple:
 	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 409 if isinstance(exc, database.Duplicate) else 400
 
 
+@app.get('/api/export')
+def api_export() -> Response:
+	'''Download a project (?project=id) and everything under it, or everything you can see, as JSON.'''
+
+	project = request.args.get('project', type=int)
+	data    = dict(kanopy=__version__, exported=kanban.now(), **kanban.export(project))
+	name    = 'kanopy-' + (re.sub(r'[^a-z0-9]+', '-', data['projects'][0]['path'].lower()).strip('-') if project and data['projects'] else 'export') + '.json'
+
+	return Response(json.dumps(data, indent='\t', ensure_ascii=False), mimetype='application/json', headers={'Content-Disposition': f'attachment; filename="{name}"'})
+
+
 @app.get('/health')
 def health() -> tuple:
 	'''Answer ok when the database responds, for Docker and uptime monitors; no sign-in needed.'''

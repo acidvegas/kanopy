@@ -396,6 +396,28 @@ def connect(target: str = None) -> database.Connection:
 	return database.Connection(target or DATABASE)
 
 
+def export(project_id: int = None) -> dict:
+	'''
+	Return a project and everything under it, or everything the signed-in user can see, as plain data: projects, then tasks with their comments, links, attachment details and history.
+
+	:param project_id: Project id, or None for everything visible
+	'''
+
+	if project_id:
+		with connect() as db:
+			require(db, 'projects', project_id)
+			need(db, project_id, VIEW)
+			inside = subtree(db, project_id)
+
+	keys  = ('id', 'parent_id', 'path', 'title', 'description', 'color', 'folder', 'archived', 'position')
+	shown = [{key: p[key] for key in keys} for p in projects() if p['role'] and (not project_id or p['id'] in inside)] # role 0 parents are shown in the tree only, not shared
+
+	with connect() as db:
+		ids = [row['id'] for row in db.execute(f'SELECT id FROM tasks WHERE project_id IN ({marks(shown)}) ORDER BY id', [p['id'] for p in shown])] if shown else []
+
+	return {'projects': shown, 'tasks': [{key: value for key, value in task(i).items() if key != 'role'} for i in ids]}
+
+
 def init(target: str = None):
 	'''
 	Create or upgrade the database, and on a fresh one add an Inbox project and the default type: labels.

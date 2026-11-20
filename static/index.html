@@ -87,6 +87,7 @@
 					<span id="kb-project-ops" hidden>
 						<button id="kb-share" class="icon" title="Share project" aria-label="Share project"><svg viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/></svg></button>
 						<button id="kb-rename" class="icon" title="Rename / move project" aria-label="Rename / move project"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 13h6m-2-2 2 2-2 2"/></svg></button>
+						<button id="kb-export" class="icon" title="Export project as JSON" aria-label="Export project as JSON"><svg viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg></button>
 						<button id="kb-archive" class="icon" title="Archive project" aria-label="Archive project"><svg viewBox="0 0 24 24"><path d="M3 4h18v4H3zM5 8v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8M10 12h4"/></svg></button>
 						<button id="kb-delete" class="icon danger" title="Delete project" aria-label="Delete project"><svg viewBox="0 0 24 24"><path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6M10 11v6M14 11v6"/></svg></button>
 					</span>
@@ -192,6 +193,12 @@
 					<div class="set-card" id="set-trash">
 						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/></svg>Trash</h2><p>Deleted tasks stay here for <span id="trash-days"></span> days, then are gone for good.</p></div></header>
 						<div id="trash"></div>
+					</div>
+					<div class="set-card" id="set-export">
+						<header class="card-head">
+							<div><h2><svg class="si" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>Export</h2><p>Everything you can see as one JSON file: projects, tasks, comments, links and history. Attachments are listed by name, not included.</p></div>
+							<button type="button" id="export-all" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M12 3v12m-5-5 5 5 5-5M5 21h14"/></svg>Download</button>
+						</header>
 					</div>
 					<div class="set-card admin-only" id="set-version">
 						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><path d="M12 2v6M12 22v-6M4.9 4.9l4.2 4.2M19.1 19.1l-4.2-4.2M2 12h6M22 12h-6"/></svg>Version</h2><p id="version-text">Checking...</p></div></header>
