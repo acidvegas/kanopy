@@ -70,7 +70,8 @@ CREATE TABLE IF NOT EXISTS tasks (
 	done_at     TEXT,
 	archived    INTEGER NOT NULL DEFAULT 0,
 	repeat      TEXT,
-	claimed_by  TEXT
+	claimed_by  TEXT,
+	repeat_day  INTEGER -- day of month a monthly/yearly repeat aims for, so the 31st comes back after a short month
 );
 CREATE TABLE IF NOT EXISTS attachments    (id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, data BLOB NOT NULL, created TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS settings       (key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -189,7 +190,7 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 					value = datetime.strptime(data[key], fmt).strftime(fmt) # stored zero-padded, so 2027-1-5 becomes 2027-01-05
 				except (TypeError, ValueError):
 					raise ValueError(f'{key} must look like {shape}') from None
-			db.execute(f'UPDATE tasks SET {key} = ? WHERE id = ?', (value, task_id))
+			db.execute(f'UPDATE tasks SET {key} = ?, repeat_day = NULL WHERE id = ?', (value, task_id)) # a new date starts a fresh repeat anchor
 			if value != row[key]:
 				note(key, row[key], value)
 
@@ -204,7 +205,7 @@ def apply_fields(db: sqlite3.Connection, task_id: int, data: dict, log: bool = T
 
 	if 'repeat' in data:
 		spec = valid_repeat(data['repeat'])
-		db.execute('UPDATE tasks SET repeat = ? WHERE id = ?', (spec, task_id))
+		db.execute('UPDATE tasks SET repeat = ?, repeat_day = NULL WHERE id = ?', (spec, task_id))
 		if spec != row['repeat']:
 			note('repeat', row['repeat'], spec)
 
@@ -415,7 +416,7 @@ def init(target: str = None):
 		if not db.postgres:
 			db.execute('PRAGMA journal_mode = WAL')
 		db.executescript(database.schema(SCHEMA, db.postgres))
-		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
+		for table, column, kind in (('projects', 'owner_id', 'INTEGER REFERENCES users(id)'), ('users', 'avatar', 'BLOB'), ('users', 'avatar_mime', 'TEXT'), ('users', 'avatar_at', 'TEXT'), ('projects', 'folder', "TEXT NOT NULL DEFAULT ''"), ('tasks', 'repeat', 'TEXT'), ('tasks', 'claimed_by', 'TEXT'), ('tasks', 'repeat_day', 'INTEGER'), ('tokens', 'read_only', 'INTEGER NOT NULL DEFAULT 0'), ('teams', 'webhook', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_error', "TEXT NOT NULL DEFAULT ''"), ('teams', 'webhook_failed', 'TEXT')): # columns added after the first release
 			if column not in database.columns(db, table):
 				db.execute(f'ALTER TABLE {table} ADD COLUMN {column} {database.schema(kind, db.postgres)}')
 		if 'owner_id' not in database.columns(db, 'labels'): # SQLite boards from before personal labels: they were all global with unique names; type: stays global, the rest become the first admin's
@@ -986,25 +987,26 @@ def repeat_dates(start: str, end: str) -> dict:
 
 	with connect() as db:
 		lv   = levels(db)
-		rows = [r for r in db.execute("SELECT id, project_id, due, remind_at, repeat FROM tasks WHERE repeat IS NOT NULL AND status != 'done' AND archived = 0 AND COALESCE(due, remind_at) IS NOT NULL") if lv is None or lv.get(r['project_id'])]
+		rows = [r for r in db.execute("SELECT id, project_id, due, remind_at, repeat, repeat_day FROM tasks WHERE repeat IS NOT NULL AND status != 'done' AND archived = 0 AND COALESCE(due, remind_at) IS NOT NULL") if lv is None or lv.get(r['project_id'])]
 
 	out = {}
 	for r in rows:
 		base = day = date.fromisoformat((r['due'] or r['remind_at'])[:10])
-		while (day := repeat_next(r['repeat'], base, day)) <= end:
+		while (day := repeat_next(r['repeat'], base, day, r['repeat_day'])) <= end:
 			if day >= start:
 				out.setdefault(r['id'], []).append(day.isoformat())
 
 	return out
 
 
-def repeat_next(spec: str, base: date, today: date) -> date:
+def repeat_next(spec: str, base: date, today: date, anchor: int = None) -> date:
 	'''
 	Return the next date of a repeat rule after base, never today or earlier.
 
 	:param spec: Repeat rule from valid_repeat
 	:param base: Date the finished occurrence was due
 	:param today: Today's local date
+	:param anchor: Day of month monthly/yearly repeats aim for (default base's day), clamped to short months
 	'''
 
 	if set(spec.split(',')) <= {d[:3] for d in DAYS}:
@@ -1023,7 +1025,7 @@ def repeat_next(spec: str, base: date, today: date) -> date:
 		else:
 			months = base.month - 1 + k * n * (12 if unit == 'year' else 1)
 			year   = base.year + months // 12
-			day    = date(year, months % 12 + 1, min(base.day, calendar.monthrange(year, months % 12 + 1)[1])) # stepped from base each time, so the 31st stays the 31st where it exists
+			day    = date(year, months % 12 + 1, min(anchor or base.day, calendar.monthrange(year, months % 12 + 1)[1])) # aims for the anchor day, so the 31st comes back after February
 		if day > today:
 			return day
 		k += 1
@@ -1042,13 +1044,14 @@ def repeat_spawn(db: sqlite3.Connection, task_id: int):
 	if not row['repeat']:
 		return
 
-	today = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
-	base  = date.fromisoformat((row['due'] or row['remind_at'] or today.isoformat())[:10])
-	shift = repeat_next(row['repeat'], base, today) - base
-	moved = lambda value: (datetime.fromisoformat(value) + shift).isoformat()[:len(value)] if value else None
-	stamp = now()
+	today  = datetime.now(ZoneInfo(setting_values().get('timezone') or 'UTC')).date()
+	base   = date.fromisoformat((row['due'] or row['remind_at'] or today.isoformat())[:10])
+	anchor = row['repeat_day'] or base.day # kept across copies, so a shortened month does not stick
+	shift  = repeat_next(row['repeat'], base, today, anchor) - base
+	moved  = lambda value: (datetime.fromisoformat(value) + shift).isoformat()[:len(value)] if value else None
+	stamp  = now()
 
-	new_id = db.execute('INSERT INTO tasks (project_id, title, description, priority, due, remind_at, repeat, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (row['project_id'], row['title'], re.sub(r'^(\s*[-*] )\[[xX]\]', r'\1[ ]', row['description'], flags=re.M), row['priority'], moved(row['due']), moved(row['remind_at']), row['repeat'], stamp, stamp)).lastrowid
+	new_id = db.execute('INSERT INTO tasks (project_id, title, description, priority, due, remind_at, repeat, repeat_day, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (row['project_id'], row['title'], re.sub(r'^(\s*[-*] )\[[xX]\]', r'\1[ ]', row['description'], flags=re.M), row['priority'], moved(row['due']), moved(row['remind_at']), row['repeat'], anchor, stamp, stamp)).lastrowid
 	set_status(db, new_id, 'todo', False)
 	db.execute('INSERT INTO task_labels SELECT ?, label_id FROM task_labels WHERE task_id = ?', (new_id, task_id))
 	db.execute('INSERT INTO task_assignees SELECT ?, user_id FROM task_assignees WHERE task_id = ?', (new_id, task_id))

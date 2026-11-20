@@ -653,6 +653,19 @@ class TestRepeat(Base):
 		self.assertEqual(kanban.task(t['id'])['status'], 'done')
 
 
+	def test_monthly_repeat_keeps_its_day(self):
+		'''A monthly task due on the 31st lands on the 28th in February and back on the 31st in March.'''
+
+		t = self.task(title='rent', due='2027-01-31', repeat='monthly')
+		dues = []
+		for _ in range(2):
+			kanban.task_update(t['id'], {'status': 'done'})
+			t = next(x for x in kanban.tasks() if x['title'] == 'rent' and x['status'] == 'todo')
+			dues.append(t['due'])
+		self.assertEqual(dues, ['2027-02-28', '2027-03-31'])
+		self.assertEqual(kanban.repeat_dates('2027-04-01', '2027-05-31')[t['id']], ['2027-04-30', '2027-05-31'])
+
+
 	def test_repeat_dates(self):
 		'''Calendar projections list upcoming dates inside the window only.'''
 
