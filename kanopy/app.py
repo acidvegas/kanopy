@@ -388,10 +388,11 @@ def api_bulk() -> dict:
 
 	body    = json_body()
 	ids     = [int(i) for i in body.get('ids', [])]
-	before  = {task_id: kanban.task(task_id) for task_id in ids}
+	watch   = notify.webhook_tasks(ids) # only tasks a team webhook will hear about need before/after copies
+	before  = {task_id: kanban.task(task_id) for task_id in watch}
 	changed = kanban.bulk(ids, body)
 
-	notify.webhook_bulk('deleted' if body.get('delete') else 'updated', before, {} if body.get('delete') else {task_id: kanban.task(task_id) for task_id in ids})
+	notify.webhook_bulk('deleted' if body.get('delete') else 'updated', before, {} if body.get('delete') else {task_id: kanban.task(task_id) for task_id in watch})
 
 	return {'changed': changed}
 

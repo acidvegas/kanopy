@@ -509,6 +509,16 @@ class TestWebhooks(Base):
 		self.assertEqual(self.hits[-1][1]['action'], 'deleted')
 
 
+	def test_webhook_tasks(self):
+		'''Only tasks under a project a team webhook covers need snapshots, and none when no team has a webhook.'''
+
+		a, b = self.task('Work', 'one'), self.task('Elsewhere', 'two')
+		self.assertEqual(notify.webhook_tasks([a['id'], b['id']]), [a['id']])
+		with kanban.connect() as db:
+			db.execute("UPDATE teams SET webhook = ''")
+		self.assertEqual(notify.webhook_tasks([a['id'], b['id']]), [])
+
+
 	def test_skipped(self):
 		'''Unshared projects, changes with no tracked field, system changes and teams without a URL post nothing.'''
 

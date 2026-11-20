@@ -497,6 +497,22 @@ def webhook_status(url: str, error: str):
 		logging.warning('could not record team webhook status: %s', exc)
 
 
+def webhook_tasks(ids: list) -> list:
+	'''
+	Return the ids among these tasks that some team webhook covers; none at all when no team has a webhook.
+
+	:param ids: Task ids
+	'''
+
+	with kanban.connect() as db:
+		if not db.execute("SELECT 1 FROM teams WHERE webhook != ''").fetchone():
+			return []
+
+	hooked = {}
+
+	return [t['id'] for t in kanban.tasks(ids=ids, archived=True, brief=True) if hooked.setdefault(t['project_id'], bool(webhook_urls(t['project_id'])))]
+
+
 def webhook_urls(project_id: int) -> list:
 	'''
 	Return the webhook URLs of the teams a project is shared with, directly or through a parent project.
