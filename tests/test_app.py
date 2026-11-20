@@ -432,11 +432,19 @@ class TestMcpEndpoint(AppBase):
 	'''MCP over HTTP.'''
 
 	def test_needs_token(self):
-		'''The MCP endpoint takes API tokens only, never cookies.'''
+		'''Tool calls take API tokens only, never cookies; without a token only the handshake and the tool list answer, and the board's instructions stay private.'''
 
-		self.assertEqual(self.client.post('/mcp', json={'jsonrpc': '2.0', 'id': 1, 'method': 'ping'}).status_code, 401)
+		call = {'jsonrpc': '2.0', 'id': 1, 'method': 'tools/call', 'params': {'name': 'list_projects', 'arguments': {}}}
+		self.assertEqual(self.client.post('/mcp', json=call).status_code, 401)
+		self.assertEqual(app.app.test_client().post('/mcp', json=dict(call, method='resources/list')).status_code, 401)
 		self.assertEqual(self.rpc('ping', key='bk_wrong').status_code, 401)
 		self.assertEqual(self.rpc('ping').json['result'], {})
+		anon = app.app.test_client()
+		init = anon.post('/mcp', json={'jsonrpc': '2.0', 'id': 1, 'method': 'initialize', 'params': {}}).json['result']
+		self.assertEqual((init['serverInfo']['name'], 'instructions' in init), ('kanopy', False))
+		self.assertIn('instructions', self.rpc('initialize').json['result'])
+		self.assertIn('save_task', [t['name'] for t in anon.post('/mcp', json={'jsonrpc': '2.0', 'id': 2, 'method': 'tools/list'}).json['result']['tools']])
+		self.assertEqual(anon.post('/mcp', json={'jsonrpc': '2.0', 'method': 'notifications/initialized'}).status_code, 202)
 
 
 	def test_notification_is_202(self):
