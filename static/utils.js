@@ -3,8 +3,6 @@
 
 const $ = (sel) => document.querySelector(sel);
 
-const ICONS = { chev: '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>' };
-
 
 /* ---------- helpers ---------- */
 
@@ -26,7 +24,7 @@ async function api(method, url, body) {
 	return data;
 }
 
-function ask({ title, text = '', value = null, ok = 'OK', danger = false, path = false, secret = false }) {
+function ask({ title, text = '', value = null, ok = 'OK', danger = false, path = false, secret = false, check = null }) { // check: label for an on-by-default switch; OK then resolves to its state
 	return new Promise((resolve) => {
 		const dlg   = $('#dialog');
 		const input = $('#dlg-input');
@@ -37,10 +35,13 @@ function ask({ title, text = '', value = null, ok = 'OK', danger = false, path =
 		input.hidden = value === null;
 		input.type   = secret ? 'password' : 'text';
 		input.value  = value ?? '';
+		$('#dlg-check').hidden = check === null;
+		$('#dlg-check b').textContent = check ?? '';
+		$('#dlg-check input').checked = true;
 		dlg.returnValue = '';
 		dlg.showModal();
 		if (!input.hidden) input.focus();
-		dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? (value === null ? true : answer(input.value, path, secret)) : null), { once: true });
+		dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? (check !== null ? $('#dlg-check input').checked : value === null ? true : answer(input.value, path, secret)) : null), { once: true });
 	});
 }
 
@@ -122,6 +123,7 @@ const PRIO   = ['none', 'low', 'medium', 'high', 'urgent', 'do now'];
 
 const SVG = {
 	chat  : '<svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+	chev  : '<svg class="chev" viewBox="0 0 24 24"><path d="m9 6 6 6-6 6"/></svg>',
 	check : '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="m8 12 3 3 5-6"/></svg>',
 	clip  : '<svg viewBox="0 0 24 24"><path d="m21 12-8.5 8.5a5 5 0 0 1-7-7L14 5a3.5 3.5 0 0 1 5 5l-8.5 8.5a2 2 0 0 1-3-3L15 8"/></svg>',
 	down  : '<svg viewBox="0 0 24 24"><path d="M12 4v12M6 10l6 6 6-6M4 20h16"/></svg>',
@@ -227,7 +229,7 @@ function kbTree() {
 	for (const p of KB.projects) {
 		if ((p.archived && !KB.archived && p.id !== KB.project) || (keep ? !keep.has(p.path) : hidden(p))) continue;
 		const depth = p.path.split('/').length - 1;
-		const chev  = parent(p) ? `<i class="chev-btn" data-path="${esc(p.path)}">${ICONS.chev}</i>` : '<i class="chev-pad"></i>';
+		const chev  = parent(p) ? `<i class="chev-btn" data-path="${esc(p.path)}">${SVG.chev}</i>` : '<i class="chev-pad"></i>';
 		const dot   = p.color ? `<i class="dot" style="--c:${p.color}"></i>` : '<i class="dot none"></i>';
 		nav.insertAdjacentHTML('beforeend', `<a class="item project${p.id === KB.project ? ' active' : ''}${p.archived ? ' archived' : ''}${KB.collapsed.has(p.path) ? '' : ' open'}" href="#/${kbView()}/${p.id}" draggable="true" style="--depth:${depth}">${chev}${dot}<span>${esc(p.title)}</span>${p.open ? `<b class="count">${p.open}</b>` : ''}</a>`);
 	}
@@ -417,7 +419,7 @@ function kbCalendar() {
 			const t     = KB.tasks.find((x) => x.id === +evt.item.dataset.id);
 			const field = evt.item.dataset.kind === 'due' ? { due: date } : { remind_at: `${date}T${t.remind_at.slice(11, 16)}` };
 			guard(async () => {
-				await api('PATCH', `/api/tasks/${t.id}`, field);
+				await api('PATCH', `/api/tasks/${t.id}`, field).catch(async (err) => { await kbLoad(); throw err; }); // refused: redraw so the card goes back
 				await kbLoad();
 				await kbRefreshTask(t.id);
 				toast(`#${t.id} ${evt.item.dataset.kind === 'due' ? 'due' : 'reminder'} moved to ${date}`);
@@ -519,7 +521,7 @@ function descRender(p, editing = false) {
 		input.style.height = Math.max(110, input.scrollHeight + 4) + 'px';
 		return input.focus();
 	}
-	box.innerHTML = `<div class="desc-head"><button class="desc-toggle${open ? ' open' : ''}" data-desc="toggle">${ICONS.chev}<b>Description</b></button>${p.folder ? `<code class="desc-path" title="Folder">${esc(p.folder)}</code>` : ''}<span class="spacer"></span><button class="icon small" data-desc="edit" title="Edit description and color" aria-label="Edit description and color">${SVG.edit}</button></div>` +
+	box.innerHTML = `<div class="desc-head"><button class="desc-toggle${open ? ' open' : ''}" data-desc="toggle">${SVG.chev}<b>Description</b></button>${p.folder ? `<code class="desc-path" title="Folder">${esc(p.folder)}</code>` : ''}<span class="spacer"></span><button class="icon small" data-desc="edit" title="Edit description and color" aria-label="Edit description and color">${SVG.edit}</button></div>` +
 		(open ? `<div class="markdown desc-body">${p.description.trim() ? mdHtml(p.description) : '<p class="dim">No description yet. Click the pencil to add one.</p>'}</div>` : '');
 }
 
@@ -692,6 +694,7 @@ function bulkBar() {
 	$('#bulk-label').value = '';
 	$('#bulk-unlabel').innerHTML = '<option value="">Remove label</option>' + used.map((l) => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
 	$('#bulk-unlabel').disabled = !used.length;
+	document.body.style.setProperty('--bulk-h', bar.offsetHeight + 'px'); // the card lists leave this much room so the bar never covers the last card
 }
 
 function bulkMode(on) {
@@ -868,9 +871,15 @@ function accountBind() {
 		if (btn.dataset.userAct === 'reset') {
 			const pw = await ask({ title: `New password for ${name}`, text: 'At least 8 characters. They are signed out everywhere.', value: '', ok: 'Set password', secret: true });
 			if (pw) guard(async () => { await api('POST', `/api/users/${id}/password`, { password: pw }); toast(`Password set for ${name}`); });
-		} else if (await ask({ title: `Delete ${name}?`, text: 'Their projects move to you; their assignments, comments stay. This cannot be undone.', ok: 'Delete', danger: true })) {
-			guard(async () => { await api('DELETE', `/api/users/${id}`); usersLoad(); });
-		}
+		} else guard(async () => {
+			const f      = await api('GET', `/api/users/${id}/footprint`);
+			const shared = f.shared ? ` ${f.shared} of those projects ${f.shared === 1 ? 'is' : 'are'} shared with others.` : '';
+			const keep   = await ask({ title: `Delete ${name}?`, text: `This permanently deletes ${f.projects} project${f.projects === 1 ? '' : 's'} and ${f.tasks} task${f.tasks === 1 ? '' : 's'} they own.${shared} Their comments elsewhere stay. This cannot be undone.`, ok: 'Delete', danger: true, check: `Keep their labels as yours (${f.tags} tag${f.tags === 1 ? '' : 's'} on other people's tasks)` });
+			if (keep === null) return;
+			await api('DELETE', `/api/users/${id}`, { keep_labels: keep });
+			await kbLoad();
+			usersLoad();
+		});
 	});
 	$('#kb-share').onclick = () => shareOpen();
 	$('#share-add').onclick = () => shareAdd();
@@ -1241,7 +1250,7 @@ function kbDrawer() {
 			</section>`;
 	const history = t.history.length ? `<section>
 				<details class="history"${same && old.querySelector('.history')?.open ? ' open' : ''}>
-					<summary><h4>${ICONS.chev}History <span class="dim">${t.history.length}</span></h4></summary>
+					<summary><h4>${SVG.chev}History <span class="dim">${t.history.length}</span></h4></summary>
 					<ul class="events">${t.history.map((e) => kbEvent(e)).join('')}</ul>
 				</details>
 			</section>` : '';
@@ -1524,7 +1533,7 @@ function kbBind() {
 	$('#kb-rename').onclick = async () => {
 		const p = project(KB.project);
 		const path = await ask({ title: 'Rename / move project', value: p.path, ok: 'Save', path: true });
-		if (path && path !== p.path) await guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { path }); await kbLoad(); });
+		if (path && path !== p.path) await guard(async () => { await api('PATCH', `/api/projects/${p.id}`, { path }); await kbLoad(); if (KB.task) await kbRefreshTask(KB.task.id); });
 	};
 	$('#kb-archive').onclick = async () => {
 		const p = project(KB.project);
@@ -1559,7 +1568,7 @@ function kbBind() {
 				if (evt.from === evt.to && evt.oldIndex === evt.newIndex) return;
 				const to = evt.to.closest('.column').dataset.status;
 				guard(async () => {
-					await api('POST', '/api/reorder', { status: to, ids: [...evt.to.children].map((c) => +c.dataset.id) });
+					await api('POST', '/api/reorder', { status: to, ids: [...evt.to.children].map((c) => +c.dataset.id) }).catch(async (err) => { await kbLoad(); throw err; }); // refused: redraw so the card goes back
 					await kbLoad();
 					if (KB.task) {
 						KB.task = await api('GET', `/api/tasks/${KB.task.id}`);
@@ -1588,7 +1597,12 @@ function kbBind() {
 	$('#bulk-status').onchange = (e) => bulkApply({ status: e.target.value }, `Moved to ${STATUS[e.target.value]}`);
 	$('#bulk-project').onchange = (e) => bulkApply({ project_id: +e.target.value }, `Moved to ${project(+e.target.value)?.path}`);
 	$('#bulk-unlabel').onchange = (e) => bulkApply({ remove_label: e.target.value }, `Removed ${e.target.value}`);
-	$('#bulk-label').onkeydown = (e) => { if (e.key === 'Enter' && e.target.value.trim()) bulkApply({ add_label: e.target.value.trim() }, `Added ${e.target.value.trim()}`); };
+	$('#bulk-label').onkeydown = (e) => {
+		const name = e.target.value.trim();
+		if (e.key !== 'Enter' || !name) return;
+		e.target.value = ''; // cleared first so the change event that follows Enter has nothing to add again
+		bulkApply({ add_label: name }, `Added ${name}`);
+	};
 	$('#bulk-label').onchange = (e) => { if (KB.labels.some((l) => l.name === e.target.value.trim())) bulkApply({ add_label: e.target.value.trim() }, `Added ${e.target.value.trim()}`); };
 	$('#bulk-delete').onclick = async () => {
 		const n = KB.picked.size;
@@ -1734,6 +1748,7 @@ function linkSuggest() {
 }
 
 function kbKey(e) {
+	if (e.key === 'Escape' && e.target.closest?.('.md-editor')?.querySelector('.mention-pop:not([hidden])')) return; // the editor's own handler closes the @mention list
 	if (e.key === 'Escape' && KB.task && !document.querySelector('dialog[open]') && e.target.closest?.('#drawer, #taskpage') && e.target.matches('input, textarea, select')) {
 		e.target.blur(); // first Esc leaves the field, the next one closes the task
 		return pane().focus({ preventScroll: true });
@@ -1788,7 +1803,6 @@ document.addEventListener('DOMContentLoaded', () => {
 		kbRoute(location.hash).catch((err) => [403, 404].includes(err.status) ? kbLost() : toast(err.message, true));
 	};
 	window.addEventListener('hashchange', route);
-	KB.route = route;
 	setInterval(() => kbPoll().catch(() => {}), 15_000);
 	fetch('/api/me').then((res) => res.ok ? res.json() : null).then((me) => {
 		KB.me = me;

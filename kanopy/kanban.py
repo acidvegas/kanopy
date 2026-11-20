@@ -26,6 +26,7 @@ MAX_FILE = 25 * 1024 * 1024 # bytes per attachment
 SAFE_MIME = ('image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif', 'application/pdf', 'text/plain') # attachment types kept as-is; anything else (SVG, HTML...) is stored as application/octet-stream
 INVERSE  = {'blocking': 'blocked', 'blocked': 'blocking', 'subtask': 'parenttask', 'parenttask': 'subtask', 'related': 'related', 'duplicates': 'duplicateof', 'duplicateof': 'duplicates', 'precedes': 'follows', 'follows': 'precedes'}
 LABEL_RE = re.compile(r'^[a-z]+:[a-z0-9][a-z0-9._-]*$')
+LABEL_MAX = 64 # characters in a label name
 STATUSES = ('todo', 'doing', 'done')
 COLORS   = ('#a78bfa', '#f472b6', '#f87171', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#22d3ee', '#60a5fa', '#94a3b8')
 COLOR_RE = re.compile(r'^#[0-9a-fA-F]{6}$')
@@ -765,6 +766,35 @@ def subtree(db: sqlite3.Connection, project_id: int) -> set:
 	return out
 
 
+def root_owner(db: sqlite3.Connection, project_id: int):
+	'''
+	Return the owner id of a project's top-level ancestor, whose ownership carries down the whole tree.
+
+	:param db: Open database connection
+	:param project_id: Project id
+	'''
+
+	row = db.execute('SELECT parent_id, owner_id FROM projects WHERE id = ?', (project_id,)).fetchone()
+	while row['parent_id']:
+		row = db.execute('SELECT parent_id, owner_id FROM projects WHERE id = ?', (row['parent_id'],)).fetchone()
+
+	return row['owner_id']
+
+
+def need_move(db: sqlite3.Connection, project_id: int, parent_id: int):
+	'''
+	Raise PermissionError when a move would put a project under a different owner's tree and the signed-in user does not own it, so a manager cannot take a project by moving it under their own.
+
+	:param db: Open database connection
+	:param project_id: Project being moved
+	:param parent_id: New parent project id, or None for top-level
+	'''
+
+	after = root_owner(db, parent_id) if parent_id else db.execute('SELECT owner_id FROM projects WHERE id = ?', (project_id,)).fetchone()['owner_id']
+	if after != root_owner(db, project_id):
+		need(db, project_id, OWN)
+
+
 def top_project(db: sqlite3.Connection, title: str):
 	'''
 	Find the top-level project a name means for the signed-in user: their own first, then an ownerless one, then (for non-admins) one shared with them. Other people's private top-level projects never match, so everyone has their own names.
@@ -864,6 +894,8 @@ def project_order(parent_id: int, ids: list):
 				if ancestor == pid:
 					raise ValueError('cannot move a project into itself')
 				ancestor = db.execute('SELECT parent_id FROM projects WHERE id = ?', (ancestor,)).fetchone()['parent_id']
+			if row['parent_id'] != parent_id:
+				need_move(db, pid, parent_id)
 			if row['parent_id'] != parent_id and db.execute('SELECT 1 FROM projects WHERE title = ? AND parent_id IS ? AND id != ?' + ('' if parent_id else ' AND owner_id IS ?'), (row['title'], parent_id, pid) + (() if parent_id else (row['owner_id'],))).fetchone(): # top-level names are unique per owner
 				raise ValueError(f'a project named {row["title"]} already exists there')
 			db.execute('UPDATE projects SET parent_id = ?, position = ? WHERE id = ?', (parent_id, pos, pid))
@@ -916,8 +948,10 @@ def project_save(path: str, project_id: int = None, description: str = None, arc
 					if ancestor == project_id:
 						raise ValueError('cannot move a project into itself')
 					ancestor = db.execute('SELECT parent_id FROM projects WHERE id = ?', (ancestor,)).fetchone()['parent_id']
-				if parent and parent != db.execute('SELECT parent_id FROM projects WHERE id = ?', (project_id,)).fetchone()['parent_id']:
-					need(db, parent, MANAGE)
+				if parent != db.execute('SELECT parent_id FROM projects WHERE id = ?', (project_id,)).fetchone()['parent_id']:
+					if parent:
+						need(db, parent, MANAGE)
+					need_move(db, project_id, parent)
 				db.execute('UPDATE projects SET title = ?, parent_id = ? WHERE id = ?', (parts[-1], parent, project_id))
 			else:
 				if parent:
@@ -1264,12 +1298,12 @@ def set_labels(db: sqlite3.Connection, task_id: int, names: list):
 
 	names = sorted({name.strip().lower() for name in names if name.strip()})
 
-	for name in names:
-		if not LABEL_RE.match(name):
-			raise ValueError(f'label "{name}" must look like namespace:value')
-
 	on   = db.execute('SELECT l.id, l.name FROM labels l JOIN task_labels tl ON tl.label_id = l.id WHERE tl.task_id = ?', (task_id,)).fetchall()
 	have = {r['name'] for r in on if r['name'] in names} # a label already on the task stays, whoever owns it
+
+	for name in names:
+		if name not in have: # names made before a rule changed stay usable on the tasks that have them
+			valid_label(name)
 
 	for r in on:
 		if r['name'] not in names:
@@ -1632,6 +1666,9 @@ def valid_label(name: str) -> str:
 
 	if not LABEL_RE.match(name):
 		raise ValueError(f'label "{name}" must look like namespace:value')
+
+	if len(name) > LABEL_MAX:
+		raise ValueError(f'label names are at most {LABEL_MAX} characters')
 
 	return name
 

@@ -31,6 +31,7 @@ except ImportError:
 
 from . import __version__
 from . import accounts
+from . import database
 from . import kanban
 from . import mcp_server
 from . import notify
@@ -360,11 +361,18 @@ def api_user_avatar(user_id: int) -> Response:
 	return Response(data, mimetype=mime, headers={'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff'})
 
 
+@app.get('/api/users/<int:user_id>/footprint')
+def api_user_footprint(user_id: int) -> dict:
+	'''What deleting a user would remove (admin).'''
+
+	return accounts.user_footprint(g.user, user_id)
+
+
 @app.delete('/api/users/<int:user_id>')
 def api_user_delete(user_id: int) -> dict:
-	'''Delete a user (admin).'''
+	'''Delete a user and their projects (admin); keep_labels keeps their labels as yours.'''
 
-	accounts.user_delete(g.user, user_id)
+	accounts.user_delete(g.user, user_id, keep_labels=json_body().get('keep_labels', True) is not False)
 
 	return {'users': accounts.users()}
 
@@ -799,7 +807,7 @@ def version_key(tag: str) -> tuple:
 def json_body() -> dict:
 	'''Return the request's JSON object, or {} when there is no body; anything but an object is a 400.'''
 
-	body = request.get_json(force=True) or {}
+	body = (request.get_json(force=True) or {}) if request.get_data() else {}
 
 	if not isinstance(body, dict):
 		raise ValueError('send a JSON object')
@@ -813,9 +821,9 @@ def json_body() -> dict:
 @app.errorhandler(TypeError)
 @app.errorhandler(AttributeError)
 def error(exc: Exception) -> tuple:
-	'''Return lookup errors as 404, permission errors as 403 and validation errors (bad values or types, like a number where text belongs) as 400.'''
+	'''Return lookup errors as 404, permission errors as 403, unique-rule clashes as 409 and validation errors (bad values or types, like a number where text belongs) as 400.'''
 
-	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 400
+	return {'error': str(exc)}, 404 if isinstance(exc, LookupError) else 403 if isinstance(exc, PermissionError) else 409 if isinstance(exc, database.Duplicate) else 400
 
 
 @app.get('/')

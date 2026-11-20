@@ -2,6 +2,8 @@
 # kanopy - Developed by acidvegas in Python (https://github.com/acidvegas)
 # tests/test_mcp.py
 
+import threading
+import time
 import unittest
 
 from datetime import datetime, timedelta, timezone
@@ -401,6 +403,33 @@ class TestTools(Base):
 		self.assertIn('... 1 more', self.mcp('list_tasks', {'changed': '1d', 'limit': 1}))
 
 
+	def test_claim_race(self):
+		'''Two sessions claiming the same task at once: exactly one gets it, the other is told it is taken.'''
+
+		t    = self.task()
+		read = kanban.task
+		kanban.task = lambda *a, **k: (read(*a, **k), time.sleep(0.05))[0] # widen the gap between the check and the write
+		results = {}
+
+		def claim(session):
+			kanban.AGENT.set('claude')
+			kanban.SESSION.set(session)
+			try:
+				results[session] = self.mcp('save_task', {'id': t['id'], 'status': 'doing'})
+			except ToolError as exc:
+				results[session] = str(exc)
+
+		try:
+			threads = [threading.Thread(target=claim, args=(s,)) for s in ('aaa', 'bbb')]
+			for th in threads:
+				th.start()
+			for th in threads:
+				th.join()
+		finally:
+			kanban.task = read
+		self.assertEqual(sum('already being worked on' in r for r in results.values()), 1)
+
+
 	def test_claims(self):
 		'''doing claims a task for the session; another session is refused unless it takes over; leaving doing releases it.'''
 
@@ -457,6 +486,21 @@ class TestTools(Base):
 		self.assertIn('~/a', self.mcp('list_projects'))
 		self.mcp('save_project', {'project': 'A', 'path': 'Moved/A'})
 		self.assertIn('Moved/A', self.mcp('list_projects'))
+
+
+	def test_hidden_links(self):
+		'''Links to tasks in projects the user cannot see are left out of task lines.'''
+
+		ann, bob = self.user('ann'), self.user('bob')
+		self.act(ann)
+		secret = self.task('Private', 'secret')
+		shared = self.task('Team', 'shared')
+		accounts.share_add(shared['project_id'], 'viewer', 'bob')
+		kanban.link_add(shared['id'], 'blocked', secret['id'])
+		self.assertIn(f'blocked-by:#{secret["id"]}', self.mcp('get_task', {'id': shared['id']}))
+		self.act(bob)
+		self.assertNotIn('blocked-by', self.mcp('get_task', {'id': shared['id']}))
+		self.assertNotIn('blocked-by', self.mcp('list_tasks', {'project': 'Team'}))
 
 
 	def test_comment_link_labels_inbox(self):

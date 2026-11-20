@@ -249,6 +249,16 @@ class TestLabels(Base):
 		self.assertNotIn('host:pi', [l['name'] for l in kanban.labels()])
 
 
+	def test_label_length(self):
+		'''Label names over LABEL_MAX characters are refused on tasks and on rename.'''
+
+		self.task(labels=['host:' + 'x' * 59])
+		with self.assertRaises(ValueError):
+			self.task(labels=['host:' + 'x' * 60])
+		with self.assertRaises(ValueError):
+			kanban.valid_label('host:' + 'y' * 60)
+
+
 	def test_global_label_absorbs_personal(self):
 		'''Creating a global label folds same-named personal labels into it.'''
 
@@ -467,6 +477,24 @@ class TestPermissions(Base):
 			kanban.project_delete(empty)
 
 
+	def test_manager_cannot_take_by_moving(self):
+		'''A manager cannot move a shared project under their own tree, by drag or by path, but can still move it within the owner's tree.'''
+
+		accounts.share_add(self.pid, 'manager', 'bob')
+		self.act(self.bob)
+		mine = kanban.project_save('Bob')['id']
+		with self.assertRaises(PermissionError):
+			kanban.project_order(mine, [self.sub])
+		with self.assertRaises(PermissionError):
+			kanban.project_save('Bob/sub', self.sub)
+		with self.assertRaises(PermissionError):
+			kanban.project_save('Bob/new/sub', self.sub)
+		other = kanban.project_save('Ann/other')['id']
+		kanban.project_order(other, [self.sub])
+		self.act(self.ann)
+		self.assertEqual(next(p['path'] for p in kanban.projects() if p['id'] == self.sub), 'Ann/other/sub')
+
+
 	def test_team_share(self):
 		'''Sharing with a team gives its members access.'''
 
@@ -539,9 +567,9 @@ class TestProjects(Base):
 
 
 	def test_owner_names_stay_unique(self):
-		'''A manager renaming someone's project, or an admin inheriting a deleted user's projects, never gives one owner two roots with the same name.'''
+		'''A manager renaming someone's project never gives its owner two roots with the same name.'''
 
-		root, ann, bob = self.user('root', admin=True), self.user('ann'), self.user('bob')
+		ann, bob = self.user('ann'), self.user('bob')
 		self.act(ann)
 		kanban.project_save('Life')
 		team = kanban.project_save('Team')['id']
@@ -549,14 +577,6 @@ class TestProjects(Base):
 		self.act(bob)
 		with self.assertRaises(ValueError):
 			kanban.project_save('Life', project_id=team) # ann already has a Life
-		self.act(root)
-		kanban.project_save('Work')
-		self.act(bob)
-		kanban.project_save('Work')
-		self.act(None)
-		accounts.user_delete(root, bob['id'])
-		self.act(root)
-		self.assertEqual(sorted(p['path'] for p in kanban.projects() if p['owner_id'] == root['id'] and not p['parent_id']), ['Work', 'Work (bob)'])
 
 
 	def test_shared_top_level_resolves_by_name(self):

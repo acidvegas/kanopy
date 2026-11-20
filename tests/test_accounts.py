@@ -228,11 +228,53 @@ class TestProfile(Base):
 			accounts.user_delete(admin, admin['id'])
 		accounts.user_delete(admin, ann['id'])
 		with kanban.connect() as db:
-			self.assertEqual(db.execute('SELECT owner_id FROM projects WHERE id = ?', (pid,)).fetchone()[0], admin['id'])
+			self.assertIsNone(db.execute('SELECT 1 FROM projects WHERE id = ?', (pid,)).fetchone())
 		with self.assertRaises(LookupError):
 			accounts.user_delete(admin, ann['id'])
 		with self.assertRaises(LookupError):
 			accounts.user_reset(admin, 999, 'resetpassword')
+
+
+class TestUserDelete(Base):
+	'''Deleting a user removes what they own and leaves other people's work intact.'''
+
+	def setUp(self):
+		super().setUp()
+		self.admin, self.ann, self.bob = self.user('root', admin=True), self.user('ann'), self.user('bob')
+		self.act(self.ann)
+		self.team   = kanban.project_save('Team')['id']
+		accounts.share_add(self.team, 'manager', 'bob')
+		self.act(self.bob)
+		self.mine   = kanban.project_save('Bob/sub')['id']
+		self.inside = kanban.project_save('Team/bobs')['id'] # bob's sub-project in ann's tree
+		self.own    = self.task('Bob/sub', 'bob only')
+		self.shared = self.task('Team', 'in ann tree', labels=['host:bobbox', 'host:both'])
+		self.act(self.admin)
+		self.task('Mine', 'admin task', labels=['host:both']) # the admin's own host:both, which bob's merges into
+		self.act(None)
+
+
+	def test_footprint_and_delete(self):
+		'''The footprint counts bob's projects, tasks and tags elsewhere; deleting removes his tree only and hands his inner sub-project to the tree's owner.'''
+
+		self.assertEqual(accounts.user_footprint(self.admin, self.bob['id']), {'projects': 2, 'tasks': 1, 'shared': 0, 'tags': 2})
+		with self.assertRaises(PermissionError):
+			accounts.user_footprint(self.ann, self.bob['id'])
+		accounts.user_delete(self.admin, self.bob['id'])
+		with kanban.connect() as db:
+			self.assertIsNone(db.execute('SELECT 1 FROM tasks WHERE id = ?', (self.own['id'],)).fetchone())
+			self.assertEqual(db.execute('SELECT owner_id FROM projects WHERE id = ?', (self.inside,)).fetchone()[0], self.ann['id'])
+			self.assertEqual(db.execute('SELECT COUNT(*) FROM labels WHERE name = ?', ('host:both',)).fetchone()[0], 1)
+		self.act(self.admin)
+		self.assertEqual(sorted(kanban.task(self.shared['id'])['labels']), ['host:bobbox', 'host:both'])
+
+
+	def test_drop_labels(self):
+		'''Not keeping the labels removes bob's tags from other people's tasks.'''
+
+		accounts.user_delete(self.admin, self.bob['id'], keep_labels=False)
+		self.act(self.admin)
+		self.assertEqual(kanban.task(self.shared['id'])['labels'], [])
 
 
 class TestShares(Base):
