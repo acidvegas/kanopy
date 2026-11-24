@@ -8,6 +8,8 @@ Labels: host:<machine> (any real host, created on demand) and type:<kind> (exist
 Description = plan/notes in markdown, steps as "- [ ]". Progress = comment(), or comment= on save_task alongside a status change. Blockers = link(kind=blocked).
 Status: save_task status=doing the moment you start real work on a task (changing files or systems; reading/discussing doesn't count), status=done when finished, status=todo if you stop unfinished. doing claims the task for your session; if it is already claimed by another session, leave it and tell the user (take=true only when they say so).
 Never file anything without asking first: propose "add <title> to <project> with <labels>?" and wait.
+Request matches a task in the session briefing -> say its number and claim it (status=doing); never call list_tasks just to look.
+Real work with no task -> ask once whether to file it; offer follow-ups as one list when done.
 Commits: when you finish a task that produced commits, put their short hashes in the done comment.
 Confirm before any delete. Never store secrets.
 Accounts: you act as the token's user and only see projects shared with them. assign/unassign take usernames; @username in text notifies that user.
