@@ -12,6 +12,7 @@
 	<a href="https://github.com/acidvegas/kanopy/pkgs/container/kanopy"><img src="https://img.shields.io/badge/docker-ghcr.io-2496ed?logo=docker&logoColor=white" alt="Docker"></a>
 	<img src="https://img.shields.io/badge/python-3.12%2B-3776ab?logo=python&logoColor=white" alt="Python 3.12+">
 	<a href="LICENSE"><img src="https://img.shields.io/github/license/acidvegas/kanopy?color=f472b6" alt="License"></a>
+	<a href="https://glama.ai/mcp/servers/acidvegas/kanopy"><img src="https://glama.ai/mcp/servers/acidvegas/kanopy/badges/score.svg" alt="acidvegas/kanopy MCP server"></a>
 </p>
 
 <p align="center">
