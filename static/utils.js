@@ -143,7 +143,7 @@ const SVG = {
 
 const esc     = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const linkify = (md) => md.replace(/(^|[\s(])#(\d+)\b/g, (m, pre, id) => `${pre}[#${id}](${taskHref(id)})`);
-const mdHtml  = (text) => DOMPurify.sanitize(marked.parse(linkify(text)), { FORBID_ATTR: ['id', 'name', 'class', 'style'], FORBID_TAGS: ['style', 'form'] }); // user markup must not clobber or restyle the app's own elements
+const mdHtml  = (text) => DOMPurify.sanitize(marked.parse(linkify(text).replace(/^(\s*(?:[-*+]|\d+[.)])\s+\[[ xX]\]\s+\d+[.)]) /gm, '$1\u00a0')), { FORBID_ATTR: ['id', 'name', 'class', 'style'], FORBID_TAGS: ['style', 'form'] }); // user markup must not clobber or restyle the app's own elements; "- [ ] 1. step" keeps its number on the checkbox line instead of nesting a numbered list
 const pane    = () => KB.view === 'task' ? $('#taskpage') : $('#drawer');
 const narrow  = () => matchMedia('(max-width: 800px)').matches;
 const taskHref = (id) => ['task', 'activity'].includes(KB.view) || narrow() ? `#/task/${id}` : `${kbBase()}/${id}`; // phones open the full page, not the side panel
