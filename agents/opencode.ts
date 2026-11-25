@@ -21,7 +21,9 @@ export default Plugin.define({
           try {
             const cwd = ((await ctx.session.get({ sessionID })) as { location?: { directory?: string } })?.location?.directory
             if (!cwd) return ""
-            const resp = await fetch(`${BASE}/api/context?cwd=${encodeURIComponent(cwd)}`, { headers: { "X-Key": readFileSync(TOKEN, "utf8").trim(), "User-Agent": UA }, signal: AbortSignal.timeout(3_000) })
+            const home = homedir()
+            const dir  = cwd === home || cwd.startsWith(home + "/") ? "~" + cwd.slice(home.length) : cwd // as ~/..., so a kanopy on another machine matches ~/ project folders
+            const resp = await fetch(`${BASE}/api/context?cwd=${encodeURIComponent(dir)}`, { headers: { "X-Key": readFileSync(TOKEN, "utf8").trim(), "User-Agent": UA }, signal: AbortSignal.timeout(3_000) })
             return resp.ok ? (await resp.text()).trim() : ""
           } catch {
             return ""

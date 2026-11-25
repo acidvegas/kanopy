@@ -212,16 +212,18 @@ def context(cwd: str) -> str:
 	'''
 	Session-start briefing for an agent: the project whose folder is the deepest one containing cwd, and its doing and open tasks.
 
-	:param cwd: Agent's working directory
+	:param cwd: Agent's working directory, absolute or ~/... (clients send ~ so a kanopy on another machine, with another home, still matches ~/ folders)
 	'''
 
 	best = None
+	here = Path(cwd)
 
 	for p in kanban.projects():
 		if not p['folder'] or p.get('role') == 0: # role 0: ancestor shown only for the tree
 			continue
-		path = Path(p['folder']).expanduser()
-		if (Path(cwd) == path or path in Path(cwd).parents) and (not best or len(path.parts) > len(best[1].parts)):
+		path = Path(p['folder'])
+		hit  = any(c == f or f in c.parents for c, f in ((here, path), (here.expanduser(), path.expanduser()))) # as written, then with ~ expanded here
+		if hit and (not best or len(path.parts) > len(best[1].parts)):
 			best = (p, path)
 
 	if not best:

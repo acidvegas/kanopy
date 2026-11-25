@@ -12,4 +12,7 @@ url="$(sed -n 's/^KANOPY_URL=//p' "$dir/.env" 2>/dev/null)" # set when kanopy ru
 
 [ -n "$key" ] || exit 0
 
-curl -sf -m 3 -G -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36' -H "X-Key: $key" --data-urlencode "cwd=${1:-$PWD}" "${url:-http://${host:-127.0.0.1}:${port:-8000}}/api/context" || true
+cwd="${1:-$PWD}"
+case "$cwd" in "$HOME"|"$HOME"/*) cwd="~${cwd#"$HOME"}" ;; esac # as ~/..., so a kanopy on another machine matches ~/ project folders
+
+curl -sf -m 3 -G -A 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36' -H "X-Key: $key" --data-urlencode "cwd=$cwd" "${url:-http://${host:-127.0.0.1}:${port:-8000}}/api/context" || true

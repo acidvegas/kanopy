@@ -7,6 +7,7 @@ import time
 import unittest
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from kanopy import accounts
 from kanopy import kanban
@@ -127,6 +128,16 @@ class TestContext(Base):
 		self.assertTrue(mcp_server.context('/src/other').startswith('kanopy project for this directory: Code (3 open)')) # sub-project tasks included
 		self.assertEqual(mcp_server.context('/elsewhere'), '')
 		self.assertEqual(mcp_server.context('/src/application'), mcp_server.context('/src/x')) # /src/app is not a parent of /src/application
+
+
+	def test_home_folder_from_another_machine(self):
+		'''A ~/ folder matches a client's ~/ cwd even when the server's home is different, and still matches an absolute cwd under the server's own home.'''
+
+		pid = kanban.project_save('Code/kanopy', folder='~/dev/kanopy')['id']
+		kanban.task_create({'project_id': pid, 'title': 'one'})
+		self.assertTrue(mcp_server.context('~/dev/kanopy/static').startswith('kanopy project for this directory: Code/kanopy'))
+		self.assertTrue(mcp_server.context(str(Path.home() / 'dev/kanopy')).startswith('kanopy project for this directory: Code/kanopy'))
+		self.assertEqual(mcp_server.context('~/dev/other'), '')
 
 
 	def test_stale_doing_and_overflow(self):
