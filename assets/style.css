@@ -218,6 +218,15 @@ footer svg { width: 18px; height: 18px; }
 .prose summary { cursor: pointer; padding: .85rem 1.1rem; font-weight: 600; }
 .prose details > :not(summary) { margin-inline: 1.1rem; }
 .prose details > :last-child { margin-bottom: 1.1rem; }
+.prose h3 .verb { display: inline-block; min-width: 3.9rem; margin-right: .4rem; padding: .1rem .45rem; border-radius: 6px; font-family: var(--mono); font-size: .72rem; text-align: center; vertical-align: .15em; color: var(--bg); background: var(--accent); }
+.prose h3 .verb.get { background: #4ade80; }
+.prose h3 .verb.post { background: #60a5fa; }
+.prose h3 .verb.patch, .prose h3 .verb.put { background: #fbbf24; }
+.prose h3 .verb.delete { background: #f87171; }
+.prose h3 code { font-size: .92em; background: none; border: 0; padding: 0; color: var(--text); word-break: break-all; }
+.prose .auth, .prose .label { color: var(--muted); font-size: .92rem; }
+.prose .codes { font-size: .92rem; }
+.prose small { color: var(--accent); font-size: .75em; margin-left: .2rem; }
 
 @media (max-width: 900px) {
 	.row { grid-template-columns: minmax(0, 1fr); }

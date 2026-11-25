@@ -1,0 +1,5135 @@
+{
+	"openapi": "3.1.0",
+	"info": {
+		"title": "kanopy",
+		"version": "1.2.4",
+		"license": {
+			"name": "ISC",
+			"identifier": "ISC"
+		},
+		"description": "The REST API the kanopy web app uses. Agents should prefer the MCP endpoint (/mcp), which answers in compact text.\n\n**Auth.** Send an API token in the `X-Key` header (create one under Settings), or use the `kb_session` cookie from /api/login. A sent `X-Key` is the only credential checked. Tokens can use the board only: routes marked cookie-only (account, teams, tokens, users, sharing, settings) refuse them with 403. Read-only (viewer) tokens can only read, and a token limited to some projects sees only those.\n\n**Writes with the cookie** must be same-origin and send JSON (or multipart for uploads); token requests skip that check.\n\n**Errors** come back as `{\"error\": \"...\"}` with 400, 401, 403, 404, 409 or 415.\n\n**Revision.** Every /api response carries `X-Revision`, the board's change counter; a successful write bumps it and also sends `X-Revision-Was`."
+	},
+	"servers": [
+		{
+			"url": "http://127.0.0.1:8000",
+			"description": "Default local install"
+		}
+	],
+	"security": [
+		{
+			"token": []
+		},
+		{
+			"session": []
+		}
+	],
+	"tags": [
+		{
+			"name": "Auth"
+		},
+		{
+			"name": "Invites"
+		},
+		{
+			"name": "Account"
+		},
+		{
+			"name": "Notifications"
+		},
+		{
+			"name": "Projects"
+		},
+		{
+			"name": "Sharing"
+		},
+		{
+			"name": "Tasks"
+		},
+		{
+			"name": "Comments and links"
+		},
+		{
+			"name": "Attachments"
+		},
+		{
+			"name": "Trash"
+		},
+		{
+			"name": "Labels"
+		},
+		{
+			"name": "Teams"
+		},
+		{
+			"name": "Tokens"
+		},
+		{
+			"name": "Users"
+		},
+		{
+			"name": "Board"
+		},
+		{
+			"name": "Agents"
+		},
+		{
+			"name": "Health"
+		}
+	],
+	"paths": {
+		"/api/setup": {
+			"get": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Whether the first admin still has to be created",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"needed": {
+											"type": "boolean"
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": []
+			},
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Create the first admin on an empty board and sign in",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					}
+				},
+				"description": "Works only while the board has no users. Sets the session cookie. If KANOPY_KEY is set, it is imported as this admin's API token.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Credentials"
+							}
+						}
+					}
+				},
+				"security": []
+			}
+		},
+		"/api/login": {
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Sign in",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					}
+				},
+				"description": "Sets the `kb_session` cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/Credentials"
+							}
+						}
+					}
+				},
+				"security": []
+			}
+		},
+		"/api/logout": {
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Sign out",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					}
+				},
+				"description": "Ends the session and clears the cookie.",
+				"security": []
+			}
+		},
+		"/api/signup": {
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Create an account from an invite link and sign in",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					},
+					"409": {
+						"$ref": "#/components/responses/E409"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"token": {
+										"type": "string"
+									},
+									"username": {
+										"type": "string"
+									},
+									"password": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"token",
+									"username",
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"security": []
+			}
+		},
+		"/api/invites/check/{token}": {
+			"get": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Check that an invite link can still be used",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "token",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Invite token from the link"
+					}
+				],
+				"security": []
+			}
+		},
+		"/api/invites": {
+			"get": {
+				"tags": [
+					"Invites"
+				],
+				"summary": "List invites (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"invites": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Invite"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"post": {
+				"tags": [
+					"Invites"
+				],
+				"summary": "Create a single-use invite link (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "integer"
+										},
+										"token": {
+											"type": "string"
+										},
+										"url": {
+											"type": "string",
+											"description": "Link to hand out; valid 7 days"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "The token is only shown in this response.",
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/invites/{invite_id}": {
+			"delete": {
+				"tags": [
+					"Invites"
+				],
+				"summary": "Revoke an unused invite (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "invite_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Invite id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/me": {
+			"get": {
+				"tags": [
+					"Account"
+				],
+				"summary": "The signed-in user",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Me"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"patch": {
+				"tags": [
+					"Account"
+				],
+				"summary": "Update your password, ntfy settings, timezone or notification toggles",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Me"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Only the fields sent change. A new password signs out every other session.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"$ref": "#/components/schemas/MeUpdate"
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/me/avatar": {
+			"put": {
+				"tags": [
+					"Account"
+				],
+				"summary": "Set your picture",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"file": {
+										"type": "string",
+										"format": "binary",
+										"description": "PNG, JPEG, WebP or GIF, at most 512 KB"
+									}
+								},
+								"required": [
+									"file"
+								]
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"delete": {
+				"tags": [
+					"Account"
+				],
+				"summary": "Remove your picture",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/User"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/me/test": {
+			"post": {
+				"tags": [
+					"Account"
+				],
+				"summary": "Send a test push to your ntfy topic",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/notifications": {
+			"get": {
+				"tags": [
+					"Notifications"
+				],
+				"summary": "Your inbox: the newest 100 notifications and the unread count",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Inbox"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				}
+			}
+		},
+		"/api/notifications/read": {
+			"post": {
+				"tags": [
+					"Notifications"
+				],
+				"summary": "Mark notifications read",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Inbox"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": false,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"ids": {
+										"type": "array",
+										"items": {
+											"type": "integer"
+										},
+										"description": "Leave out to mark every notification read"
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/projects": {
+			"get": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Every project you can see, in tree order",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"projects": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Project"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Create a project by path",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "integer"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"path": {
+										"type": "string",
+										"description": "Slash path like Code/weatherbox; missing parents are created"
+									},
+									"description": {
+										"type": "string"
+									},
+									"folder": {
+										"type": "string",
+										"description": "Local directory the project lives in, absolute or starting with ~"
+									}
+								},
+								"required": [
+									"path"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/projects/{project_id}": {
+			"patch": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Rename or move, describe, archive, color or set the folder of a project (manager)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "integer"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"path": {
+										"type": "string",
+										"description": "New slash path; renames and/or moves it"
+									},
+									"description": {
+										"type": "string"
+									},
+									"archived": {
+										"type": "boolean"
+									},
+									"color": {
+										"type": "string",
+										"description": "#rrggbb, or empty to clear"
+									},
+									"folder": {
+										"type": "string",
+										"description": "Absolute or ~ path, or empty to clear"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Delete an empty project",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					}
+				]
+			}
+		},
+		"/api/projects/order": {
+			"post": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Set the parent and order of a group of sibling projects",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"parent_id": {
+										"type": [
+											"integer",
+											"null"
+										],
+										"description": "New parent, or null for top level"
+									},
+									"ids": {
+										"type": "array",
+										"items": {
+											"type": "integer"
+										},
+										"description": "Every child under that parent, top to bottom"
+									}
+								},
+								"required": [
+									"ids"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/projects/{project_id}/activity": {
+			"get": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Task history across a project and its sub-projects, newest first",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"events": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/ProjectEvent"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					},
+					{
+						"name": "before",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Only events older than this event id, for the next page (100 per page)"
+					}
+				]
+			}
+		},
+		"/api/projects/{project_id}/people": {
+			"get": {
+				"tags": [
+					"Projects"
+				],
+				"summary": "Usernames that can see a project, most recently active first",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"people": {
+											"type": "array",
+											"items": {
+												"type": "string"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Owner, shared users and members of shared teams, here or on a parent project. Ordered by their latest change or comment in the project or its sub-projects; people with no activity follow alphabetically.",
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/projects/{project_id}/shares": {
+			"get": {
+				"tags": [
+					"Sharing"
+				],
+				"summary": "Who a project is shared with, plus its owner and shares inherited from parents",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"shares": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Share"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"post": {
+				"tags": [
+					"Sharing"
+				],
+				"summary": "Share a project with a user or a team (manager)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"shares": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Share"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Sharing again changes the role. Sharing includes every sub-project.",
+				"parameters": [
+					{
+						"name": "project_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"role": {
+										"type": "string",
+										"enum": [
+											"viewer",
+											"editor",
+											"manager"
+										],
+										"default": "viewer"
+									},
+									"username": {
+										"type": "string",
+										"description": "User to share with"
+									},
+									"team": {
+										"type": "string",
+										"description": "Team name to share with, instead of username"
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/shares/{share_id}": {
+			"delete": {
+				"tags": [
+					"Sharing"
+				],
+				"summary": "Remove a share (manager)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"shares": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Share"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "share_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Share id from the share list"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/tasks": {
+			"get": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Task cards for every project or one project and its sub-projects",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"tasks": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/TaskCard"
+											}
+										},
+										"done_total": {
+											"type": "integer",
+											"description": "Only with done_limit: how many done tasks there are in all"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id; its sub-projects are included"
+					},
+					{
+						"name": "done_limit",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Keep every open task but only this many of the newest done ones"
+					},
+					{
+						"name": "brief",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Any value: return only id, project_id, project, title, status, priority and updated"
+					}
+				]
+			},
+			"post": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Create a task (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"title": {
+										"type": "string",
+										"description": "Required on create"
+									},
+									"description": {
+										"type": "string",
+										"description": "Markdown; checklist steps as \"- [ ] \""
+									},
+									"project_id": {
+										"type": "integer",
+										"description": "Required on create; on update, moves the task (editor on the target needed)"
+									},
+									"status": {
+										"type": "string",
+										"enum": [
+											"todo",
+											"doing",
+											"done"
+										],
+										"description": "Moving to doing claims the task for the caller; done on a repeating task creates its next copy"
+									},
+									"priority": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 5,
+										"description": "0 none, 1 low, 2 medium, 3 high, 4 urgent, 5 do now"
+									},
+									"due": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "YYYY-MM-DD; empty or null clears it"
+									},
+									"remind_at": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "YYYY-MM-DDTHH:MM in the user's own timezone; empty or null clears it"
+									},
+									"repeat": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "daily, weekly, monthly, yearly, \"every N days/weeks/months/years\", weekdays, or day names like \"mon,wed,fri\"; empty stops it"
+									},
+									"labels": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"description": "Replaces every label; each must look like namespace:value"
+									},
+									"assignees": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"description": "Usernames; replaces every assignee. Each needs access to the project"
+									}
+								},
+								"required": [
+									"project_id",
+									"title"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/tasks/{task_id}": {
+			"get": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "A full task: description, attachments, links, comments and history",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				]
+			},
+			"patch": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Update task fields (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					},
+					"409": {
+						"description": "The description changed while you were editing it",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"error": {
+											"type": "string"
+										},
+										"description": {
+											"type": "string",
+											"description": "The current text"
+										}
+									}
+								}
+							}
+						}
+					}
+				},
+				"description": "Only the fields sent change.",
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"title": {
+										"type": "string",
+										"description": "Required on create"
+									},
+									"description": {
+										"type": "string",
+										"description": "Markdown; checklist steps as \"- [ ] \""
+									},
+									"project_id": {
+										"type": "integer",
+										"description": "Required on create; on update, moves the task (editor on the target needed)"
+									},
+									"status": {
+										"type": "string",
+										"enum": [
+											"todo",
+											"doing",
+											"done"
+										],
+										"description": "Moving to doing claims the task for the caller; done on a repeating task creates its next copy"
+									},
+									"priority": {
+										"type": "integer",
+										"minimum": 0,
+										"maximum": 5,
+										"description": "0 none, 1 low, 2 medium, 3 high, 4 urgent, 5 do now"
+									},
+									"due": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "YYYY-MM-DD; empty or null clears it"
+									},
+									"remind_at": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "YYYY-MM-DDTHH:MM in the user's own timezone; empty or null clears it"
+									},
+									"repeat": {
+										"type": [
+											"string",
+											"null"
+										],
+										"description": "daily, weekly, monthly, yearly, \"every N days/weeks/months/years\", weekdays, or day names like \"mon,wed,fri\"; empty stops it"
+									},
+									"labels": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"description": "Replaces every label; each must look like namespace:value"
+									},
+									"assignees": {
+										"type": "array",
+										"items": {
+											"type": "string"
+										},
+										"description": "Usernames; replaces every assignee. Each needs access to the project"
+									},
+									"claim": {
+										"type": "boolean",
+										"description": "Take over a task another session claimed"
+									},
+									"description_was": {
+										"type": "string",
+										"description": "The description your edit started from; if it changed meanwhile the update is refused with 409"
+									}
+								}
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Move a task to the trash (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Trashed tasks can be restored for 30 days.",
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				]
+			}
+		},
+		"/api/tasks/bulk": {
+			"post": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Apply one change to many tasks",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"changed": {
+											"type": "integer"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Runs in one transaction: if any task fails, none change.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"ids": {
+										"type": "array",
+										"items": {
+											"type": "integer"
+										}
+									},
+									"status": {
+										"type": "string",
+										"enum": [
+											"todo",
+											"doing",
+											"done"
+										]
+									},
+									"project_id": {
+										"type": "integer"
+									},
+									"add_label": {
+										"type": "string"
+									},
+									"remove_label": {
+										"type": "string"
+									},
+									"delete": {
+										"type": "boolean",
+										"description": "Move them all to the trash"
+									}
+								},
+								"required": [
+									"ids"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/reorder": {
+			"post": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Set the status and order of the tasks in one column",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Cards not listed keep their place; listed cards from another column move into this one.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"status": {
+										"type": "string",
+										"enum": [
+											"todo",
+											"doing",
+											"done"
+										]
+									},
+									"ids": {
+										"type": "array",
+										"items": {
+											"type": "integer"
+										},
+										"description": "The visible task ids in that column, top to bottom"
+									}
+								},
+								"required": [
+									"status",
+									"ids"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/repeats": {
+			"get": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Upcoming dates of repeating tasks, for the calendar",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"dates": {
+											"type": "object",
+											"additionalProperties": {
+												"type": "array",
+												"items": {
+													"type": "string"
+												}
+											},
+											"description": "Task id -> dates (YYYY-MM-DD)"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "from",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"description": "First day, YYYY-MM-DD"
+					},
+					{
+						"name": "to",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Last day, YYYY-MM-DD; at most 62 days after from"
+					}
+				]
+			}
+		},
+		"/api/search": {
+			"get": {
+				"tags": [
+					"Tasks"
+				],
+				"summary": "Search task titles, descriptions and comments",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"results": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/SearchResult"
+											}
+										},
+										"total": {
+											"type": "integer",
+											"description": "Matches in all; at most 300 are returned"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "q",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Words that must all appear (case-insensitive). Empty lists every task the filters allow"
+					},
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id; its sub-projects are included"
+					},
+					{
+						"name": "status",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Comma-separated statuses, like todo,doing"
+					},
+					{
+						"name": "label",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Label every result must have"
+					},
+					{
+						"name": "assignee",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Username every result must be assigned to"
+					},
+					{
+						"name": "priority",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Minimum priority"
+					},
+					{
+						"name": "due",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"overdue",
+								"today",
+								"week",
+								"any",
+								"none"
+							]
+						},
+						"description": "Due date filter"
+					},
+					{
+						"name": "fields",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Comma-separated: title, description, comments (default all)"
+					},
+					{
+						"name": "sort",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string",
+							"enum": [
+								"updated",
+								"created",
+								"priority",
+								"due",
+								"id"
+							],
+							"default": "updated"
+						},
+						"description": "Sort order"
+					}
+				]
+			}
+		},
+		"/api/tasks/{task_id}/comments": {
+			"post": {
+				"tags": [
+					"Comments and links"
+				],
+				"summary": "Comment on a task (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"body": {
+										"type": "string",
+										"description": "Markdown; @username notifies that user"
+									}
+								},
+								"required": [
+									"body"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/tasks/{task_id}/links": {
+			"post": {
+				"tags": [
+					"Comments and links"
+				],
+				"summary": "Link a task to another (editor on both)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"description": "Both directions are stored: blocking on one task shows as blocked on the other.",
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"kind": {
+										"$ref": "#/components/schemas/LinkKind"
+									},
+									"other": {
+										"type": "integer",
+										"description": "The other task id"
+									}
+								},
+								"required": [
+									"kind",
+									"other"
+								]
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Comments and links"
+				],
+				"summary": "Remove a link between two tasks",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					},
+					{
+						"name": "kind",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"$ref": "#/components/schemas/LinkKind"
+						},
+						"description": "Link kind"
+					},
+					{
+						"name": "other",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "The other task id"
+					}
+				]
+			}
+		},
+		"/api/tasks/{task_id}/attachments": {
+			"post": {
+				"tags": [
+					"Attachments"
+				],
+				"summary": "Attach files to a task (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "task_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Task id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"multipart/form-data": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"file": {
+										"type": "array",
+										"items": {
+											"type": "string",
+											"format": "binary"
+										},
+										"description": "One or more files, 25 MB each"
+									}
+								},
+								"required": [
+									"file"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/attachments/{attachment_id}": {
+			"get": {
+				"tags": [
+					"Attachments"
+				],
+				"summary": "Download an attachment",
+				"responses": {
+					"200": {
+						"description": "The file, with its own MIME type",
+						"content": {
+							"application/octet-stream": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "attachment_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Attachment id"
+					}
+				]
+			},
+			"delete": {
+				"tags": [
+					"Attachments"
+				],
+				"summary": "Delete an attachment (editor)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "attachment_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Attachment id"
+					}
+				]
+			}
+		},
+		"/api/trash": {
+			"get": {
+				"tags": [
+					"Trash"
+				],
+				"summary": "Deleted tasks you can restore",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"trash": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/TrashItem"
+											}
+										},
+										"days": {
+											"type": "integer",
+											"description": "Days a task stays in the trash"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				}
+			}
+		},
+		"/api/trash/{trash_id}/restore": {
+			"post": {
+				"tags": [
+					"Trash"
+				],
+				"summary": "Restore a deleted task",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Task"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "trash_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Trash entry id"
+					}
+				]
+			}
+		},
+		"/api/labels": {
+			"get": {
+				"tags": [
+					"Labels"
+				],
+				"summary": "Global labels and your own, with usage counts",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"labels": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Label"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				}
+			},
+			"post": {
+				"tags": [
+					"Labels"
+				],
+				"summary": "Create a personal label, or a global one (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "namespace:value, like host:pi"
+									},
+									"color": {
+										"type": "string",
+										"description": "#rrggbb; without one it takes its namespace's color"
+									},
+									"global": {
+										"type": "boolean",
+										"description": "Admin only"
+									}
+								},
+								"required": [
+									"name"
+								]
+							}
+						}
+					}
+				}
+			},
+			"patch": {
+				"tags": [
+					"Labels"
+				],
+				"summary": "Rename and/or recolor a label",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Current name"
+									},
+									"new_name": {
+										"type": "string",
+										"description": "New name; an existing label's name merges the two"
+									},
+									"color": {
+										"type": "string",
+										"description": "#rrggbb, or empty to clear"
+									}
+								},
+								"required": [
+									"name"
+								]
+							}
+						}
+					}
+				}
+			},
+			"delete": {
+				"tags": [
+					"Labels"
+				],
+				"summary": "Delete a label everywhere",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "name",
+						"in": "query",
+						"required": true,
+						"schema": {
+							"type": "string"
+						},
+						"description": "Label name"
+					}
+				]
+			}
+		},
+		"/api/teams": {
+			"get": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Your teams (admins see all)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"post": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Create a team",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"name"
+								]
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/teams/{team_id}": {
+			"delete": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Delete a team (team owner or admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Team id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/teams/{team_id}/members": {
+			"post": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Add a member by username (team owner or admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Team id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"username": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"username"
+								]
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/teams/{team_id}/members/{user_id}": {
+			"delete": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Remove a member, or leave the team yourself",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Team id"
+					},
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"patch": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Make a member an owner, or back to a member",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Team id"
+					},
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"owner": {
+										"type": "boolean"
+									}
+								},
+								"required": [
+									"owner"
+								]
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/teams/{team_id}/webhook": {
+			"put": {
+				"tags": [
+					"Teams"
+				],
+				"summary": "Set or clear the team's webhook URL",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"teams": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Team"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "team_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Team id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"url": {
+										"type": "string",
+										"description": "https URL that resolves to public addresses only; empty clears it. A key= parameter is sent as an Authorization: Bearer header"
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/tokens": {
+			"get": {
+				"tags": [
+					"Tokens"
+				],
+				"summary": "Your API tokens (never the secrets)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"tokens": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Token"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"post": {
+				"tags": [
+					"Tokens"
+				],
+				"summary": "Create an API token",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"id": {
+											"type": "integer"
+										},
+										"name": {
+											"type": "string"
+										},
+										"token": {
+											"type": "string",
+											"description": "The secret, shown only here"
+										},
+										"role": {
+											"type": "string"
+										},
+										"projects": {
+											"type": "array",
+											"items": {
+												"type": "integer"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Label like claude"
+									},
+									"role": {
+										"type": "string",
+										"enum": [
+											"viewer",
+											"editor",
+											"manager",
+											"owner"
+										],
+										"default": "owner",
+										"description": "Highest role the token may use; viewer is read-only. Never more than your own role"
+									},
+									"projects": {
+										"type": "array",
+										"items": {
+											"type": "integer"
+										},
+										"description": "Limit the token to these projects and everything under them; empty for all"
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/tokens/{token_id}": {
+			"delete": {
+				"tags": [
+					"Tokens"
+				],
+				"summary": "Revoke an API token",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "token_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Token id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/users": {
+			"get": {
+				"tags": [
+					"Users"
+				],
+				"summary": "Every user, for assigning, sharing and mentions",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"users": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/UserBrief"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/users/{user_id}/avatar": {
+			"get": {
+				"tags": [
+					"Users"
+				],
+				"summary": "A user's picture",
+				"responses": {
+					"200": {
+						"description": "The image",
+						"content": {
+							"image/*": {
+								"schema": {
+									"type": "string",
+									"format": "binary"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/users/{user_id}/footprint": {
+			"get": {
+				"tags": [
+					"Users"
+				],
+				"summary": "What deleting a user would remove (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"projects": {
+											"type": "integer"
+										},
+										"tasks": {
+											"type": "integer"
+										},
+										"shared": {
+											"type": "integer",
+											"description": "How many of those projects are shared"
+										},
+										"tags": {
+											"type": "integer",
+											"description": "Tags their personal labels put on other people's tasks"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/users/{user_id}": {
+			"delete": {
+				"tags": [
+					"Users"
+				],
+				"summary": "Delete a user and their projects (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"users": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/UserBrief"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"requestBody": {
+					"required": false,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"keep_labels": {
+										"type": "boolean",
+										"default": true,
+										"description": "Keep their personal labels as yours"
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/users/{user_id}/password": {
+			"post": {
+				"tags": [
+					"Users"
+				],
+				"summary": "Set a user's password (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/settings": {
+			"get": {
+				"tags": [
+					"Board"
+				],
+				"summary": "Board settings (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"timezone": {
+											"type": "string",
+											"description": "Default for people whose browser has not reported one"
+										},
+										"due_time": {
+											"type": "string",
+											"description": "HH:MM for due-today pushes, in each person's timezone"
+										},
+										"digest_time": {
+											"type": "string",
+											"description": "HH:MM for the overdue digest"
+										},
+										"archive_days": {
+											"type": "string",
+											"description": "Archive tasks done this many days ago; 0 turns it off"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			},
+			"put": {
+				"tags": [
+					"Board"
+				],
+				"summary": "Save board settings (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"timezone": {
+											"type": "string",
+											"description": "Default for people whose browser has not reported one"
+										},
+										"due_time": {
+											"type": "string",
+											"description": "HH:MM for due-today pushes, in each person's timezone"
+										},
+										"digest_time": {
+											"type": "string",
+											"description": "HH:MM for the overdue digest"
+										},
+										"archive_days": {
+											"type": "string",
+											"description": "Archive tasks done this many days ago; 0 turns it off"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"timezone": {
+										"type": "string",
+										"description": "Default for people whose browser has not reported one"
+									},
+									"due_time": {
+										"type": "string",
+										"description": "HH:MM for due-today pushes, in each person's timezone"
+									},
+									"digest_time": {
+										"type": "string",
+										"description": "HH:MM for the overdue digest"
+									},
+									"archive_days": {
+										"type": "string",
+										"description": "Archive tasks done this many days ago; 0 turns it off"
+									}
+								}
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/version": {
+			"get": {
+				"tags": [
+					"Board"
+				],
+				"summary": "Running version and the newest GitHub release (admin)",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"current": {
+											"type": "string"
+										},
+										"latest": {
+											"type": [
+												"string",
+												"null"
+											]
+										},
+										"outdated": {
+											"type": "boolean"
+										},
+										"check": {
+											"type": "boolean",
+											"description": "False when KANOPY_UPDATE_CHECK=0"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"security": [
+					{
+						"session": []
+					}
+				]
+			}
+		},
+		"/api/revision": {
+			"get": {
+				"tags": [
+					"Board"
+				],
+				"summary": "The board's change counter",
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"revision": {
+											"type": "integer"
+										}
+									}
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				},
+				"description": "Every successful write bumps it. Open pages poll this and reload when it moves."
+			}
+		},
+		"/api/export": {
+			"get": {
+				"tags": [
+					"Board"
+				],
+				"summary": "Download a project and everything under it, or everything you can see, as JSON",
+				"responses": {
+					"200": {
+						"description": "A JSON file download",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"kanopy": {
+											"type": "string",
+											"description": "Version that wrote it"
+										},
+										"exported": {
+											"type": "string"
+										},
+										"projects": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/ExportProject"
+											}
+										},
+										"tasks": {
+											"type": "array",
+											"items": {
+												"$ref": "#/components/schemas/Task"
+											}
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"parameters": [
+					{
+						"name": "project",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Project id; leave out for everything"
+					}
+				]
+			}
+		},
+		"/api/context": {
+			"get": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "Plain-text session briefing for an agent",
+				"responses": {
+					"200": {
+						"description": "The project whose folder holds cwd and its open tasks; empty when none matches",
+						"content": {
+							"text/plain": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					}
+				},
+				"description": "What the Claude Code SessionStart hook and the opencode plugin print at the start of a session.",
+				"parameters": [
+					{
+						"name": "cwd",
+						"in": "query",
+						"required": false,
+						"schema": {
+							"type": "string"
+						},
+						"description": "The agent's working directory"
+					}
+				]
+			}
+		},
+		"/mcp": {
+			"post": {
+				"tags": [
+					"Agents"
+				],
+				"summary": "MCP endpoint (streamable HTTP, stateless, JSON responses)",
+				"responses": {
+					"200": {
+						"description": "One JSON-RPC response, or 202 with no body for a notification",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"202": {
+						"description": "Accepted (a JSON-RPC notification)"
+					}
+				},
+				"description": "Takes API tokens only. Without one, only the handshake and the tool list answer. Send `X-Agent` to name the agent in comments and history, and send back the `Mcp-Session-Id` header you were given so the session can claim tasks as itself. The tools are listed in the README.",
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"description": "One JSON-RPC 2.0 request object; batches are not supported"
+							}
+						}
+					}
+				},
+				"security": [
+					{
+						"token": []
+					}
+				]
+			}
+		},
+		"/health": {
+			"get": {
+				"tags": [
+					"Health"
+				],
+				"summary": "ok while the database responds",
+				"security": [],
+				"responses": {
+					"200": {
+						"description": "ok",
+						"content": {
+							"text/plain": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"503": {
+						"description": "database unreachable",
+						"content": {
+							"text/plain": {
+								"schema": {
+									"type": "string"
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+	},
+	"components": {
+		"securitySchemes": {
+			"token": {
+				"type": "apiKey",
+				"in": "header",
+				"name": "X-Key",
+				"description": "API token from Settings"
+			},
+			"session": {
+				"type": "apiKey",
+				"in": "cookie",
+				"name": "kb_session",
+				"description": "Set by /api/login"
+			}
+		},
+		"responses": {
+			"E400": {
+				"description": "Bad value or request",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			},
+			"E401": {
+				"description": "Not signed in",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			},
+			"E403": {
+				"description": "No access, a read-only or limited token, or a cross-site write",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			},
+			"E404": {
+				"description": "Not found",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			},
+			"E409": {
+				"description": "Already exists",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			},
+			"E415": {
+				"description": "Writes must send JSON or multipart",
+				"content": {
+					"application/json": {
+						"schema": {
+							"$ref": "#/components/schemas/Error"
+						}
+					}
+				}
+			}
+		},
+		"schemas": {
+			"Ok": {
+				"type": "object",
+				"properties": {
+					"ok": {
+						"type": "boolean",
+						"const": true
+					}
+				}
+			},
+			"Error": {
+				"type": "object",
+				"properties": {
+					"error": {
+						"type": "string"
+					}
+				},
+				"required": [
+					"error"
+				]
+			},
+			"Credentials": {
+				"type": "object",
+				"properties": {
+					"username": {
+						"type": "string"
+					},
+					"password": {
+						"type": "string",
+						"description": "At least 8 characters for new accounts"
+					}
+				},
+				"required": [
+					"username",
+					"password"
+				]
+			},
+			"Invite": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"created": {
+						"type": "string"
+					},
+					"expires": {
+						"type": "string"
+					},
+					"used": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"used_by": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"User": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"username": {
+						"type": "string"
+					},
+					"is_admin": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"ntfy_topic": {
+						"type": "string"
+					},
+					"ntfy_url": {
+						"type": "string"
+					},
+					"notify_remind": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_due": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_digest": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_agent": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_mention": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_assign": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"notify_activity": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"timezone": {
+						"type": "string"
+					},
+					"timezone_auto": {
+						"type": "string"
+					},
+					"created": {
+						"type": "string"
+					},
+					"avatar_at": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"Me": {
+				"allOf": [
+					{
+						"$ref": "#/components/schemas/User"
+					},
+					{
+						"type": "object",
+						"properties": {
+							"unread": {
+								"type": "integer",
+								"description": "Unread notifications (GET only)"
+							},
+							"ntfy_token_set": {
+								"type": "boolean"
+							}
+						}
+					}
+				]
+			},
+			"MeUpdate": {
+				"type": "object",
+				"properties": {
+					"password": {
+						"type": "string",
+						"description": "New password; needs current_password"
+					},
+					"current_password": {
+						"type": "string"
+					},
+					"ntfy_url": {
+						"type": "string",
+						"description": "Your ntfy server; empty means ntfy.sh"
+					},
+					"ntfy_token": {
+						"type": "string",
+						"description": "Access token for your ntfy server; empty keeps the stored one"
+					},
+					"clear_ntfy_token": {
+						"type": "boolean"
+					},
+					"ntfy_topic": {
+						"type": "string",
+						"description": "Letters, digits, dashes and underscores"
+					},
+					"timezone": {
+						"type": "string",
+						"description": "IANA name you picked; empty follows your browser"
+					},
+					"timezone_auto": {
+						"type": "string",
+						"description": "IANA name your browser reports"
+					},
+					"notify_remind": {
+						"type": "boolean"
+					},
+					"notify_due": {
+						"type": "boolean"
+					},
+					"notify_digest": {
+						"type": "boolean"
+					},
+					"notify_agent": {
+						"type": "boolean"
+					},
+					"notify_mention": {
+						"type": "boolean"
+					},
+					"notify_assign": {
+						"type": "boolean"
+					},
+					"notify_activity": {
+						"type": "boolean"
+					}
+				}
+			},
+			"UserBrief": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"username": {
+						"type": "string"
+					},
+					"is_admin": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"created": {
+						"type": "string"
+					},
+					"avatar_at": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"Inbox": {
+				"type": "object",
+				"properties": {
+					"notifications": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"user_id": {
+									"type": "integer"
+								},
+								"task_id": {
+									"type": [
+										"integer",
+										"null"
+									]
+								},
+								"title": {
+									"type": [
+										"string",
+										"null"
+									],
+									"description": "The task's title"
+								},
+								"kind": {
+									"type": "string"
+								},
+								"actor": {
+									"type": "string"
+								},
+								"text": {
+									"type": "string"
+								},
+								"created": {
+									"type": "string"
+								},
+								"read": {
+									"type": "integer",
+									"enum": [
+										0,
+										1
+									],
+									"description": "0 or 1"
+								}
+							}
+						}
+					},
+					"unread": {
+						"type": "integer"
+					}
+				}
+			},
+			"Project": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"parent_id": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"title": {
+						"type": "string"
+					},
+					"path": {
+						"type": "string",
+						"description": "Slash path like Code/weatherbox"
+					},
+					"description": {
+						"type": "string"
+					},
+					"archived": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"color": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"position": {
+						"type": "number"
+					},
+					"owner_id": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"folder": {
+						"type": "string"
+					},
+					"open": {
+						"type": "integer",
+						"description": "To-Do + Doing tasks directly in it"
+					},
+					"role": {
+						"type": "integer",
+						"enum": [
+							0,
+							1,
+							2,
+							3,
+							4
+						],
+						"description": "0 a parent shown only for the tree, 1 viewer, 2 editor, 3 manager, 4 owner"
+					}
+				}
+			},
+			"ExportProject": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"parent_id": {
+						"type": [
+							"integer",
+							"null"
+						]
+					},
+					"path": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"description": {
+						"type": "string"
+					},
+					"color": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"folder": {
+						"type": "string"
+					},
+					"archived": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"position": {
+						"type": "number"
+					}
+				}
+			},
+			"ProjectEvent": {
+				"allOf": [
+					{
+						"type": "object",
+						"properties": {
+							"id": {
+								"type": "integer"
+							},
+							"at": {
+								"type": "string"
+							},
+							"actor": {
+								"type": "string",
+								"description": "Username, or system"
+							},
+							"agent": {
+								"type": [
+									"string",
+									"null"
+								],
+								"description": "Agent name when the change came over MCP"
+							},
+							"field": {
+								"type": "string",
+								"description": "What changed: created, title, status, comment, label, ..."
+							},
+							"old": {
+								"type": [
+									"string",
+									"null"
+								]
+							},
+							"new": {
+								"type": [
+									"string",
+									"null"
+								]
+							}
+						}
+					},
+					{
+						"type": "object",
+						"properties": {
+							"task_id": {
+								"type": "integer"
+							},
+							"title": {
+								"type": "string",
+								"description": "The task's title"
+							}
+						}
+					}
+				]
+			},
+			"Share": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": [
+							"integer",
+							"null"
+						],
+						"description": "null for the owner row"
+					},
+					"kind": {
+						"type": "string",
+						"enum": [
+							"owner",
+							"user",
+							"team"
+						]
+					},
+					"name": {
+						"type": "string",
+						"description": "Username or team name"
+					},
+					"role": {
+						"type": "string",
+						"enum": [
+							"owner",
+							"viewer",
+							"editor",
+							"manager"
+						]
+					},
+					"project": {
+						"type": "string",
+						"description": "Path of the project the share is on"
+					},
+					"inherited": {
+						"type": "boolean",
+						"description": "The share is on a parent project"
+					}
+				}
+			},
+			"TaskCard": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"project_id": {
+						"type": "integer"
+					},
+					"project": {
+						"type": "string",
+						"description": "Project path"
+					},
+					"title": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"todo",
+							"doing",
+							"done"
+						]
+					},
+					"priority": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5
+					},
+					"due": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "YYYY-MM-DD"
+					},
+					"remind_at": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "YYYY-MM-DDTHH:MM"
+					},
+					"repeat": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"position": {
+						"type": "number"
+					},
+					"done_at": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"updated": {
+						"type": "string"
+					},
+					"archived": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"claimed_by": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The agent session working on it, while in doing"
+					},
+					"labels": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"checks": {
+						"type": "array",
+						"items": {
+							"type": "integer"
+						},
+						"minItems": 2,
+						"maxItems": 2,
+						"description": "[ticked, total] checklist steps in the description"
+					},
+					"files": {
+						"type": "integer",
+						"description": "Attachment count"
+					},
+					"assignees": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"comments": {
+						"type": "integer",
+						"description": "Comment count"
+					}
+				}
+			},
+			"Task": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"project_id": {
+						"type": "integer"
+					},
+					"project": {
+						"type": "string",
+						"description": "Project path"
+					},
+					"title": {
+						"type": "string"
+					},
+					"status": {
+						"type": "string",
+						"enum": [
+							"todo",
+							"doing",
+							"done"
+						]
+					},
+					"priority": {
+						"type": "integer",
+						"minimum": 0,
+						"maximum": 5
+					},
+					"due": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "YYYY-MM-DD"
+					},
+					"remind_at": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "YYYY-MM-DDTHH:MM"
+					},
+					"repeat": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"position": {
+						"type": "number"
+					},
+					"done_at": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"updated": {
+						"type": "string"
+					},
+					"archived": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"claimed_by": {
+						"type": [
+							"string",
+							"null"
+						],
+						"description": "The agent session working on it, while in doing"
+					},
+					"labels": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"checks": {
+						"type": "array",
+						"items": {
+							"type": "integer"
+						},
+						"minItems": 2,
+						"maxItems": 2,
+						"description": "[ticked, total] checklist steps in the description"
+					},
+					"files": {
+						"type": "integer",
+						"description": "Attachment count"
+					},
+					"assignees": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"role": {
+						"type": "integer",
+						"description": "Your role on its project, 1-4"
+					},
+					"description": {
+						"type": "string"
+					},
+					"created": {
+						"type": "string"
+					},
+					"attachments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"name": {
+									"type": "string"
+								},
+								"mime": {
+									"type": "string"
+								},
+								"size": {
+									"type": "integer"
+								},
+								"created": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"links": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"kind": {
+									"$ref": "#/components/schemas/LinkKind"
+								},
+								"id": {
+									"type": "integer"
+								},
+								"title": {
+									"type": "string"
+								},
+								"status": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"comments": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"author": {
+									"type": "string",
+									"description": "Username, or agent (username) for comments made over MCP"
+								},
+								"body": {
+									"type": "string"
+								},
+								"created": {
+									"type": "string"
+								}
+							}
+						}
+					},
+					"history": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"at": {
+									"type": "string"
+								},
+								"actor": {
+									"type": "string",
+									"description": "Username, or system"
+								},
+								"agent": {
+									"type": [
+										"string",
+										"null"
+									],
+									"description": "Agent name when the change came over MCP"
+								},
+								"field": {
+									"type": "string",
+									"description": "What changed: created, title, status, comment, label, ..."
+								},
+								"old": {
+									"type": [
+										"string",
+										"null"
+									]
+								},
+								"new": {
+									"type": [
+										"string",
+										"null"
+									]
+								}
+							}
+						}
+					}
+				}
+			},
+			"LinkKind": {
+				"type": "string",
+				"enum": [
+					"blocking",
+					"blocked",
+					"subtask",
+					"parenttask",
+					"related",
+					"duplicates",
+					"duplicateof",
+					"precedes",
+					"follows"
+				]
+			},
+			"SearchResult": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"title": {
+						"type": "string"
+					},
+					"project": {
+						"type": "string"
+					},
+					"project_id": {
+						"type": "integer"
+					},
+					"status": {
+						"type": "string"
+					},
+					"priority": {
+						"type": "integer"
+					},
+					"due": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"labels": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"assignees": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						}
+					},
+					"archived": {
+						"type": "integer",
+						"enum": [
+							0,
+							1
+						],
+						"description": "0 or 1"
+					},
+					"where": {
+						"type": "string",
+						"enum": [
+							"title",
+							"description",
+							"comment"
+						],
+						"description": "Where the words matched"
+					},
+					"snippet": {
+						"type": "string",
+						"description": "The matching line, when not in the title"
+					},
+					"created": {
+						"type": "string"
+					},
+					"updated": {
+						"type": "string"
+					}
+				}
+			},
+			"TrashItem": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"task_id": {
+						"type": "integer"
+					},
+					"project_id": {
+						"type": "integer"
+					},
+					"project": {
+						"type": "string"
+					},
+					"title": {
+						"type": "string"
+					},
+					"deleted": {
+						"type": "string"
+					},
+					"deleted_by": {
+						"type": "string"
+					}
+				}
+			},
+			"Label": {
+				"type": "object",
+				"properties": {
+					"name": {
+						"type": "string"
+					},
+					"color": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"global": {
+						"type": "boolean"
+					},
+					"count": {
+						"type": "integer",
+						"description": "Tasks you can see that use it"
+					}
+				}
+			},
+			"Team": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"name": {
+						"type": "string"
+					},
+					"members": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"username": {
+									"type": "string"
+								},
+								"owner": {
+									"type": "integer",
+									"enum": [
+										0,
+										1
+									],
+									"description": "0 or 1"
+								}
+							}
+						}
+					},
+					"projects": {
+						"type": "array",
+						"items": {
+							"type": "integer"
+						},
+						"description": "Project ids shared with the team"
+					},
+					"owner": {
+						"type": "boolean",
+						"description": "You can manage it"
+					},
+					"webhook": {
+						"type": "string",
+						"description": "Only shown to team owners"
+					},
+					"webhook_error": {
+						"type": "string"
+					},
+					"webhook_failed": {
+						"type": [
+							"string",
+							"null"
+						]
+					}
+				}
+			},
+			"Token": {
+				"type": "object",
+				"properties": {
+					"id": {
+						"type": "integer"
+					},
+					"name": {
+						"type": "string"
+					},
+					"created": {
+						"type": "string"
+					},
+					"used": {
+						"type": [
+							"string",
+							"null"
+						]
+					},
+					"role": {
+						"type": "string"
+					},
+					"projects": {
+						"type": "array",
+						"items": {
+							"type": "string"
+						},
+						"description": "Paths the token is limited to; empty for all"
+					}
+				}
+			}
+		}
+	}
+}

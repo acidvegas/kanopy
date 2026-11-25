@@ -29,6 +29,7 @@
 			<a href="./#compare">Compare</a>
 			<a href="./#install">Install</a>
 			<a class="on" href="docs.html">Docs</a>
+			<a href="api.html">API</a>
 		</nav>
 		<a class="btn sm gh" href="https://github.com/acidvegas/kanopy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
 		<button class="menu" type="button" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
@@ -49,6 +50,7 @@
 			<a href="#accounts-and-sharing">Accounts and sharing</a>
 			<a href="#connecting-agents">Connecting agents</a>
 			<a href="#mcp-tools">MCP tools</a>
+			<a href="#rest-api">REST API</a>
 			<a href="#configuration">Configuration</a>
 			<a class="sub" href="#sqlite-or-postgresql">SQLite or PostgreSQL</a>
 			<a class="sub" href="#live-updates">Live updates</a>
@@ -267,6 +269,8 @@ ln -s /path/to/kanopy/agents/task.md ~/.config/opencode/command/task.md
 <li><code>host:</code> labels that differ only by punctuation <em>(<code>host:web01</code> and <code>host:web-01</code>)</em> are rejected</li>
 <li>Moving a task to doing <strong>claims</strong> it for that agent session <em>(<code>by:claude(brandon)#a1b2c3</code> on its line, the agent's name on its card)</em>. Another session that tries to start it is told who has it, and takes over only with <code>take=true</code>. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own</li>
 </ul>
+<h2 id="rest-api">REST API<a class="anchor" href="#rest-api" aria-label="Link to this section">#</a></h2>
+<p>The web app's REST API is described in <a href="static/openapi.json"><code>static/openapi.json</code></a> <em>(OpenAPI 3.1)</em>, which every kanopy also serves at <code>/openapi.json</code>, and on the <a href="https://acidvegas.github.io/kanopy/api.html">API page</a>. Scripts can call it with an API token in the <code>X-Key</code> header; account, team, token, user and sharing routes need a signed-in session instead. Agents should use MCP, which answers in far fewer tokens.</p>
 <h2 id="configuration">Configuration<a class="anchor" href="#configuration" aria-label="Link to this section">#</a></h2>
 <p>Settings live in <code>.env</code>:</p>
 <div class="table-wrap"><table>

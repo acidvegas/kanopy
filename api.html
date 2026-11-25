@@ -1,0 +1,493 @@
+<!-- site - Developed by acidvegas in HTML (https://github.com/acidvegas) -->
+<!-- index.html -->
+
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>API · kanopy</title>
+	<meta name="description" content="kanopy is a self-hosted kanban board built for AI agents and the people they work with. Agents file, claim and finish tasks over MCP, and every change names who made it.">
+	<meta name="theme-color" content="#07060d">
+	<meta property="og:title" content="kanopy">
+	<meta property="og:description" content="The kanban board built for AI agents and the people they work with.">
+	<meta property="og:image" content="assets/img/og.png">
+	<meta property="og:type" content="website">
+	<meta name="twitter:card" content="summary_large_image">
+	<link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+	<link rel="icon" href="assets/img/favicon.ico" sizes="48x48">
+	<link rel="apple-touch-icon" href="assets/img/apple-touch-icon.png">
+	<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+
+<header class="nav">
+	<div class="wrap">
+		<a class="brand" href="./"><img src="assets/img/favicon.svg" alt="">kanopy</a>
+		<nav class="nav-links" aria-label="Main">
+			<a href="./#why">Why</a>
+			<a href="./#compare">Compare</a>
+			<a href="./#install">Install</a>
+			<a href="docs.html">Docs</a>
+			<a class="on" href="api.html">API</a>
+		</nav>
+		<a class="btn sm gh" href="https://github.com/acidvegas/kanopy"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+		<button class="menu" type="button" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+	</div>
+</header>
+
+<main class="wrap docs">
+	<aside class="toc" aria-label="On this page">
+		<p>REST API</p>
+			<a href="#overview">Overview</a>
+			<a href="#auth">Auth</a>
+			<a href="#invites">Invites</a>
+			<a href="#account">Account</a>
+			<a href="#notifications">Notifications</a>
+			<a href="#projects">Projects</a>
+			<a href="#sharing">Sharing</a>
+			<a href="#tasks">Tasks</a>
+			<a href="#comments-and-links">Comments and links</a>
+			<a href="#attachments">Attachments</a>
+			<a href="#trash">Trash</a>
+			<a href="#labels">Labels</a>
+			<a href="#teams">Teams</a>
+			<a href="#tokens">Tokens</a>
+			<a href="#users">Users</a>
+			<a href="#board">Board</a>
+			<a href="#agents">Agents</a>
+			<a href="#health">Health</a>
+			<a href="#schemas">Schemas</a>
+	</aside>
+	<article class="prose">
+		<h1>REST API</h1>
+		<p class="intro">kanopy 1.2.4. Every endpoint the web app uses. This page is built from <a href="openapi.json">openapi.json</a> (OpenAPI 3.1), which every kanopy also serves at <code>/openapi.json</code>.</p>
+		<h2 id="overview">Overview<a class="anchor" href="#overview" aria-label="Link to this section">#</a></h2>
+<p>The REST API the kanopy web app uses. Agents should prefer the MCP endpoint (/mcp), which answers in compact text.</p>
+<p><strong>Auth.</strong> Send an API token in the <code>X-Key</code> header (create one under Settings), or use the <code>kb_session</code> cookie from /api/login. A sent <code>X-Key</code> is the only credential checked. Tokens can use the board only: routes marked cookie-only (account, teams, tokens, users, sharing, settings) refuse them with 403. Read-only (viewer) tokens can only read, and a token limited to some projects sees only those.</p>
+<p><strong>Writes with the cookie</strong> must be same-origin and send JSON (or multipart for uploads); token requests skip that check.</p>
+<p><strong>Errors</strong> come back as <code>{"error": "..."}</code> with 400, 401, 403, 404, 409 or 415.</p>
+<p><strong>Revision.</strong> Every /api response carries <code>X-Revision</code>, the board's change counter; a successful write bumps it and also sends <code>X-Revision-Was</code>.</p>
+<h2 id="auth">Auth<a class="anchor" href="#auth" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-setup"><span class="verb get">GET</span> <code>/api/setup</code><a class="anchor" href="#get-api-setup" aria-label="Link to this endpoint">#</a></h3>
+<p>Whether the first admin still has to be created.</p>
+<p class="auth">No sign-in needed.</p>
+<ul class="codes"><li><code>200</code> OK: object</li></ul>
+<h3 id="post-api-setup"><span class="verb post">POST</span> <code>/api/setup</code><a class="anchor" href="#post-api-setup" aria-label="Link to this endpoint">#</a></h3>
+<p>Create the first admin on an empty board and sign in.</p>
+<p>Works only while the board has no users. Sets the session cookie. If KANOPY_KEY is set, it is imported as this admin's API token.</p>
+<p class="auth">No sign-in needed.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>username</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>password</code> <small>required</small></td><td>string</td><td>At least 8 characters for new accounts</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>403</code></li></ul>
+<h3 id="post-api-login"><span class="verb post">POST</span> <code>/api/login</code><a class="anchor" href="#post-api-login" aria-label="Link to this endpoint">#</a></h3>
+<p>Sign in.</p>
+<p>Sets the <code>kb_session</code> cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window.</p>
+<p class="auth">No sign-in needed.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>username</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>password</code> <small>required</small></td><td>string</td><td>At least 8 characters for new accounts</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>403</code></li></ul>
+<h3 id="post-api-logout"><span class="verb post">POST</span> <code>/api/logout</code><a class="anchor" href="#post-api-logout" aria-label="Link to this endpoint">#</a></h3>
+<p>Sign out.</p>
+<p>Ends the session and clears the cookie.</p>
+<p class="auth">No sign-in needed.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li></ul>
+<h3 id="post-api-signup"><span class="verb post">POST</span> <code>/api/signup</code><a class="anchor" href="#post-api-signup" aria-label="Link to this endpoint">#</a></h3>
+<p>Create an account from an invite link and sign in.</p>
+<p class="auth">No sign-in needed.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>token</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>username</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>password</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>404</code>, <code>409</code></li></ul>
+<h3 id="get-api-invites-check-token"><span class="verb get">GET</span> <code>/api/invites/check/{token}</code><a class="anchor" href="#get-api-invites-check-token" aria-label="Link to this endpoint">#</a></h3>
+<p>Check that an invite link can still be used.</p>
+<p class="auth">No sign-in needed.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>token</code> <small>required</small></td><td>path</td><td>string</td><td>Invite token from the link</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>404</code></li></ul>
+<h2 id="invites">Invites<a class="anchor" href="#invites" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-invites"><span class="verb get">GET</span> <code>/api/invites</code><a class="anchor" href="#get-api-invites" aria-label="Link to this endpoint">#</a></h3>
+<p>List invites (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-invites"><span class="verb post">POST</span> <code>/api/invites</code><a class="anchor" href="#post-api-invites" aria-label="Link to this endpoint">#</a></h3>
+<p>Create a single-use invite link (admin).</p>
+<p>The token is only shown in this response.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-invites-invite-id"><span class="verb delete">DELETE</span> <code>/api/invites/{invite_id}</code><a class="anchor" href="#delete-api-invites-invite-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Revoke an unused invite (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>invite_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Invite id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="account">Account<a class="anchor" href="#account" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-me"><span class="verb get">GET</span> <code>/api/me</code><a class="anchor" href="#get-api-me" aria-label="Link to this endpoint">#</a></h3>
+<p>The signed-in user.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-me">Me</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="patch-api-me"><span class="verb patch">PATCH</span> <code>/api/me</code><a class="anchor" href="#patch-api-me" aria-label="Link to this endpoint">#</a></h3>
+<p>Update your password, ntfy settings, timezone or notification toggles.</p>
+<p>Only the fields sent change. A new password signs out every other session.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code></td><td>string</td><td>New password; needs current_password</td></tr><tr><td><code>current_password</code></td><td>string</td><td></td></tr><tr><td><code>ntfy_url</code></td><td>string</td><td>Your ntfy server; empty means ntfy.sh</td></tr><tr><td><code>ntfy_token</code></td><td>string</td><td>Access token for your ntfy server; empty keeps the stored one</td></tr><tr><td><code>clear_ntfy_token</code></td><td>boolean</td><td></td></tr><tr><td><code>ntfy_topic</code></td><td>string</td><td>Letters, digits, dashes and underscores</td></tr><tr><td><code>timezone</code></td><td>string</td><td>IANA name you picked; empty follows your browser</td></tr><tr><td><code>timezone_auto</code></td><td>string</td><td>IANA name your browser reports</td></tr><tr><td><code>notify_remind</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_due</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_digest</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_agent</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_mention</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_assign</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_activity</code></td><td>boolean</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-me">Me</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="put-api-me-avatar"><span class="verb put">PUT</span> <code>/api/me/avatar</code><a class="anchor" href="#put-api-me-avatar" aria-label="Link to this endpoint">#</a></h3>
+<p>Set your picture.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>multipart/form-data</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>file</code> <small>required</small></td><td>string</td><td>PNG, JPEG, WebP or GIF, at most 512 KB</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-user">User</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-me-avatar"><span class="verb delete">DELETE</span> <code>/api/me/avatar</code><a class="anchor" href="#delete-api-me-avatar" aria-label="Link to this endpoint">#</a></h3>
+<p>Remove your picture.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-user">User</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-test"><span class="verb post">POST</span> <code>/api/me/test</code><a class="anchor" href="#post-api-me-test" aria-label="Link to this endpoint">#</a></h3>
+<p>Send a test push to your ntfy topic.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-notifications"><span class="verb get">GET</span> <code>/api/notifications</code><a class="anchor" href="#get-api-notifications" aria-label="Link to this endpoint">#</a></h3>
+<p>Your inbox: the newest 100 notifications and the unread count.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-inbox">Inbox</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-notifications-read"><span class="verb post">POST</span> <code>/api/notifications/read</code><a class="anchor" href="#post-api-notifications-read" aria-label="Link to this endpoint">#</a></h3>
+<p>Mark notifications read.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>ids</code></td><td>integer[]</td><td>Leave out to mark every notification read</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-inbox">Inbox</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="projects">Projects<a class="anchor" href="#projects" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-projects"><span class="verb get">GET</span> <code>/api/projects</code><a class="anchor" href="#get-api-projects" aria-label="Link to this endpoint">#</a></h3>
+<p>Every project you can see, in tree order.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>401</code></li></ul>
+<h3 id="post-api-projects"><span class="verb post">POST</span> <code>/api/projects</code><a class="anchor" href="#post-api-projects" aria-label="Link to this endpoint">#</a></h3>
+<p>Create a project by path.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>path</code> <small>required</small></td><td>string</td><td>Slash path like Code/weatherbox; missing parents are created</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>folder</code></td><td>string</td><td>Local directory the project lives in, absolute or starting with ~</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="patch-api-projects-project-id"><span class="verb patch">PATCH</span> <code>/api/projects/{project_id}</code><a class="anchor" href="#patch-api-projects-project-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Rename or move, describe, archive, color or set the folder of a project (manager).</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>path</code></td><td>string</td><td>New slash path; renames and/or moves it</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>archived</code></td><td>boolean</td><td></td></tr><tr><td><code>color</code></td><td>string</td><td>#rrggbb, or empty to clear</td></tr><tr><td><code>folder</code></td><td>string</td><td>Absolute or ~ path, or empty to clear</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-projects-project-id"><span class="verb delete">DELETE</span> <code>/api/projects/{project_id}</code><a class="anchor" href="#delete-api-projects-project-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Delete an empty project.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-projects-order"><span class="verb post">POST</span> <code>/api/projects/order</code><a class="anchor" href="#post-api-projects-order" aria-label="Link to this endpoint">#</a></h3>
+<p>Set the parent and order of a group of sibling projects.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>parent_id</code></td><td>integer | null</td><td>New parent, or null for top level</td></tr><tr><td><code>ids</code> <small>required</small></td><td>integer[]</td><td>Every child under that parent, top to bottom</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-projects-project-id-activity"><span class="verb get">GET</span> <code>/api/projects/{project_id}/activity</code><a class="anchor" href="#get-api-projects-project-id-activity" aria-label="Link to this endpoint">#</a></h3>
+<p>Task history across a project and its sub-projects, newest first.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr><tr><td><code>before</code></td><td>query</td><td>integer</td><td>Only events older than this event id, for the next page (100 per page)</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-projects-project-id-people"><span class="verb get">GET</span> <code>/api/projects/{project_id}/people</code><a class="anchor" href="#get-api-projects-project-id-people" aria-label="Link to this endpoint">#</a></h3>
+<p>Usernames that can see a project, most recently active first.</p>
+<p>Owner, shared users and members of shared teams, here or on a parent project. Ordered by their latest change or comment in the project or its sub-projects; people with no activity follow alphabetically.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="sharing">Sharing<a class="anchor" href="#sharing" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-projects-project-id-shares"><span class="verb get">GET</span> <code>/api/projects/{project_id}/shares</code><a class="anchor" href="#get-api-projects-project-id-shares" aria-label="Link to this endpoint">#</a></h3>
+<p>Who a project is shared with, plus its owner and shares inherited from parents.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-projects-project-id-shares"><span class="verb post">POST</span> <code>/api/projects/{project_id}/shares</code><a class="anchor" href="#post-api-projects-project-id-shares" aria-label="Link to this endpoint">#</a></h3>
+<p>Share a project with a user or a team (manager).</p>
+<p>Sharing again changes the role. Sharing includes every sub-project.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Project id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>role</code></td><td><code>&quot;viewer&quot;</code> | <code>&quot;editor&quot;</code> | <code>&quot;manager&quot;</code></td><td></td></tr><tr><td><code>username</code></td><td>string</td><td>User to share with</td></tr><tr><td><code>team</code></td><td>string</td><td>Team name to share with, instead of username</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-shares-share-id"><span class="verb delete">DELETE</span> <code>/api/shares/{share_id}</code><a class="anchor" href="#delete-api-shares-share-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Remove a share (manager).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>share_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Share id from the share list</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="tasks">Tasks<a class="anchor" href="#tasks" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-tasks"><span class="verb get">GET</span> <code>/api/tasks</code><a class="anchor" href="#get-api-tasks" aria-label="Link to this endpoint">#</a></h3>
+<p>Task cards for every project or one project and its sub-projects.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project</code></td><td>query</td><td>integer</td><td>Project id; its sub-projects are included</td></tr><tr><td><code>done_limit</code></td><td>query</td><td>integer</td><td>Keep every open task but only this many of the newest done ones</td></tr><tr><td><code>brief</code></td><td>query</td><td>string</td><td>Any value: return only id, project_id, project, title, status, priority and updated</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>401</code></li></ul>
+<h3 id="post-api-tasks"><span class="verb post">POST</span> <code>/api/tasks</code><a class="anchor" href="#post-api-tasks" aria-label="Link to this endpoint">#</a></h3>
+<p>Create a task (editor).</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>title</code> <small>required</small></td><td>string</td><td>Required on create</td></tr><tr><td><code>description</code></td><td>string</td><td>Markdown; checklist steps as &quot;- [ ] &quot;</td></tr><tr><td><code>project_id</code> <small>required</small></td><td>integer</td><td>Required on create; on update, moves the task (editor on the target needed)</td></tr><tr><td><code>status</code></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td>Moving to doing claims the task for the caller; done on a repeating task creates its next copy</td></tr><tr><td><code>priority</code></td><td>integer</td><td>0 none, 1 low, 2 medium, 3 high, 4 urgent, 5 do now</td></tr><tr><td><code>due</code></td><td>string | null</td><td>YYYY-MM-DD; empty or null clears it</td></tr><tr><td><code>remind_at</code></td><td>string | null</td><td>YYYY-MM-DDTHH:MM in the user&#x27;s own timezone; empty or null clears it</td></tr><tr><td><code>repeat</code></td><td>string | null</td><td>daily, weekly, monthly, yearly, &quot;every N days/weeks/months/years&quot;, weekdays, or day names like &quot;mon,wed,fri&quot;; empty stops it</td></tr><tr><td><code>labels</code></td><td>string[]</td><td>Replaces every label; each must look like namespace:value</td></tr><tr><td><code>assignees</code></td><td>string[]</td><td>Usernames; replaces every assignee. Each needs access to the project</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-tasks-task-id"><span class="verb get">GET</span> <code>/api/tasks/{task_id}</code><a class="anchor" href="#get-api-tasks-task-id" aria-label="Link to this endpoint">#</a></h3>
+<p>A full task: description, attachments, links, comments and history.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="patch-api-tasks-task-id"><span class="verb patch">PATCH</span> <code>/api/tasks/{task_id}</code><a class="anchor" href="#patch-api-tasks-task-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Update task fields (editor).</p>
+<p>Only the fields sent change.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>title</code></td><td>string</td><td>Required on create</td></tr><tr><td><code>description</code></td><td>string</td><td>Markdown; checklist steps as &quot;- [ ] &quot;</td></tr><tr><td><code>project_id</code></td><td>integer</td><td>Required on create; on update, moves the task (editor on the target needed)</td></tr><tr><td><code>status</code></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td>Moving to doing claims the task for the caller; done on a repeating task creates its next copy</td></tr><tr><td><code>priority</code></td><td>integer</td><td>0 none, 1 low, 2 medium, 3 high, 4 urgent, 5 do now</td></tr><tr><td><code>due</code></td><td>string | null</td><td>YYYY-MM-DD; empty or null clears it</td></tr><tr><td><code>remind_at</code></td><td>string | null</td><td>YYYY-MM-DDTHH:MM in the user&#x27;s own timezone; empty or null clears it</td></tr><tr><td><code>repeat</code></td><td>string | null</td><td>daily, weekly, monthly, yearly, &quot;every N days/weeks/months/years&quot;, weekdays, or day names like &quot;mon,wed,fri&quot;; empty stops it</td></tr><tr><td><code>labels</code></td><td>string[]</td><td>Replaces every label; each must look like namespace:value</td></tr><tr><td><code>assignees</code></td><td>string[]</td><td>Usernames; replaces every assignee. Each needs access to the project</td></tr><tr><td><code>claim</code></td><td>boolean</td><td>Take over a task another session claimed</td></tr><tr><td><code>description_was</code></td><td>string</td><td>The description your edit started from; if it changed meanwhile the update is refused with 409</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li><code>409</code> The description changed while you were editing it</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-tasks-task-id"><span class="verb delete">DELETE</span> <code>/api/tasks/{task_id}</code><a class="anchor" href="#delete-api-tasks-task-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Move a task to the trash (editor).</p>
+<p>Trashed tasks can be restored for 30 days.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-tasks-bulk"><span class="verb post">POST</span> <code>/api/tasks/bulk</code><a class="anchor" href="#post-api-tasks-bulk" aria-label="Link to this endpoint">#</a></h3>
+<p>Apply one change to many tasks.</p>
+<p>Runs in one transaction: if any task fails, none change.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>ids</code> <small>required</small></td><td>integer[]</td><td></td></tr><tr><td><code>status</code></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td></td></tr><tr><td><code>project_id</code></td><td>integer</td><td></td></tr><tr><td><code>add_label</code></td><td>string</td><td></td></tr><tr><td><code>remove_label</code></td><td>string</td><td></td></tr><tr><td><code>delete</code></td><td>boolean</td><td>Move them all to the trash</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-reorder"><span class="verb post">POST</span> <code>/api/reorder</code><a class="anchor" href="#post-api-reorder" aria-label="Link to this endpoint">#</a></h3>
+<p>Set the status and order of the tasks in one column.</p>
+<p>Cards not listed keep their place; listed cards from another column move into this one.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>status</code> <small>required</small></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td></td></tr><tr><td><code>ids</code> <small>required</small></td><td>integer[]</td><td>The visible task ids in that column, top to bottom</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-repeats"><span class="verb get">GET</span> <code>/api/repeats</code><a class="anchor" href="#get-api-repeats" aria-label="Link to this endpoint">#</a></h3>
+<p>Upcoming dates of repeating tasks, for the calendar.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>from</code> <small>required</small></td><td>query</td><td>string</td><td>First day, YYYY-MM-DD</td></tr><tr><td><code>to</code> <small>required</small></td><td>query</td><td>string</td><td>Last day, YYYY-MM-DD; at most 62 days after from</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-search"><span class="verb get">GET</span> <code>/api/search</code><a class="anchor" href="#get-api-search" aria-label="Link to this endpoint">#</a></h3>
+<p>Search task titles, descriptions and comments.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>q</code></td><td>query</td><td>string</td><td>Words that must all appear (case-insensitive). Empty lists every task the filters allow</td></tr><tr><td><code>project</code></td><td>query</td><td>integer</td><td>Project id; its sub-projects are included</td></tr><tr><td><code>status</code></td><td>query</td><td>string</td><td>Comma-separated statuses, like todo,doing</td></tr><tr><td><code>label</code></td><td>query</td><td>string</td><td>Label every result must have</td></tr><tr><td><code>assignee</code></td><td>query</td><td>string</td><td>Username every result must be assigned to</td></tr><tr><td><code>priority</code></td><td>query</td><td>integer</td><td>Minimum priority</td></tr><tr><td><code>due</code></td><td>query</td><td><code>&quot;overdue&quot;</code> | <code>&quot;today&quot;</code> | <code>&quot;week&quot;</code> | <code>&quot;any&quot;</code> | <code>&quot;none&quot;</code></td><td>Due date filter</td></tr><tr><td><code>fields</code></td><td>query</td><td>string</td><td>Comma-separated: title, description, comments (default all)</td></tr><tr><td><code>sort</code></td><td>query</td><td><code>&quot;updated&quot;</code> | <code>&quot;created&quot;</code> | <code>&quot;priority&quot;</code> | <code>&quot;due&quot;</code> | <code>&quot;id&quot;</code></td><td>Sort order</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="comments-and-links">Comments and links<a class="anchor" href="#comments-and-links" aria-label="Link to this section">#</a></h2>
+<h3 id="post-api-tasks-task-id-comments"><span class="verb post">POST</span> <code>/api/tasks/{task_id}/comments</code><a class="anchor" href="#post-api-tasks-task-id-comments" aria-label="Link to this endpoint">#</a></h3>
+<p>Comment on a task (editor).</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>body</code> <small>required</small></td><td>string</td><td>Markdown; @username notifies that user</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-tasks-task-id-links"><span class="verb post">POST</span> <code>/api/tasks/{task_id}/links</code><a class="anchor" href="#post-api-tasks-task-id-links" aria-label="Link to this endpoint">#</a></h3>
+<p>Link a task to another (editor on both).</p>
+<p>Both directions are stored: blocking on one task shows as blocked on the other.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>kind</code> <small>required</small></td><td><a href="#schema-linkkind">LinkKind</a></td><td></td></tr><tr><td><code>other</code> <small>required</small></td><td>integer</td><td>The other task id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-tasks-task-id-links"><span class="verb delete">DELETE</span> <code>/api/tasks/{task_id}/links</code><a class="anchor" href="#delete-api-tasks-task-id-links" aria-label="Link to this endpoint">#</a></h3>
+<p>Remove a link between two tasks.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr><tr><td><code>kind</code> <small>required</small></td><td>query</td><td><a href="#schema-linkkind">LinkKind</a></td><td>Link kind</td></tr><tr><td><code>other</code> <small>required</small></td><td>query</td><td>integer</td><td>The other task id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="attachments">Attachments<a class="anchor" href="#attachments" aria-label="Link to this section">#</a></h2>
+<h3 id="post-api-tasks-task-id-attachments"><span class="verb post">POST</span> <code>/api/tasks/{task_id}/attachments</code><a class="anchor" href="#post-api-tasks-task-id-attachments" aria-label="Link to this endpoint">#</a></h3>
+<p>Attach files to a task (editor).</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>task_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Task id</td></tr></tbody></table></div>
+<p class="label">Body <code>multipart/form-data</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>file</code> <small>required</small></td><td>string[]</td><td>One or more files, 25 MB each</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-attachments-attachment-id"><span class="verb get">GET</span> <code>/api/attachments/{attachment_id}</code><a class="anchor" href="#get-api-attachments-attachment-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Download an attachment.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>attachment_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Attachment id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> The file, with its own MIME type</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-attachments-attachment-id"><span class="verb delete">DELETE</span> <code>/api/attachments/{attachment_id}</code><a class="anchor" href="#delete-api-attachments-attachment-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Delete an attachment (editor).</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>attachment_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Attachment id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="trash">Trash<a class="anchor" href="#trash" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-trash"><span class="verb get">GET</span> <code>/api/trash</code><a class="anchor" href="#get-api-trash" aria-label="Link to this endpoint">#</a></h3>
+<p>Deleted tasks you can restore.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>401</code></li></ul>
+<h3 id="post-api-trash-trash-id-restore"><span class="verb post">POST</span> <code>/api/trash/{trash_id}/restore</code><a class="anchor" href="#post-api-trash-trash-id-restore" aria-label="Link to this endpoint">#</a></h3>
+<p>Restore a deleted task.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>trash_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Trash entry id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-task">Task</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="labels">Labels<a class="anchor" href="#labels" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-labels"><span class="verb get">GET</span> <code>/api/labels</code><a class="anchor" href="#get-api-labels" aria-label="Link to this endpoint">#</a></h3>
+<p>Global labels and your own, with usage counts.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>401</code></li></ul>
+<h3 id="post-api-labels"><span class="verb post">POST</span> <code>/api/labels</code><a class="anchor" href="#post-api-labels" aria-label="Link to this endpoint">#</a></h3>
+<p>Create a personal label, or a global one (admin).</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <small>required</small></td><td>string</td><td>namespace:value, like host:pi</td></tr><tr><td><code>color</code></td><td>string</td><td>#rrggbb; without one it takes its namespace&#x27;s color</td></tr><tr><td><code>global</code></td><td>boolean</td><td>Admin only</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="patch-api-labels"><span class="verb patch">PATCH</span> <code>/api/labels</code><a class="anchor" href="#patch-api-labels" aria-label="Link to this endpoint">#</a></h3>
+<p>Rename and/or recolor a label.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <small>required</small></td><td>string</td><td>Current name</td></tr><tr><td><code>new_name</code></td><td>string</td><td>New name; an existing label&#x27;s name merges the two</td></tr><tr><td><code>color</code></td><td>string</td><td>#rrggbb, or empty to clear</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-labels"><span class="verb delete">DELETE</span> <code>/api/labels</code><a class="anchor" href="#delete-api-labels" aria-label="Link to this endpoint">#</a></h3>
+<p>Delete a label everywhere.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <small>required</small></td><td>query</td><td>string</td><td>Label name</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="teams">Teams<a class="anchor" href="#teams" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-teams"><span class="verb get">GET</span> <code>/api/teams</code><a class="anchor" href="#get-api-teams" aria-label="Link to this endpoint">#</a></h3>
+<p>Your teams (admins see all).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-teams"><span class="verb post">POST</span> <code>/api/teams</code><a class="anchor" href="#post-api-teams" aria-label="Link to this endpoint">#</a></h3>
+<p>Create a team.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-teams-team-id"><span class="verb delete">DELETE</span> <code>/api/teams/{team_id}</code><a class="anchor" href="#delete-api-teams-team-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Delete a team (team owner or admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Team id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-teams-team-id-members"><span class="verb post">POST</span> <code>/api/teams/{team_id}/members</code><a class="anchor" href="#post-api-teams-team-id-members" aria-label="Link to this endpoint">#</a></h3>
+<p>Add a member by username (team owner or admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Team id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>username</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-teams-team-id-members-user-id"><span class="verb delete">DELETE</span> <code>/api/teams/{team_id}/members/{user_id}</code><a class="anchor" href="#delete-api-teams-team-id-members-user-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Remove a member, or leave the team yourself.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Team id</td></tr><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="patch-api-teams-team-id-members-user-id"><span class="verb patch">PATCH</span> <code>/api/teams/{team_id}/members/{user_id}</code><a class="anchor" href="#patch-api-teams-team-id-members-user-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Make a member an owner, or back to a member.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Team id</td></tr><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>owner</code> <small>required</small></td><td>boolean</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="put-api-teams-team-id-webhook"><span class="verb put">PUT</span> <code>/api/teams/{team_id}/webhook</code><a class="anchor" href="#put-api-teams-team-id-webhook" aria-label="Link to this endpoint">#</a></h3>
+<p>Set or clear the team&#x27;s webhook URL.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>team_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Team id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>url</code></td><td>string</td><td>https URL that resolves to public addresses only; empty clears it. A key= parameter is sent as an Authorization: Bearer header</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="tokens">Tokens<a class="anchor" href="#tokens" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-tokens"><span class="verb get">GET</span> <code>/api/tokens</code><a class="anchor" href="#get-api-tokens" aria-label="Link to this endpoint">#</a></h3>
+<p>Your API tokens (never the secrets).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-tokens"><span class="verb post">POST</span> <code>/api/tokens</code><a class="anchor" href="#post-api-tokens" aria-label="Link to this endpoint">#</a></h3>
+<p>Create an API token.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code></td><td>string</td><td>Label like claude</td></tr><tr><td><code>role</code></td><td><code>&quot;viewer&quot;</code> | <code>&quot;editor&quot;</code> | <code>&quot;manager&quot;</code> | <code>&quot;owner&quot;</code></td><td>Highest role the token may use; viewer is read-only. Never more than your own role</td></tr><tr><td><code>projects</code></td><td>integer[]</td><td>Limit the token to these projects and everything under them; empty for all</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-tokens-token-id"><span class="verb delete">DELETE</span> <code>/api/tokens/{token_id}</code><a class="anchor" href="#delete-api-tokens-token-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Revoke an API token.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>token_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Token id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="users">Users<a class="anchor" href="#users" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-users"><span class="verb get">GET</span> <code>/api/users</code><a class="anchor" href="#get-api-users" aria-label="Link to this endpoint">#</a></h3>
+<p>Every user, for assigning, sharing and mentions.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-users-user-id-avatar"><span class="verb get">GET</span> <code>/api/users/{user_id}/avatar</code><a class="anchor" href="#get-api-users-user-id-avatar" aria-label="Link to this endpoint">#</a></h3>
+<p>A user&#x27;s picture.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> The image</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-users-user-id-footprint"><span class="verb get">GET</span> <code>/api/users/{user_id}/footprint</code><a class="anchor" href="#get-api-users-user-id-footprint" aria-label="Link to this endpoint">#</a></h3>
+<p>What deleting a user would remove (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-users-user-id"><span class="verb delete">DELETE</span> <code>/api/users/{user_id}</code><a class="anchor" href="#delete-api-users-user-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Delete a user and their projects (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>keep_labels</code></td><td>boolean</td><td>Keep their personal labels as yours</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-users-user-id-password"><span class="verb post">POST</span> <code>/api/users/{user_id}/password</code><a class="anchor" href="#post-api-users-user-id-password" aria-label="Link to this endpoint">#</a></h3>
+<p>Set a user&#x27;s password (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="board">Board<a class="anchor" href="#board" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-settings"><span class="verb get">GET</span> <code>/api/settings</code><a class="anchor" href="#get-api-settings" aria-label="Link to this endpoint">#</a></h3>
+<p>Board settings (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="put-api-settings"><span class="verb put">PUT</span> <code>/api/settings</code><a class="anchor" href="#put-api-settings" aria-label="Link to this endpoint">#</a></h3>
+<p>Save board settings (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>timezone</code></td><td>string</td><td>Default for people whose browser has not reported one</td></tr><tr><td><code>due_time</code></td><td>string</td><td>HH:MM for due-today pushes, in each person&#x27;s timezone</td></tr><tr><td><code>digest_time</code></td><td>string</td><td>HH:MM for the overdue digest</td></tr><tr><td><code>archive_days</code></td><td>string</td><td>Archive tasks done this many days ago; 0 turns it off</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-version"><span class="verb get">GET</span> <code>/api/version</code><a class="anchor" href="#get-api-version" aria-label="Link to this endpoint">#</a></h3>
+<p>Running version and the newest GitHub release (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="get-api-revision"><span class="verb get">GET</span> <code>/api/revision</code><a class="anchor" href="#get-api-revision" aria-label="Link to this endpoint">#</a></h3>
+<p>The board&#x27;s change counter.</p>
+<p>Every successful write bumps it. Open pages poll this and reload when it moves.</p>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>401</code></li></ul>
+<h3 id="get-api-export"><span class="verb get">GET</span> <code>/api/export</code><a class="anchor" href="#get-api-export" aria-label="Link to this endpoint">#</a></h3>
+<p>Download a project and everything under it, or everything you can see, as JSON.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>project</code></td><td>query</td><td>integer</td><td>Project id; leave out for everything</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> A JSON file download</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="agents">Agents<a class="anchor" href="#agents" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-context"><span class="verb get">GET</span> <code>/api/context</code><a class="anchor" href="#get-api-context" aria-label="Link to this endpoint">#</a></h3>
+<p>Plain-text session briefing for an agent.</p>
+<p>What the Claude Code SessionStart hook and the opencode plugin print at the start of a session.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>cwd</code></td><td>query</td><td>string</td><td>The agent&#x27;s working directory</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> The project whose folder holds cwd and its open tasks; empty when none matches</li><li>Errors: <code>401</code></li></ul>
+<h3 id="post-mcp"><span class="verb post">POST</span> <code>/mcp</code><a class="anchor" href="#post-mcp" aria-label="Link to this endpoint">#</a></h3>
+<p>MCP endpoint (streamable HTTP, stateless, JSON responses).</p>
+<p>Takes API tokens only. Without one, only the handshake and the tool list answer. Send <code>X-Agent</code> to name the agent in comments and history, and send back the <code>Mcp-Session-Id</code> header you were given so the session can claim tasks as itself. The tools are listed in the README.</p>
+<p class="auth">API token only.</p>
+<p class="label">Body <code>application/json</code>: One JSON-RPC 2.0 request object; batches are not supported</p>
+<ul class="codes"><li><code>200</code> One JSON-RPC response, or 202 with no body for a notification</li><li><code>202</code> Accepted (a JSON-RPC notification)</li><li>Errors: <code>400</code></li></ul>
+<h2 id="health">Health<a class="anchor" href="#health" aria-label="Link to this section">#</a></h2>
+<h3 id="get-health"><span class="verb get">GET</span> <code>/health</code><a class="anchor" href="#get-health" aria-label="Link to this endpoint">#</a></h3>
+<p>ok while the database responds.</p>
+<p class="auth">No sign-in needed.</p>
+<ul class="codes"><li><code>200</code> ok</li><li><code>503</code> database unreachable</li></ul>
+<h2 id="schemas">Schemas<a class="anchor" href="#schemas" aria-label="Link to this section">#</a></h2>
+<h3 id="schema-ok">Ok<a class="anchor" href="#schema-ok" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>ok</code></td><td>boolean</td><td></td></tr></tbody></table></div>
+<h3 id="schema-error">Error<a class="anchor" href="#schema-error" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>error</code></td><td>string</td><td></td></tr></tbody></table></div>
+<h3 id="schema-credentials">Credentials<a class="anchor" href="#schema-credentials" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>username</code></td><td>string</td><td></td></tr><tr><td><code>password</code></td><td>string</td><td>At least 8 characters for new accounts</td></tr></tbody></table></div>
+<h3 id="schema-invite">Invite<a class="anchor" href="#schema-invite" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>expires</code></td><td>string</td><td></td></tr><tr><td><code>used</code></td><td>string | null</td><td></td></tr><tr><td><code>used_by</code></td><td>string | null</td><td></td></tr></tbody></table></div>
+<h3 id="schema-user">User<a class="anchor" href="#schema-user" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>username</code></td><td>string</td><td></td></tr><tr><td><code>is_admin</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>ntfy_topic</code></td><td>string</td><td></td></tr><tr><td><code>ntfy_url</code></td><td>string</td><td></td></tr><tr><td><code>notify_remind</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_due</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_digest</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_agent</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_mention</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_assign</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_activity</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>timezone</code></td><td>string</td><td></td></tr><tr><td><code>timezone_auto</code></td><td>string</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>avatar_at</code></td><td>string | null</td><td></td></tr></tbody></table></div>
+<h3 id="schema-me">Me<a class="anchor" href="#schema-me" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>username</code></td><td>string</td><td></td></tr><tr><td><code>is_admin</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>ntfy_topic</code></td><td>string</td><td></td></tr><tr><td><code>ntfy_url</code></td><td>string</td><td></td></tr><tr><td><code>notify_remind</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_due</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_digest</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_agent</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_mention</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_assign</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>notify_activity</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>timezone</code></td><td>string</td><td></td></tr><tr><td><code>timezone_auto</code></td><td>string</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>avatar_at</code></td><td>string | null</td><td></td></tr><tr><td><code>unread</code></td><td>integer</td><td>Unread notifications (GET only)</td></tr><tr><td><code>ntfy_token_set</code></td><td>boolean</td><td></td></tr></tbody></table></div>
+<h3 id="schema-meupdate">MeUpdate<a class="anchor" href="#schema-meupdate" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code></td><td>string</td><td>New password; needs current_password</td></tr><tr><td><code>current_password</code></td><td>string</td><td></td></tr><tr><td><code>ntfy_url</code></td><td>string</td><td>Your ntfy server; empty means ntfy.sh</td></tr><tr><td><code>ntfy_token</code></td><td>string</td><td>Access token for your ntfy server; empty keeps the stored one</td></tr><tr><td><code>clear_ntfy_token</code></td><td>boolean</td><td></td></tr><tr><td><code>ntfy_topic</code></td><td>string</td><td>Letters, digits, dashes and underscores</td></tr><tr><td><code>timezone</code></td><td>string</td><td>IANA name you picked; empty follows your browser</td></tr><tr><td><code>timezone_auto</code></td><td>string</td><td>IANA name your browser reports</td></tr><tr><td><code>notify_remind</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_due</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_digest</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_agent</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_mention</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_assign</code></td><td>boolean</td><td></td></tr><tr><td><code>notify_activity</code></td><td>boolean</td><td></td></tr></tbody></table></div>
+<h3 id="schema-userbrief">UserBrief<a class="anchor" href="#schema-userbrief" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>username</code></td><td>string</td><td></td></tr><tr><td><code>is_admin</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>avatar_at</code></td><td>string | null</td><td></td></tr></tbody></table></div>
+<h3 id="schema-inbox">Inbox<a class="anchor" href="#schema-inbox" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>notifications</code></td><td>object[]</td><td></td></tr><tr><td><code>unread</code></td><td>integer</td><td></td></tr></tbody></table></div>
+<h3 id="schema-project">Project<a class="anchor" href="#schema-project" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>parent_id</code></td><td>integer | null</td><td></td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>path</code></td><td>string</td><td>Slash path like Code/weatherbox</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>archived</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>color</code></td><td>string | null</td><td></td></tr><tr><td><code>position</code></td><td>number</td><td></td></tr><tr><td><code>owner_id</code></td><td>integer | null</td><td></td></tr><tr><td><code>folder</code></td><td>string</td><td></td></tr><tr><td><code>open</code></td><td>integer</td><td>To-Do + Doing tasks directly in it</td></tr><tr><td><code>role</code></td><td><code>0</code> | <code>1</code> | <code>2</code> | <code>3</code> | <code>4</code></td><td>0 a parent shown only for the tree, 1 viewer, 2 editor, 3 manager, 4 owner</td></tr></tbody></table></div>
+<h3 id="schema-exportproject">ExportProject<a class="anchor" href="#schema-exportproject" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>parent_id</code></td><td>integer | null</td><td></td></tr><tr><td><code>path</code></td><td>string</td><td></td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>color</code></td><td>string | null</td><td></td></tr><tr><td><code>folder</code></td><td>string</td><td></td></tr><tr><td><code>archived</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>position</code></td><td>number</td><td></td></tr></tbody></table></div>
+<h3 id="schema-projectevent">ProjectEvent<a class="anchor" href="#schema-projectevent" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>at</code></td><td>string</td><td></td></tr><tr><td><code>actor</code></td><td>string</td><td>Username, or system</td></tr><tr><td><code>agent</code></td><td>string | null</td><td>Agent name when the change came over MCP</td></tr><tr><td><code>field</code></td><td>string</td><td>What changed: created, title, status, comment, label, ...</td></tr><tr><td><code>old</code></td><td>string | null</td><td></td></tr><tr><td><code>new</code></td><td>string | null</td><td></td></tr><tr><td><code>task_id</code></td><td>integer</td><td></td></tr><tr><td><code>title</code></td><td>string</td><td>The task&#x27;s title</td></tr></tbody></table></div>
+<h3 id="schema-share">Share<a class="anchor" href="#schema-share" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer | null</td><td>null for the owner row</td></tr><tr><td><code>kind</code></td><td><code>&quot;owner&quot;</code> | <code>&quot;user&quot;</code> | <code>&quot;team&quot;</code></td><td></td></tr><tr><td><code>name</code></td><td>string</td><td>Username or team name</td></tr><tr><td><code>role</code></td><td><code>&quot;owner&quot;</code> | <code>&quot;viewer&quot;</code> | <code>&quot;editor&quot;</code> | <code>&quot;manager&quot;</code></td><td></td></tr><tr><td><code>project</code></td><td>string</td><td>Path of the project the share is on</td></tr><tr><td><code>inherited</code></td><td>boolean</td><td>The share is on a parent project</td></tr></tbody></table></div>
+<h3 id="schema-taskcard">TaskCard<a class="anchor" href="#schema-taskcard" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>project_id</code></td><td>integer</td><td></td></tr><tr><td><code>project</code></td><td>string</td><td>Project path</td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>status</code></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td></td></tr><tr><td><code>priority</code></td><td>integer</td><td></td></tr><tr><td><code>due</code></td><td>string | null</td><td>YYYY-MM-DD</td></tr><tr><td><code>remind_at</code></td><td>string | null</td><td>YYYY-MM-DDTHH:MM</td></tr><tr><td><code>repeat</code></td><td>string | null</td><td></td></tr><tr><td><code>position</code></td><td>number</td><td></td></tr><tr><td><code>done_at</code></td><td>string | null</td><td></td></tr><tr><td><code>updated</code></td><td>string</td><td></td></tr><tr><td><code>archived</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>claimed_by</code></td><td>string | null</td><td>The agent session working on it, while in doing</td></tr><tr><td><code>labels</code></td><td>string[]</td><td></td></tr><tr><td><code>checks</code></td><td>integer[]</td><td>[ticked, total] checklist steps in the description</td></tr><tr><td><code>files</code></td><td>integer</td><td>Attachment count</td></tr><tr><td><code>assignees</code></td><td>string[]</td><td></td></tr><tr><td><code>comments</code></td><td>integer</td><td>Comment count</td></tr></tbody></table></div>
+<h3 id="schema-task">Task<a class="anchor" href="#schema-task" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>project_id</code></td><td>integer</td><td></td></tr><tr><td><code>project</code></td><td>string</td><td>Project path</td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>status</code></td><td><code>&quot;todo&quot;</code> | <code>&quot;doing&quot;</code> | <code>&quot;done&quot;</code></td><td></td></tr><tr><td><code>priority</code></td><td>integer</td><td></td></tr><tr><td><code>due</code></td><td>string | null</td><td>YYYY-MM-DD</td></tr><tr><td><code>remind_at</code></td><td>string | null</td><td>YYYY-MM-DDTHH:MM</td></tr><tr><td><code>repeat</code></td><td>string | null</td><td></td></tr><tr><td><code>position</code></td><td>number</td><td></td></tr><tr><td><code>done_at</code></td><td>string | null</td><td></td></tr><tr><td><code>updated</code></td><td>string</td><td></td></tr><tr><td><code>archived</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>claimed_by</code></td><td>string | null</td><td>The agent session working on it, while in doing</td></tr><tr><td><code>labels</code></td><td>string[]</td><td></td></tr><tr><td><code>checks</code></td><td>integer[]</td><td>[ticked, total] checklist steps in the description</td></tr><tr><td><code>files</code></td><td>integer</td><td>Attachment count</td></tr><tr><td><code>assignees</code></td><td>string[]</td><td></td></tr><tr><td><code>role</code></td><td>integer</td><td>Your role on its project, 1-4</td></tr><tr><td><code>description</code></td><td>string</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>attachments</code></td><td>object[]</td><td></td></tr><tr><td><code>links</code></td><td>object[]</td><td></td></tr><tr><td><code>comments</code></td><td>object[]</td><td></td></tr><tr><td><code>history</code></td><td>object[]</td><td></td></tr></tbody></table></div>
+<h3 id="schema-linkkind">LinkKind<a class="anchor" href="#schema-linkkind" aria-label="Link to this schema">#</a></h3>
+<p><code>&quot;blocking&quot;</code> | <code>&quot;blocked&quot;</code> | <code>&quot;subtask&quot;</code> | <code>&quot;parenttask&quot;</code> | <code>&quot;related&quot;</code> | <code>&quot;duplicates&quot;</code> | <code>&quot;duplicateof&quot;</code> | <code>&quot;precedes&quot;</code> | <code>&quot;follows&quot;</code></p>
+<h3 id="schema-searchresult">SearchResult<a class="anchor" href="#schema-searchresult" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>project</code></td><td>string</td><td></td></tr><tr><td><code>project_id</code></td><td>integer</td><td></td></tr><tr><td><code>status</code></td><td>string</td><td></td></tr><tr><td><code>priority</code></td><td>integer</td><td></td></tr><tr><td><code>due</code></td><td>string | null</td><td></td></tr><tr><td><code>labels</code></td><td>string[]</td><td></td></tr><tr><td><code>assignees</code></td><td>string[]</td><td></td></tr><tr><td><code>archived</code></td><td><code>0</code> | <code>1</code></td><td>0 or 1</td></tr><tr><td><code>where</code></td><td><code>&quot;title&quot;</code> | <code>&quot;description&quot;</code> | <code>&quot;comment&quot;</code></td><td>Where the words matched</td></tr><tr><td><code>snippet</code></td><td>string</td><td>The matching line, when not in the title</td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>updated</code></td><td>string</td><td></td></tr></tbody></table></div>
+<h3 id="schema-trashitem">TrashItem<a class="anchor" href="#schema-trashitem" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>task_id</code></td><td>integer</td><td></td></tr><tr><td><code>project_id</code></td><td>integer</td><td></td></tr><tr><td><code>project</code></td><td>string</td><td></td></tr><tr><td><code>title</code></td><td>string</td><td></td></tr><tr><td><code>deleted</code></td><td>string</td><td></td></tr><tr><td><code>deleted_by</code></td><td>string</td><td></td></tr></tbody></table></div>
+<h3 id="schema-label">Label<a class="anchor" href="#schema-label" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code></td><td>string</td><td></td></tr><tr><td><code>color</code></td><td>string | null</td><td></td></tr><tr><td><code>global</code></td><td>boolean</td><td></td></tr><tr><td><code>count</code></td><td>integer</td><td>Tasks you can see that use it</td></tr></tbody></table></div>
+<h3 id="schema-team">Team<a class="anchor" href="#schema-team" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>name</code></td><td>string</td><td></td></tr><tr><td><code>members</code></td><td>object[]</td><td></td></tr><tr><td><code>projects</code></td><td>integer[]</td><td>Project ids shared with the team</td></tr><tr><td><code>owner</code></td><td>boolean</td><td>You can manage it</td></tr><tr><td><code>webhook</code></td><td>string</td><td>Only shown to team owners</td></tr><tr><td><code>webhook_error</code></td><td>string</td><td></td></tr><tr><td><code>webhook_failed</code></td><td>string | null</td><td></td></tr></tbody></table></div>
+<h3 id="schema-token">Token<a class="anchor" href="#schema-token" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>name</code></td><td>string</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>used</code></td><td>string | null</td><td></td></tr><tr><td><code>role</code></td><td>string</td><td></td></tr><tr><td><code>projects</code></td><td>string[]</td><td>Paths the token is limited to; empty for all</td></tr></tbody></table></div>
+	</article>
+</main>
+
+<footer>
+	<a href="https://github.com/acidvegas"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 0-.8.4-1.3.7-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2 0-.3-.5-1.5.2-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0c2.3-1.5 3.3-1.2 3.3-1.2.6 1.7.2 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>Developed by acidvegas</a>
+</footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>
