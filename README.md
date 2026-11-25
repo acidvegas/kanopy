@@ -215,18 +215,18 @@ KANOPY_TOKEN=$TOKEN KANOPY_AGENT=claude python -m kanopy.stdio
 
 ## MCP tools
 
-| Tool            | Does                                                                                                                              |
-|-----------------|-----------------------------------------------------------------------------------------------------------------------------------|
-| `list_projects` | Project tree with open task counts                                                                                                |
+| Tool            | Does                                                                                                                                                                                                 |
+|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `list_projects` | Project tree with open task counts                                                                                                                                                                   |
 | `list_tasks`    | Tasks filtered by project, team, labels, text *(with the matching line)*, status, priority or due date; `ready` lists what can start now *(todo, no open blockers)*; `changed` lists recent activity |
-| `get_task`      | Full tasks with description, links and the last 5 comments *(`comments` for all)*, or an attachment's text                        |
-| `save_task`     | Create or update any field, edit or append to the description, tick a checklist item, comment; `ids` updates many at once         |
-| `save_project`  | Rename or move, describe, set the local folder, archive                                                                           |
-| `comment`       | Add a progress note                                                                                                               |
-| `link`          | Relate two tasks, or remove the relation                                                                                          |
-| `labels`        | List labels, create a global `type:` value *(admin)*, delete one                                                                  |
-| `inbox`         | Unread notifications                                                                                                              |
-| `delete`        | A task *(to the trash)*, or an empty project; `restore` brings a deleted task back                                                |
+| `get_task`      | Full tasks with description, links and the last 5 comments *(`comments` for all)*, or an attachment's text                                                                                           |
+| `save_task`     | Create or update any field, edit or append to the description, tick a checklist item, comment; `ids` updates many at once                                                                            |
+| `save_project`  | Rename or move, describe, set the local folder, archive                                                                                                                                              |
+| `comment`       | Add a progress note                                                                                                                                                                                  |
+| `link`          | Relate two tasks, or remove the relation                                                                                                                                                             |
+| `labels`        | List labels, create a global `type:` value *(admin)*, delete one                                                                                                                                     |
+| `inbox`         | Unread notifications                                                                                                                                                                                 |
+| `delete`        | A task *(to the trash)*, or an empty project; `restore` brings a deleted task back                                                                                                                   |
 
 A few rules keep agents from making a mess:
 
@@ -234,6 +234,10 @@ A few rules keep agents from making a mess:
 - An agent must read a task before it can replace the whole description, so it never overwrites edits it has not seen; `edit` *(exact text, must match once)* and `append` need no read
 - `host:` labels that differ only by punctuation *(`host:web01` and `host:web-01`)* are rejected
 - Moving a task to doing **claims** it for that agent session *(`by:claude(brandon)#a1b2c3` on its line, the agent's name on its card)*. Another session that tries to start it is told who has it, and takes over only with `take=true`. Each MCP connection gets its own session id, so two Claude sessions never mistake each other's work for their own
+
+## REST API
+
+The web app's REST API is described in [`static/openapi.json`](static/openapi.json) *(OpenAPI 3.1)*, which every kanopy also serves at `/openapi.json`, and on the [API page](https://acidvegas.github.io/kanopy/api.html). Scripts can call it with an API token in the `X-Key` header; account, team, token, user and sharing routes need a signed-in session instead. Agents should use MCP, which answers in far fewer tokens.
 
 ## Configuration
 

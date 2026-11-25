@@ -4,6 +4,7 @@
 
 import io
 import json
+import re
 import threading
 import time
 import unittest
@@ -201,6 +202,38 @@ class TestAuthLayer(AppBase):
 
 		self.client.get('/api/me')
 		self.assertIsNone(kanban.ACTOR.get())
+
+
+class TestOpenApi(unittest.TestCase):
+	'''static/openapi.json matches the routes the app serves.'''
+
+	def setUp(self):
+		'''Load the spec and the app's routes as (path, method) pairs in OpenAPI form.'''
+
+		with open(app.STATIC / 'openapi.json') as f:
+			self.spec = json.load(f)
+		self.documented = {(path, method.upper()) for path, ops in self.spec['paths'].items() for method in ops}
+		self.served     = {(re.sub(r'<(?:\w+:)?(\w+)>', r'{\1}', rule.rule), method) for rule in app.app.url_map.iter_rules() if rule.rule.startswith(('/api/', '/mcp', '/health')) for method in rule.methods - {'HEAD', 'OPTIONS'}}
+
+
+	def test_every_route_documented(self):
+		'''Every route is in the spec, and the spec lists nothing the app does not serve.'''
+
+		self.assertEqual(sorted(self.served - self.documented), [], 'routes missing from static/openapi.json')
+		self.assertEqual(sorted(self.documented - self.served), [], 'static/openapi.json lists routes the app does not serve')
+
+
+	def test_security_matches_auth(self):
+		'''Routes marked cookie-only are the ones API tokens are refused on, and routes marked open are the ones that work signed out.'''
+
+		for path, ops in self.spec['paths'].items():
+			sample = re.sub(r'\{\w+\}', '1', path)
+			for method, operation in ops.items():
+				security = operation.get('security')
+				with self.subTest(path=path, method=method):
+					self.assertEqual(security == [{'session': []}], bool(app.TOKEN_DENY.match(sample)) and not sample.startswith(app.OPEN))
+					if sample.startswith('/api/'):
+						self.assertEqual(security == [], sample.startswith(app.OPEN))
 
 
 class TestSetup(Base):
