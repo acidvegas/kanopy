@@ -84,6 +84,17 @@ class TestAuthLayer(AppBase):
 		self.assertEqual(self.client.post('/api/projects', json={'path': 'Z'}, headers={'X-Key': 'bogus', 'Origin': 'https://evil.example'}).status_code, 401) # a bad key never falls back to the cookie
 
 
+	def test_origin_matches_public_url(self):
+		'''Behind a proxy that forwards to a local address, a write from the KANOPY_URL page is not cross-site.'''
+
+		old, app.URL = app.URL, 'https://kanopy.example.com'
+		try:
+			self.assertEqual(self.client.post('/api/projects', json={'path': 'X'}, headers={'Origin': 'https://kanopy.example.com'}).status_code, 200)
+			self.assertEqual(self.client.post('/api/projects', json={'path': 'Y'}, headers={'Origin': 'https://evil.example'}).status_code, 403)
+		finally:
+			app.URL = old
+
+
 	def test_rate_limit_holds_under_parallel_guesses(self):
 		'''Guesses fired at once still get only FAIL_LIMIT password checks.'''
 

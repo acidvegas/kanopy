@@ -822,7 +822,7 @@ def auth():
 
 	if path.startswith('/api/') and request.method not in ('GET', 'HEAD', 'OPTIONS') and not request.headers.get('X-Key'): # cookie-signed writes only
 		origin = request.headers.get('Origin')
-		if (origin and origin != request.host_url.rstrip('/')) or request.headers.get('Sec-Fetch-Site') in ('cross-site', 'same-site'):
+		if (origin and origin not in (request.host_url.rstrip('/'), URL)) or request.headers.get('Sec-Fetch-Site') in ('cross-site', 'same-site'):
 			return {'error': 'cross-site request refused'}, 403
 		if request.content_length and request.mimetype not in ('application/json', 'multipart/form-data'):
 			return {'error': 'requests must send JSON'}, 415
