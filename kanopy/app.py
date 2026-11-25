@@ -44,7 +44,7 @@ FAIL_LIMIT  = 5
 FAIL_WINDOW = 900 # seconds
 HOST   = os.environ.get('KANOPY_HOST', '127.0.0.1')
 KEY    = os.environ.get('KANOPY_KEY', '') # old shared key, imported as the admin's API token
-TOKEN_DENY = re.compile(r'^/api/(invites|me|tokens|teams|shares|users|settings|version|projects/\d+/shares)(/|$)') # account and admin endpoints: API tokens get the board only, so one can never mint another
+TOKEN_DENY = re.compile(r'^/api/(invites|me|tokens|teams|shares|users|settings|version|projects/\d+/(shares|people))(/|$)') # account and admin endpoints: API tokens get the board only, so one can never mint another
 OPEN   = ('/api/login', '/api/logout', '/api/setup', '/api/signup', '/api/invites/check') # API paths that work signed out
 PORT   = int(os.environ.get('KANOPY_PORT', '8000'))
 THREADS = 16 # requests served at once; open pages poll every 15s, so many viewers need more than waitress's default 4
@@ -225,6 +225,13 @@ def api_shares(project_id: int) -> dict:
 	'''List who a project is shared with.'''
 
 	return {'shares': accounts.shares(project_id)}
+
+
+@app.get('/api/projects/<int:project_id>/people')
+def api_people(project_id: int) -> dict:
+	'''List who can see a project, the most recently active first.'''
+
+	return {'people': accounts.people(project_id)}
 
 
 @app.post('/api/projects/<int:project_id>/shares')

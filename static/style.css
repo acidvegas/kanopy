@@ -75,6 +75,10 @@ kbd { font-family: var(--mono); font-size: .8em; padding: .1em .4em; border: 1px
 #crumb { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #crumb .sep { color: var(--muted); margin: 0 .35rem; font-weight: 400; }
 #crumb .dim { color: var(--muted); font-weight: 400; }
+#crumb .people { display: inline-flex; align-items: center; margin-left: .75rem; vertical-align: middle; }
+#crumb .people .av { margin-left: -4px; box-shadow: 0 0 0 2px var(--bg); }
+#crumb .people .dim { margin-left: .4rem; font-size: .85em; }
+@media (max-width: 800px) { #crumb .people { display: none; } } /* the project name needs the room, and there is no hover to name them */
 .actions { display: flex; gap: .4rem; }
 .actions button { color: var(--muted); }
 .actions button:hover { color: var(--text); }

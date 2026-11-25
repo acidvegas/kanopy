@@ -338,6 +338,30 @@ def shares(project_id: int) -> list:
 	return out
 
 
+def people(project_id: int) -> list:
+	'''
+	List the usernames that can see a project (its owner, shared users and team members, here or on a parent), the most recently active in it or its sub-projects first.
+
+	:param project_id: Project id
+	'''
+
+	with kanban.connect() as db:
+		kanban.require(db, 'projects', project_id)
+		kanban.need(db, project_id, kanban.VIEW)
+		chain = []
+		node  = project_id
+		while node:
+			chain.append(node)
+			node = db.execute('SELECT parent_id FROM projects WHERE id = ?', (node,)).fetchone()['parent_id']
+		ids   = kanban.marks(chain)
+		names = sorted(row['username'] for row in db.execute(f'SELECT username FROM users WHERE id IN (SELECT owner_id FROM projects WHERE id IN ({ids})) OR id IN (SELECT user_id FROM shares WHERE project_id IN ({ids})) OR id IN (SELECT m.user_id FROM team_members m JOIN shares s ON s.team_id = m.team_id WHERE s.project_id IN ({ids}))', chain * 3))
+		lv    = kanban.levels(db)
+		scope = [pid for pid in kanban.subtree(db, project_id) if lv is None or lv.get(pid)]
+		last  = {row['actor']: row['at'] for row in db.execute(f'SELECT e.actor, MAX(e.at) AS at FROM task_events e JOIN tasks t ON t.id = e.task_id WHERE t.project_id IN ({kanban.marks(scope)}) GROUP BY e.actor', scope)}
+
+	return sorted(names, key=lambda name: last.get(name, ''), reverse=True) # stable: people with no activity keep their alphabetical order at the end
+
+
 def setup(username: str, password: str) -> str:
 	'''
 	Create the first account as admin on a board with no users, and sign in; returns the raw session token.

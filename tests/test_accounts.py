@@ -298,6 +298,30 @@ class TestShares(Base):
 			accounts.shares(parent)
 
 
+	def test_people(self):
+		'''People lists everyone who can see a project, here or through a parent or team, the most recently active in it or its sub-projects first.'''
+
+		ann, bob, cat, dan = self.user('ann'), self.user('bob'), self.user('cat'), self.user('dan')
+		self.act(ann)
+		parent = kanban.project_save('Ann')['id']
+		child  = kanban.project_save('Ann/sub')['id']
+		accounts.share_add(parent, 'editor', 'bob')
+		accounts.team_create(ann, 'crew')
+		accounts.team_member_add(ann, accounts.teams(ann)[0]['id'], 'cat')
+		accounts.share_add(child, 'viewer', team='crew')
+		task = kanban.task_create({'project_id': child, 'title': 't'})
+		self.assertEqual(accounts.people(parent), ['ann', 'bob']) # cat sees only the sub-project
+		self.act(bob)
+		kanban.comment_add(task['id'], 'bob', 'hi')
+		with kanban.connect() as db:
+			db.execute("UPDATE task_events SET at = '2000-01-01T00:00:00+00:00' WHERE actor = 'ann'") # one-second timestamps would otherwise tie
+		self.assertEqual(accounts.people(parent), ['bob', 'ann'])
+		self.assertEqual(accounts.people(child), ['bob', 'ann', 'cat'])
+		self.act(dan)
+		with self.assertRaises(PermissionError):
+			accounts.people(parent)
+
+
 	def test_share_errors(self):
 		'''Bad roles, unknown users and teams, and missing targets are refused.'''
 

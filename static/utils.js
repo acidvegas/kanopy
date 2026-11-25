@@ -170,7 +170,7 @@ const avatar  = (name) => {
 async function kbLoad() {
 	const seq   = ++KB.loadSeq;
 	const query = '?' + new URLSearchParams({ ...(KB.project ? { project: KB.project } : {}), ...(KB.view !== 'calendar' ? { done_limit: KB.doneLimit } : {}) }); // the calendar needs every task; elsewhere only the newest done ones load
-	const [p, t, l, me, u, tm] = await Promise.all([api('GET', '/api/projects'), api('GET', '/api/tasks' + query), api('GET', '/api/labels'), api('GET', '/api/me'), api('GET', '/api/users'), api('GET', '/api/teams')]);
+	const [p, t, l, me, u, tm, pp] = await Promise.all([api('GET', '/api/projects'), api('GET', '/api/tasks' + query), api('GET', '/api/labels'), api('GET', '/api/me'), api('GET', '/api/users'), api('GET', '/api/teams'), KB.project ? api('GET', `/api/projects/${KB.project}/people`).catch(() => ({ people: [] })) : { people: [] }]);
 	if (seq !== KB.loadSeq) return; // a newer load is on its way
 	KB.projects = p.projects;
 	KB.tasks    = t.tasks;
@@ -180,6 +180,7 @@ async function kbLoad() {
 	if (browserZone() && me.timezone_auto !== browserZone() && !KB.zoneSent) { KB.zoneSent = true; api('PATCH', '/api/me', { timezone_auto: browserZone() }).catch(() => {}); } // pushes follow your own clock unless you pick a timezone
 	KB.users    = u.users;
 	KB.teams    = tm.teams;
+	KB.people   = { project: KB.project, names: pp.people };
 	meRender();
 	kbTree();
 	kbRender();
@@ -311,6 +312,8 @@ function kbBar() {
 	const page = { search: 'Search', settings: 'Settings', inbox: 'Inbox', task: KB.task ? `Task #${KB.task.id}` : 'Task' }[KB.view];
 	if (page) $('#crumb').textContent = page;
 	if (KB.view === 'activity') $('#crumb').insertAdjacentHTML('beforeend', '<span class="sep">/</span><span>Activity</span>');
+	const names = p && !page && KB.people?.project === p.id ? KB.people.names : []; // shown only once someone besides the owner can see it
+	if (names.length > 1) $('#crumb').insertAdjacentHTML('beforeend', `<span class="people">${names.slice(0, 10).map(avatar).join('')}${names.length > 10 ? `<span class="dim">and ${names.length - 10} other${names.length > 11 ? 's' : ''}</span>` : ''}</span>`);
 	document.title = `${page || (p ? p.title : 'All tasks')}${KB.view === 'activity' ? ' activity' : ''} · Kanopy`;
 	$('#kb-project-ops').hidden = !p || !!page || p.role < 1; // anyone who can see a project can export it
 	for (const id of ['#kb-share', '#kb-rename', '#kb-archive']) $(id).hidden = !p || p.role < 3;
