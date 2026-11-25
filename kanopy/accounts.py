@@ -147,7 +147,18 @@ def invites(user: dict) -> list:
 
 def login(username: str, password: str) -> str:
 	'''
-	Check credentials and open a session; returns the raw session token.
+	Check credentials and open a session; returns the raw session token. The web sign-in uses password_user instead, to ask for a second factor first.
+
+	:param username: Username
+	:param password: Password
+	'''
+
+	return session_create(password_user(username, password))
+
+
+def password_user(username: str, password: str) -> int:
+	'''
+	Check credentials; returns the user id.
 
 	:param username: Username
 	:param password: Password
@@ -162,7 +173,7 @@ def login(username: str, password: str) -> str:
 	if not password_ok(password or '', row['password'] if row else DUMMY_HASH) or not row: # hash even for unknown users so timing does not reveal them
 		raise PermissionError('wrong username or password')
 
-	return session_create(row['id'])
+	return row['id']
 
 
 def need_admin(user: dict):

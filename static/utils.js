@@ -793,11 +793,14 @@ async function accountLoad() {
 	KB.teams = teams.teams;
 	teamsRender();
 	tokensRender(tokens.tokens);
+	tfaLoad();
 	if (KB.me.is_admin) usersLoad();
 }
 
 function accountBind() {
 	$('#auth-form').addEventListener('submit', (e) => { e.preventDefault(); authSubmit(); });
+	$('#auth-passkey').onclick = () => authPasskey();
+	$('#tfa').addEventListener('click', (e) => { const btn = e.target.closest('[data-tfa]'); if (btn) guard(() => tfaAction(btn)); });
 	$('#themes').addEventListener('click', (e) => { const btn = e.target.closest('[data-theme-key]'); if (btn) themeSet(btn.dataset.themeKey); });
 	$('#avatar-pick').onclick = () => $('#avatar-file').click();
 	$('#avatar-file').onchange = (e) => { const file = e.target.files[0]; e.target.value = ''; if (file) guard(() => avatarUpload(file)); };
@@ -877,7 +880,9 @@ function accountBind() {
 		const btn = e.target.closest('[data-user-act]');
 		if (!btn) return;
 		const id = btn.dataset.id, name = btn.dataset.name;
-		if (btn.dataset.userAct === 'reset') {
+		if (btn.dataset.userAct === '2fa') {
+			if (await ask({ title: `Turn off two-factor sign-in for ${name}?`, text: 'Their authenticator app, passkeys and recovery codes are removed, so their password alone signs them in. Use this when they are locked out.', ok: 'Turn off', danger: true })) guard(async () => { await api('DELETE', `/api/users/${id}/2fa`); toast(`Two-factor sign-in off for ${name}`); });
+		} else if (btn.dataset.userAct === 'reset') {
 			const pw = await ask({ title: `New password for ${name}`, text: 'At least 8 characters. They are signed out everywhere.', value: '', ok: 'Set password', secret: true });
 			if (pw) guard(async () => { await api('POST', `/api/users/${id}/password`, { password: pw }); toast(`Password set for ${name}`); });
 		} else guard(async () => {
@@ -959,14 +964,126 @@ function authError(msg) {
 async function authSubmit() {
 	const f      = $('#auth-form').elements;
 	const mode   = $('#auth').dataset.mode;
+	if (mode === 'second') return authSecond({ code: f.code.value });
 	if (mode !== 'login' && f.password.value !== f.confirm.value) return authError('The passwords do not match.');
 	const res  = await fetch(`/api/${mode}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: f.username.value, password: f.password.value, token: $('#auth').dataset.token }) });
 	const data = await res.json().catch(() => ({}));
 	if (!res.ok) return authError(data.error || 'Something went wrong.');
+	if (data.two_factor) { // the password was right; now the second factor
+		$('#auth').dataset.mode   = 'second';
+		$('#auth').dataset.ticket = data.ticket;
+		document.querySelectorAll('#auth .auth-first').forEach((el) => { el.hidden = true; el.querySelector('input').required = false; });
+		$('#auth-second').hidden  = !data.two_factor.some((m) => m !== 'passkey');
+		$('#auth-passkey').hidden = !data.two_factor.includes('passkey');
+		$('#auth-text').textContent = !window.isSecureContext && $('#auth-second').hidden ? 'This account signs in with a passkey, which needs https. Open kanopy at its https address.' : '';
+		$('#auth-error').hidden = true;
+		if (!$('#auth-second').hidden) $('#auth-form').elements.code.focus();
+		return;
+	}
 	$('#auth-form').reset();
 	$('#auth').hidden = true;
 	if (mode !== 'login') location.hash = '#/board/all';
 	location.reload();
+}
+
+async function authSecond(proof) {
+	const res  = await fetch('/api/login/2fa', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: $('#auth').dataset.ticket, ...proof }) });
+	const data = await res.json().catch(() => ({}));
+	if (!res.ok) {
+		if (/expired|password again/.test(data.error || '')) return location.reload(); // back to the password
+		return authError(data.error || 'Something went wrong.');
+	}
+	location.reload();
+}
+
+async function authPasskey() {
+	try {
+		const opts = await fetch('/api/login/passkey', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ticket: $('#auth').dataset.ticket }) }).then((res) => res.json());
+		if (opts.error) return authError(opts.error);
+		const cred = await navigator.credentials.get({ publicKey: PublicKeyCredential.parseRequestOptionsFromJSON(opts) });
+		await authSecond({ passkey: cred.toJSON() });
+	} catch (err) {
+		authError(window.isSecureContext ? `Passkey sign-in did not finish: ${err.message}` : 'Passkeys need https. Open kanopy at its https address.');
+	}
+}
+
+async function tfaLoad() {
+	tfaRender(await api('GET', '/api/me/2fa'));
+}
+
+function tfaRender(st, setup = null) {
+	const secure = window.isSecureContext && 'PublicKeyCredential' in window;
+	const keys   = st.passkeys.map((k) => `<div class="row-item"><b>${esc(k.name)}</b><span class="dim">added ${new Date(k.created).toLocaleDateString()} · ${k.used ? `last used ${new Date(k.used).toLocaleString()}` : 'never used'}</span><span class="spacer"></span><button type="button" class="link-btn danger" data-tfa="key-remove" data-id="${k.id}">Remove</button></div>`).join('');
+	$('#tfa').innerHTML = `
+		<div class="row-item"><b>Authenticator app</b>${st.totp ? '<small class="pill">on</small>' : '<small class="pill off">off</small>'}<span class="spacer"></span><button type="button" class="link-btn${st.totp ? ' danger' : ''}" data-tfa="${st.totp ? 'totp-off' : 'totp-on'}">${st.totp ? 'Turn off' : 'Set up'}</button></div>
+		${setup ? `<div class="tfa-setup"><div class="tfa-qr">${qrSvg(setup.uri)}</div><div><p class="dim small">Scan this with your authenticator app, or enter the key by hand, then type the 6-digit code it shows.</p><input readonly class="mono" value="${esc(setup.secret)}"><form class="inline-form" id="tfa-confirm"><input name="code" autocomplete="one-time-code" inputmode="numeric" placeholder="123456" required><button class="primary">Turn on</button></form></div></div>` : ''}
+		<h3>Passkeys</h3>
+		${keys || '<p class="dim small">No passkeys yet.</p>'}
+		<div class="row-item"><span class="dim">${secure ? 'A passkey on this device, a phone or a security key.' : 'Adding passkeys needs kanopy on https.'}</span><span class="spacer"></span><button type="button" class="link-btn" data-tfa="key-add"${secure ? '' : ' disabled'}>Add passkey</button></div>
+		${st.totp || st.passkeys.length ? `<h3>Recovery codes</h3><div class="row-item"><span class="dim">${st.recovery_left} unused. Each one signs you in once if you lose your device.</span><span class="spacer"></span><button type="button" class="link-btn" data-tfa="recovery">New codes</button></div>` : ''}
+		<div id="tfa-codes" class="secret" hidden></div>`;
+	if (st.recovery) tfaCodes(st.recovery);
+	$('#tfa-confirm')?.addEventListener('submit', (e) => {
+		e.preventDefault();
+		guard(async () => { const next = await api('POST', '/api/me/2fa/totp/confirm', { code: e.target.elements.code.value }); tfaRender(next); toast('Authenticator app on'); });
+	});
+}
+
+function tfaCodes(codes) {
+	const box = $('#tfa-codes');
+	box.innerHTML = `<p>Save these recovery codes somewhere safe; they are not shown again.</p><textarea readonly class="mono" rows="5">${codes.join('\n')}</textarea><button type="button" class="link-btn" data-close>Hide</button>`;
+	box.hidden = false;
+	box.querySelector('textarea').onclick = (e) => e.target.select();
+	box.querySelector('[data-close]').onclick = () => { box.hidden = true; box.innerHTML = ''; };
+}
+
+function qrSvg(text) {
+	const qr = qrcode(0, 'M');
+	qr.addData(text);
+	qr.make();
+	return qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+}
+
+function loadScript(src) {
+	return new Promise((resolve, reject) => {
+		if (document.querySelector(`script[src="${src}"]`)) return resolve();
+		const el = document.createElement('script');
+		el.src = src;
+		el.onload = resolve;
+		el.onerror = () => reject(new Error(`could not load ${src}`));
+		document.head.append(el);
+	});
+}
+
+async function tfaAction(btn) {
+	const act = btn.dataset.tfa;
+	const pw  = () => ask({ title: 'Confirm your password', value: '', ok: 'Continue', secret: true });
+	if (act === 'totp-on') {
+		const password = await pw();
+		if (!password) return;
+		const setup = await api('POST', '/api/me/2fa/totp', { password });
+		await loadScript('/vendor/qrcode.js'); // only needed here, so it is not on every page load
+		tfaRender(await api('GET', '/api/me/2fa'), setup);
+		$('#tfa-confirm').elements.code.focus();
+	} else if (act === 'totp-off') {
+		const password = await pw();
+		if (password) { tfaRender(await api('DELETE', '/api/me/2fa/totp', { password })); toast('Authenticator app off'); }
+	} else if (act === 'recovery') {
+		const password = await pw();
+		if (password) tfaRender(await api('POST', '/api/me/2fa/recovery', { password }));
+	} else if (act === 'key-remove') {
+		const password = await pw();
+		if (password) { tfaRender(await api('DELETE', `/api/me/2fa/passkeys/${btn.dataset.id}`, { password })); toast('Passkey removed'); }
+	} else if (act === 'key-add') {
+		const name = await ask({ title: 'Name this passkey', value: '', ok: 'Next', text: 'Like laptop or phone, so you can tell them apart.' });
+		if (name === null) return;
+		const password = await pw();
+		if (!password) return;
+		const opts = await api('POST', '/api/me/2fa/passkeys/options', { password });
+		const cred = await navigator.credentials.create({ publicKey: PublicKeyCredential.parseCreationOptionsFromJSON(opts) });
+		tfaRender(await api('POST', '/api/me/2fa/passkeys', { name, credential: cred.toJSON() }));
+		toast('Passkey added');
+	}
 }
 
 async function inboxLoad() {
@@ -1081,7 +1198,7 @@ async function trashLoad() {
 async function usersLoad() {
 	const [users, invites] = await Promise.all([api('GET', '/api/users'), api('GET', '/api/invites')]);
 	const now = new Date().toISOString();
-	$('#users').innerHTML = users.users.map((u) => `<div class="row-item">${avatar(u.username)}<b>${esc(u.username)}</b>${u.is_admin ? '<small class="pill">admin</small>' : ''}<span class="dim">joined ${new Date(u.created).toLocaleDateString()}</span><span class="spacer"></span>${u.id === KB.me.id ? '' : `<span class="row-acts"><button type="button" class="link-btn" data-user-act="reset" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button><button type="button" class="link-btn danger" data-user-act="delete" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button></span>`}</div>`).join('');
+	$('#users').innerHTML = users.users.map((u) => `<div class="row-item">${avatar(u.username)}<b>${esc(u.username)}</b>${u.is_admin ? '<small class="pill">admin</small>' : ''}<span class="dim">joined ${new Date(u.created).toLocaleDateString()}</span><span class="spacer"></span>${u.id === KB.me.id ? '' : `<span class="row-acts"><button type="button" class="link-btn" data-user-act="reset" data-id="${u.id}" data-name="${esc(u.username)}">Reset password</button><button type="button" class="link-btn" data-user-act="2fa" data-id="${u.id}" data-name="${esc(u.username)}">Reset 2FA</button><button type="button" class="link-btn danger" data-user-act="delete" data-id="${u.id}" data-name="${esc(u.username)}">Delete</button></span>`}</div>`).join('');
 	$('#invites').innerHTML = invites.invites.map((i) => `<div class="row-item"><span>Created ${new Date(i.created).toLocaleString()}</span><span class="dim">${i.used ? `used by ${esc(i.used_by || 'a deleted user')}` : i.expires < now ? 'expired' : `pending, expires ${new Date(i.expires).toLocaleDateString()}`}</span><span class="spacer"></span>${!i.used && i.expires >= now ? `<button type="button" class="link-btn danger" data-invite="${i.id}">Revoke</button>` : ''}</div>`).join('') || '<p class="dim">No invites yet.</p>';
 }
 

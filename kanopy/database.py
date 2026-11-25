@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 
-ID_TABLES = {'projects', 'tasks', 'attachments', 'labels', 'comments', 'users', 'tokens', 'invites', 'teams', 'shares', 'task_events', 'notifications', 'trash'} # tables with an id primary key, so an INSERT can report it
+ID_TABLES = {'projects', 'tasks', 'attachments', 'labels', 'comments', 'users', 'tokens', 'invites', 'teams', 'shares', 'task_events', 'notifications', 'trash', 'passkeys', 'recovery_codes'} # tables with an id primary key, so an INSERT can report it
 POOL_SIZE = 8 # idle PostgreSQL connections kept per database
 POOLS     = {} # postgres url -> queue of idle connections
 

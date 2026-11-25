@@ -34,6 +34,9 @@
 			"name": "Account"
 		},
 		{
+			"name": "Two-factor"
+		},
+		{
 			"name": "Notifications"
 		},
 		{
@@ -151,7 +154,35 @@
 						"content": {
 							"application/json": {
 								"schema": {
-									"$ref": "#/components/schemas/Ok"
+									"oneOf": [
+										{
+											"$ref": "#/components/schemas/Ok"
+										},
+										{
+											"type": "object",
+											"properties": {
+												"two_factor": {
+													"type": "array",
+													"items": {
+														"type": "string",
+														"enum": [
+															"totp",
+															"passkey",
+															"recovery"
+														]
+													},
+													"description": "Second factors the account can use"
+												},
+												"ticket": {
+													"type": "string"
+												}
+											},
+											"required": [
+												"two_factor",
+												"ticket"
+											]
+										}
+									]
 								}
 							}
 						}
@@ -163,7 +194,7 @@
 						"$ref": "#/components/responses/E403"
 					}
 				},
-				"description": "Sets the `kb_session` cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window.",
+				"description": "Sets the `kb_session` cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window. When the account has a second factor, no cookie is set yet: the response is `{\"two_factor\": [...], \"ticket\": \"...\"}` and sign-in finishes at /api/login/2fa within 5 minutes.",
 				"requestBody": {
 					"required": true,
 					"content": {
@@ -175,6 +206,103 @@
 					}
 				},
 				"security": []
+			}
+		},
+		"/api/login/2fa": {
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Finish signing in with a second factor",
+				"description": "Send `code` (authenticator code or a recovery code) or `passkey` (the browser's assertion as JSON, from /api/login/passkey). Sets the session cookie. Five wrong tries end the ticket; wrong tries also count toward the address's sign-in limit.",
+				"security": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"ticket": {
+										"type": "string"
+									},
+									"code": {
+										"type": "string"
+									},
+									"passkey": {
+										"type": "object"
+									}
+								},
+								"required": [
+									"ticket"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					}
+				}
+			}
+		},
+		"/api/login/passkey": {
+			"post": {
+				"tags": [
+					"Auth"
+				],
+				"summary": "Browser options for finishing a sign-in with a passkey",
+				"security": [],
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"ticket": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"ticket"
+								]
+							}
+						}
+					}
+				},
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PasskeyOptions"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					}
+				}
 			}
 		},
 		"/api/logout": {
@@ -639,6 +767,462 @@
 				"security": [
 					{
 						"session": []
+					}
+				]
+			}
+		},
+		"/api/me/2fa": {
+			"get": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Your second factors",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				}
+			}
+		},
+		"/api/me/2fa/totp": {
+			"post": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Start setting up an authenticator app",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"type": "object",
+									"properties": {
+										"secret": {
+											"type": "string",
+											"description": "Base32 secret"
+										},
+										"uri": {
+											"type": "string",
+											"description": "otpauth:// link for the QR code"
+										}
+									}
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string",
+										"description": "Your current password"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"description": "Nothing changes until /api/me/2fa/totp/confirm gets a matching code."
+			},
+			"delete": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Turn the authenticator app off",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string",
+										"description": "Your current password"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				}
+			}
+		},
+		"/api/me/2fa/totp/confirm": {
+			"post": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Turn the authenticator app on with a code from it",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"code": {
+										"type": "string"
+									}
+								},
+								"required": [
+									"code"
+								]
+							}
+						}
+					}
+				},
+				"description": "The first second factor also creates 10 recovery codes, returned once in `recovery`."
+			}
+		},
+		"/api/me/2fa/recovery": {
+			"post": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Replace your recovery codes",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string",
+										"description": "Your current password"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"description": "The new codes are only shown in this response; the old ones stop working."
+			}
+		},
+		"/api/me/2fa/passkeys/options": {
+			"post": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Browser options for adding a passkey",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/PasskeyOptions"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string",
+										"description": "Your current password"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"description": "Passkeys need https (or localhost)."
+			}
+		},
+		"/api/me/2fa/passkeys": {
+			"post": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Store a passkey the browser just made",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"name": {
+										"type": "string",
+										"description": "Label like laptop"
+									},
+									"credential": {
+										"type": "object",
+										"description": "The browser credential as JSON (credential.toJSON())"
+									}
+								},
+								"required": [
+									"credential"
+								]
+							}
+						}
+					}
+				},
+				"description": "The first second factor also creates 10 recovery codes, returned once in `recovery`."
+			}
+		},
+		"/api/me/2fa/passkeys/{passkey_id}": {
+			"delete": {
+				"tags": [
+					"Two-factor"
+				],
+				"summary": "Remove a passkey",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/TwoFactor"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				},
+				"requestBody": {
+					"required": true,
+					"content": {
+						"application/json": {
+							"schema": {
+								"type": "object",
+								"properties": {
+									"password": {
+										"type": "string",
+										"description": "Your current password"
+									}
+								},
+								"required": [
+									"password"
+								]
+							}
+						}
+					}
+				},
+				"parameters": [
+					{
+						"name": "passkey_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "Passkey id"
 					}
 				]
 			}
@@ -3598,6 +4182,54 @@
 				]
 			}
 		},
+		"/api/users/{user_id}/2fa": {
+			"delete": {
+				"tags": [
+					"Users"
+				],
+				"summary": "Turn off a locked-out user's second factors (admin)",
+				"security": [
+					{
+						"session": []
+					}
+				],
+				"parameters": [
+					{
+						"name": "user_id",
+						"in": "path",
+						"required": true,
+						"schema": {
+							"type": "integer"
+						},
+						"description": "User id"
+					}
+				],
+				"responses": {
+					"200": {
+						"description": "OK",
+						"content": {
+							"application/json": {
+								"schema": {
+									"$ref": "#/components/schemas/Ok"
+								}
+							}
+						}
+					},
+					"400": {
+						"$ref": "#/components/responses/E400"
+					},
+					"401": {
+						"$ref": "#/components/responses/E401"
+					},
+					"403": {
+						"$ref": "#/components/responses/E403"
+					},
+					"404": {
+						"$ref": "#/components/responses/E404"
+					}
+				}
+			}
+		},
 		"/api/settings": {
 			"get": {
 				"tags": [
@@ -5129,6 +5761,56 @@
 						"description": "Paths the token is limited to; empty for all"
 					}
 				}
+			},
+			"TwoFactor": {
+				"type": "object",
+				"properties": {
+					"totp": {
+						"type": "boolean",
+						"description": "Authenticator app on"
+					},
+					"passkeys": {
+						"type": "array",
+						"items": {
+							"type": "object",
+							"properties": {
+								"id": {
+									"type": "integer"
+								},
+								"name": {
+									"type": "string"
+								},
+								"created": {
+									"type": "string"
+								},
+								"used": {
+									"type": [
+										"string",
+										"null"
+									]
+								}
+							}
+						}
+					},
+					"recovery_left": {
+						"type": "integer",
+						"description": "Unused recovery codes"
+					},
+					"recovery": {
+						"type": [
+							"array",
+							"null"
+						],
+						"items": {
+							"type": "string"
+						},
+						"description": "New recovery codes, only in the response that made them"
+					}
+				}
+			},
+			"PasskeyOptions": {
+				"type": "object",
+				"description": "WebAuthn options as JSON; pass to PublicKeyCredential.parseCreationOptionsFromJSON / parseRequestOptionsFromJSON"
 			}
 		}
 	}

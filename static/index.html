@@ -171,6 +171,10 @@
 						</div>
 						<footer class="card-foot"><button type="button" id="me-test" class="ib"><svg class="si" viewBox="0 0 24 24"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4z"/></svg>Send test push</button><button type="submit" class="primary ib"><svg class="si" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg>Save</button></footer>
 					</form>
+					<div class="set-card" id="set-2fa">
+						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Two-factor sign-in</h2><p>After your password, also ask for a code from an authenticator app or a passkey. API tokens are not affected.</p></div></header>
+						<div id="tfa"></div>
+					</div>
 					<div class="set-card" id="set-theme">
 						<header class="card-head"><div><h2><svg class="si" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1.2"/><circle cx="12" cy="7.5" r="1.2"/><circle cx="15.5" cy="10" r="1.2"/><path d="M12 21a3 3 0 0 1 0-6h1.5a2 2 0 0 0 2-2"/></svg>Theme</h2><p>Remembered in this browser.</p></div></header>
 						<div class="themes" id="themes"></div>
@@ -299,8 +303,10 @@
 			<div class="auth-brand"><img class="logo" src="/icons/favicon.svg" alt=""><span>KANOPY</span></div>
 			<h2 id="auth-title">Sign in</h2>
 			<p id="auth-text" class="dim"></p>
-			<label>Username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
-			<label>Password<input name="password" type="password" autocomplete="current-password" required></label>
+			<label class="auth-first">Username<input name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+			<label class="auth-first">Password<input name="password" type="password" autocomplete="current-password" required></label>
+			<label id="auth-second" hidden>Code from your authenticator app, or a recovery code<input name="code" autocomplete="one-time-code" autocapitalize="none" spellcheck="false"></label>
+			<button type="button" id="auth-passkey" hidden>Use a passkey</button>
 			<label id="auth-confirm" hidden>Confirm password<input name="confirm" type="password" autocomplete="new-password"></label>
 			<p id="auth-error" class="auth-error" hidden></p>
 			<button type="submit" class="primary" id="auth-submit">Sign in</button>

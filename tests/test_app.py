@@ -87,12 +87,12 @@ class TestAuthLayer(AppBase):
 	def test_rate_limit_holds_under_parallel_guesses(self):
 		'''Guesses fired at once still get only FAIL_LIMIT password checks.'''
 
-		calls, real = [], accounts.login
+		calls, real = [], accounts.password_user
 		def slow_wrong(username, password):
 			calls.append(1)
 			time.sleep(0.2)
 			raise PermissionError('wrong username or password')
-		accounts.login = slow_wrong
+		accounts.password_user = slow_wrong
 		try:
 			threads = [threading.Thread(target=lambda: app.app.test_client().post('/api/login', json={'username': 'ann', 'password': 'x'})) for _ in range(12)]
 			for t in threads:
@@ -100,7 +100,7 @@ class TestAuthLayer(AppBase):
 			for t in threads:
 				t.join()
 		finally:
-			accounts.login = real
+			accounts.password_user = real
 		self.assertEqual(len(calls), app.FAIL_LIMIT)
 
 

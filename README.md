@@ -129,6 +129,8 @@ Each person can get pushes through [ntfy](https://ntfy.sh) on their own server a
 
 Everyone signs in with a username and password. The admin creates single-use invite links *(valid 7 days)* on the Settings page.
 
+**Two-factor sign-in** is opt-in per person, under **Settings, Two-factor sign-in**. After the password, kanopy asks for a code from an authenticator app *(scan the QR code)* or a **passkey** *(this device, a phone or a security key; add several)*. Turning on the first one shows 10 one-time **recovery codes**. Every change there asks for your password again, and an admin can turn 2FA off for someone who is locked out *(Settings, Users, Reset 2FA)*. Passkeys need kanopy on https *(or localhost)* and are tied to its address, so set `KANOPY_URL` behind a proxy. API tokens and MCP are not affected.
+
 Projects are private to whoever made them until shared with a user or a team. Sharing a project includes its sub-projects.
 
 | Role    | Can                                      |

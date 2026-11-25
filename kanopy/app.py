@@ -35,6 +35,7 @@ from . import database
 from . import kanban
 from . import mcp_server
 from . import notify
+from . import twofactor
 
 
 COOKIE = 'kb_session'
@@ -101,20 +102,11 @@ def api_invite_delete(invite_id: int) -> dict:
 def api_login() -> Response:
 	'''Sign in and set the session cookie.'''
 
-	body = json_body()
-	ip   = request.remote_addr or ''
-	now  = time.monotonic()
-
-	with FAILS_LOCK:
-		for old in [key for key, times in FAILS.items() if key != ip and all(now - t >= FAIL_WINDOW for t in times)]:
-			del FAILS[old] # addresses whose failures have all expired
-		FAILS[ip] = [t for t in FAILS.get(ip, []) if now - t < FAIL_WINDOW]
-		if len(FAILS[ip]) >= FAIL_LIMIT:
-			raise PermissionError('too many failed sign-ins, try again in a few minutes')
-		FAILS[ip].append(now) # counted up front, so parallel guesses cannot all slip past the limit
+	body    = json_body()
+	ip, now = attempt()
 
 	try:
-		token = accounts.login(body.get('username'), body.get('password'))
+		user_id = accounts.password_user(body.get('username'), body.get('password'))
 	except PermissionError:
 		raise # a wrong password keeps its slot
 	except Exception:
@@ -122,7 +114,55 @@ def api_login() -> Response:
 		raise
 
 	forgive(ip, now)
-	return session_response(token)
+
+	if ways := twofactor.methods(user_id):
+		return {'two_factor': ways, 'ticket': twofactor.ticket_new(user_id)}
+
+	return session_response(accounts.session_create(user_id))
+
+
+@app.post('/api/login/2fa')
+def api_login_2fa() -> Response:
+	'''Finish signing in with an authenticator code, a recovery code or a passkey, and set the session cookie.'''
+
+	body    = json_body()
+	ip, now = attempt()
+	rp_id, origin = site()
+
+	try:
+		user_id = twofactor.ticket_finish(body.get('ticket'), body.get('code'), body.get('passkey'), rp_id, origin)
+	except PermissionError:
+		raise # a wrong code keeps its slot
+	except Exception:
+		forgive(ip, now)
+		raise
+
+	forgive(ip, now)
+	return session_response(accounts.session_create(user_id))
+
+
+@app.post('/api/login/passkey')
+def api_login_passkey() -> dict:
+	'''Return the browser options for finishing a sign-in with a passkey.'''
+
+	return twofactor.ticket_passkey(json_body().get('ticket'), site()[0])
+
+
+def attempt() -> tuple:
+	'''Take a sign-in slot for the client's address up front, so parallel guesses cannot all slip past the limit; returns (ip, the slot's time).'''
+
+	ip  = request.remote_addr or ''
+	now = time.monotonic()
+
+	with FAILS_LOCK:
+		for old in [key for key, times in FAILS.items() if key != ip and all(now - t >= FAIL_WINDOW for t in times)]:
+			del FAILS[old] # addresses whose failures have all expired
+		FAILS[ip] = [t for t in FAILS.get(ip, []) if now - t < FAIL_WINDOW]
+		if len(FAILS[ip]) >= FAIL_LIMIT:
+			raise PermissionError('too many failed sign-ins, try again in a few minutes')
+		FAILS[ip].append(now)
+
+	return ip, now
 
 
 def forgive(ip: str, at: float):
@@ -202,6 +242,64 @@ def api_me_update() -> dict:
 	user = accounts.user_update(g.user, json_body(), None if 'X-Key' in request.headers else request.cookies.get(COOKIE))
 
 	return dict(user, ntfy_token_set=accounts.ntfy_token_set(user['id']))
+
+
+@app.get('/api/me/2fa')
+def api_2fa() -> dict:
+	'''Return the signed-in user's second factors: authenticator on, passkeys, recovery codes left.'''
+
+	return twofactor.status(g.user)
+
+
+@app.post('/api/me/2fa/totp')
+def api_2fa_totp() -> dict:
+	'''Start setting up an authenticator app; returns its secret and otpauth:// link.'''
+
+	return twofactor.totp_begin(g.user, json_body().get('password'))
+
+
+@app.post('/api/me/2fa/totp/confirm')
+def api_2fa_totp_confirm() -> dict:
+	'''Turn the authenticator app on with a code from it.'''
+
+	return twofactor.totp_confirm(g.user, json_body().get('code'))
+
+
+@app.delete('/api/me/2fa/totp')
+def api_2fa_totp_off() -> dict:
+	'''Turn the authenticator app off.'''
+
+	return twofactor.totp_disable(g.user, json_body().get('password'))
+
+
+@app.post('/api/me/2fa/recovery')
+def api_2fa_recovery() -> dict:
+	'''Replace the recovery codes; the new ones are only shown in this response.'''
+
+	return twofactor.recovery_regenerate(g.user, json_body().get('password'))
+
+
+@app.post('/api/me/2fa/passkeys/options')
+def api_2fa_passkey_options() -> dict:
+	'''Return the browser options for adding a passkey.'''
+
+	return twofactor.passkey_options(g.user, json_body().get('password'), site()[0])
+
+
+@app.post('/api/me/2fa/passkeys')
+def api_2fa_passkey_add() -> dict:
+	'''Store a passkey the browser just made.'''
+
+	body = json_body()
+
+	return twofactor.passkey_add(g.user, body.get('name'), body.get('credential'), *site())
+
+
+@app.delete('/api/me/2fa/passkeys/<int:passkey_id>')
+def api_2fa_passkey_remove(passkey_id: int) -> dict:
+	'''Remove a passkey.'''
+
+	return twofactor.passkey_remove(g.user, passkey_id, json_body().get('password'))
 
 
 @app.get('/api/notifications')
@@ -383,6 +481,15 @@ def api_user_delete(user_id: int) -> dict:
 	accounts.user_delete(g.user, user_id, keep_labels=json_body().get('keep_labels', True) is not False)
 
 	return {'users': accounts.users()}
+
+
+@app.delete('/api/users/<int:user_id>/2fa')
+def api_user_2fa_reset(user_id: int) -> dict:
+	'''Turn off a locked-out user's second factors (admin).'''
+
+	twofactor.reset(g.user, user_id)
+
+	return {'ok': True}
 
 
 @app.post('/api/users/<int:user_id>/password')
@@ -748,7 +855,7 @@ def count_change(resp: Response) -> Response:
 	path = request.path
 
 	if path.startswith('/api/') or path == '/mcp':
-		write = request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400 and path not in ('/api/login', '/api/logout', '/api/notifications/read')
+		write = request.method not in ('GET', 'HEAD', 'OPTIONS') and resp.status_code < 400 and not path.startswith(('/api/login', '/api/logout', '/api/notifications/read'))
 		if path == '/mcp':
 			write = resp.status_code < 400 and g.get('mcp_write', False) # set by the endpoint: a tool call that succeeded and can change something
 		resp.headers['X-Revision'] = str(kanban.revision_bump() if write else kanban.revision())
@@ -896,6 +1003,14 @@ def mcp() -> tuple:
 		resp.headers['Mcp-Session-Id'] = session
 
 	return resp
+
+
+def site() -> tuple:
+	'''Return (host name, origin) passkeys are bound to: KANOPY_URL when set, else the address the request came to.'''
+
+	url = urllib.parse.urlsplit(URL or request.host_url)
+
+	return url.hostname, f'{url.scheme}://{url.netloc}'
 
 
 def session_response(token: str) -> Response:

@@ -6,7 +6,7 @@ from . import database
 from . import kanban
 
 
-TABLES = ('users', 'projects', 'tasks', 'attachments', 'settings', 'sent', 'labels', 'task_labels', 'comments', 'links', 'sessions', 'tokens', 'invites', 'teams', 'team_members', 'shares', 'task_assignees', 'task_events', 'notifications', 'trash') # parents before the rows that reference them
+TABLES = ('users', 'projects', 'tasks', 'attachments', 'settings', 'sent', 'labels', 'task_labels', 'comments', 'links', 'sessions', 'tokens', 'invites', 'teams', 'team_members', 'shares', 'task_assignees', 'task_events', 'notifications', 'trash', 'passkeys', 'recovery_codes') # parents before the rows that reference them
 BATCH  = 500 # rows per insert batch
 
 

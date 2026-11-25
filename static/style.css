@@ -641,6 +641,13 @@ body:not(.is-admin) .admin-only { display: none !important; }
 .secret p { margin: 0; font-size: .84rem; }
 .secret input { font-family: var(--mono); font-size: .8rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .45rem .55rem; color: var(--text); width: 100%; }
 .secret .link-btn { align-self: flex-end; width: auto; }
+.secret textarea { font-family: var(--mono); font-size: .85rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .45rem .55rem; color: var(--text); width: 100%; resize: vertical; }
+.tfa-setup { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.tfa-setup > div:last-child { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: .5rem; }
+.tfa-qr { width: 164px; flex: none; padding: 6px; background: #fff; border-radius: 8px; line-height: 0; }
+.tfa-qr svg { width: 100%; height: auto; }
+.tfa-setup input.mono { font-family: var(--mono); font-size: .8rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .45rem .55rem; color: var(--text); width: 100%; }
+#auth-passkey { width: 100%; }
 #share-dlg { width: min(520px, calc(100vw - 2rem)); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 14px; padding: 1.2rem; }
 #share-dlg::backdrop { background: rgb(0 0 0 / .55); }
 #day-dlg { width: min(520px, calc(100vw - 2rem)); background: var(--panel); }
