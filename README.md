@@ -158,7 +158,7 @@ Add the server:
 claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header "X-Agent: claude" --header "X-Key: $TOKEN"
 ```
 
-Add `agents/hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. Each new session then starts with a briefing on the project for the current directory and its open tasks:
+Add `agents/hook.sh` as a `SessionStart` hook in `~/.claude/settings.json`. Each new session then starts with a briefing on the project for the current directory and its open tasks. It reads `KANOPY_KEY` and the address from the `.env` next to it: `KANOPY_URL` when set *(kanopy on another machine or behind a proxy)*, otherwise `KANOPY_HOST` and `KANOPY_PORT`:
 
 ```json
 {
