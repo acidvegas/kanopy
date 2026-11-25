@@ -43,6 +43,7 @@
 			<a href="#auth">Auth</a>
 			<a href="#invites">Invites</a>
 			<a href="#account">Account</a>
+			<a href="#two-factor">Two-factor</a>
 			<a href="#notifications">Notifications</a>
 			<a href="#projects">Projects</a>
 			<a href="#sharing">Sharing</a>
@@ -82,11 +83,24 @@
 <ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>403</code></li></ul>
 <h3 id="post-api-login"><span class="verb post">POST</span> <code>/api/login</code><a class="anchor" href="#post-api-login" aria-label="Link to this endpoint">#</a></h3>
 <p>Sign in.</p>
-<p>Sets the <code>kb_session</code> cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window.</p>
+<p>Sets the <code>kb_session</code> cookie (30 days). Five failed sign-ins from one address within 15 minutes lock it out for the rest of that window. When the account has a second factor, no cookie is set yet: the response is <code>{"two_factor": [...], "ticket": "..."}</code> and sign-in finishes at /api/login/2fa within 5 minutes.</p>
 <p class="auth">No sign-in needed.</p>
 <p class="label">Body <code>application/json</code></p>
 <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>username</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>password</code> <small>required</small></td><td>string</td><td>At least 8 characters for new accounts</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: any</li><li>Errors: <code>400</code>, <code>403</code></li></ul>
+<h3 id="post-api-login-2fa"><span class="verb post">POST</span> <code>/api/login/2fa</code><a class="anchor" href="#post-api-login-2fa" aria-label="Link to this endpoint">#</a></h3>
+<p>Finish signing in with a second factor.</p>
+<p>Send <code>code</code> (authenticator code or a recovery code) or <code>passkey</code> (the browser's assertion as JSON, from /api/login/passkey). Sets the session cookie. Five wrong tries end the ticket; wrong tries also count toward the address's sign-in limit.</p>
+<p class="auth">No sign-in needed.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>ticket</code> <small>required</small></td><td>string</td><td></td></tr><tr><td><code>code</code></td><td>string</td><td></td></tr><tr><td><code>passkey</code></td><td>object</td><td></td></tr></tbody></table></div>
 <ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>403</code></li></ul>
+<h3 id="post-api-login-passkey"><span class="verb post">POST</span> <code>/api/login/passkey</code><a class="anchor" href="#post-api-login-passkey" aria-label="Link to this endpoint">#</a></h3>
+<p>Browser options for finishing a sign-in with a passkey.</p>
+<p class="auth">No sign-in needed.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>ticket</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-passkeyoptions">PasskeyOptions</a></li><li>Errors: <code>400</code>, <code>403</code></li></ul>
 <h3 id="post-api-logout"><span class="verb post">POST</span> <code>/api/logout</code><a class="anchor" href="#post-api-logout" aria-label="Link to this endpoint">#</a></h3>
 <p>Sign out.</p>
 <p>Ends the session and clears the cookie.</p>
@@ -144,6 +158,59 @@
 <p>Send a test push to your ntfy topic.</p>
 <p class="auth">Sign-in cookie only: API tokens are refused.</p>
 <ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h2 id="two-factor">Two-factor<a class="anchor" href="#two-factor" aria-label="Link to this section">#</a></h2>
+<h3 id="get-api-me-2fa"><span class="verb get">GET</span> <code>/api/me/2fa</code><a class="anchor" href="#get-api-me-2fa" aria-label="Link to this endpoint">#</a></h3>
+<p>Your second factors.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-2fa-totp"><span class="verb post">POST</span> <code>/api/me/2fa/totp</code><a class="anchor" href="#post-api-me-2fa-totp" aria-label="Link to this endpoint">#</a></h3>
+<p>Start setting up an authenticator app.</p>
+<p>Nothing changes until /api/me/2fa/totp/confirm gets a matching code.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td>Your current password</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: object</li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-me-2fa-totp"><span class="verb delete">DELETE</span> <code>/api/me/2fa/totp</code><a class="anchor" href="#delete-api-me-2fa-totp" aria-label="Link to this endpoint">#</a></h3>
+<p>Turn the authenticator app off.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td>Your current password</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-2fa-totp-confirm"><span class="verb post">POST</span> <code>/api/me/2fa/totp/confirm</code><a class="anchor" href="#post-api-me-2fa-totp-confirm" aria-label="Link to this endpoint">#</a></h3>
+<p>Turn the authenticator app on with a code from it.</p>
+<p>The first second factor also creates 10 recovery codes, returned once in <code>recovery</code>.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>code</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-2fa-recovery"><span class="verb post">POST</span> <code>/api/me/2fa/recovery</code><a class="anchor" href="#post-api-me-2fa-recovery" aria-label="Link to this endpoint">#</a></h3>
+<p>Replace your recovery codes.</p>
+<p>The new codes are only shown in this response; the old ones stop working.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td>Your current password</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-2fa-passkeys-options"><span class="verb post">POST</span> <code>/api/me/2fa/passkeys/options</code><a class="anchor" href="#post-api-me-2fa-passkeys-options" aria-label="Link to this endpoint">#</a></h3>
+<p>Browser options for adding a passkey.</p>
+<p>Passkeys need https (or localhost).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td>Your current password</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-passkeyoptions">PasskeyOptions</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="post-api-me-2fa-passkeys"><span class="verb post">POST</span> <code>/api/me/2fa/passkeys</code><a class="anchor" href="#post-api-me-2fa-passkeys" aria-label="Link to this endpoint">#</a></h3>
+<p>Store a passkey the browser just made.</p>
+<p>The first second factor also creates 10 recovery codes, returned once in <code>recovery</code>.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>name</code></td><td>string</td><td>Label like laptop</td></tr><tr><td><code>credential</code> <small>required</small></td><td>object</td><td>The browser credential as JSON (credential.toJSON())</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-me-2fa-passkeys-passkey-id"><span class="verb delete">DELETE</span> <code>/api/me/2fa/passkeys/{passkey_id}</code><a class="anchor" href="#delete-api-me-2fa-passkeys-passkey-id" aria-label="Link to this endpoint">#</a></h3>
+<p>Remove a passkey.</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>passkey_id</code> <small>required</small></td><td>path</td><td>integer</td><td>Passkey id</td></tr></tbody></table></div>
+<p class="label">Body <code>application/json</code></p>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td>Your current password</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-twofactor">TwoFactor</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
 <h2 id="notifications">Notifications<a class="anchor" href="#notifications" aria-label="Link to this section">#</a></h2>
 <h3 id="get-api-notifications"><span class="verb get">GET</span> <code>/api/notifications</code><a class="anchor" href="#get-api-notifications" aria-label="Link to this endpoint">#</a></h3>
 <p>Your inbox: the newest 100 notifications and the unread count.</p>
@@ -398,6 +465,11 @@
 <p class="label">Body <code>application/json</code></p>
 <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>password</code> <small>required</small></td><td>string</td><td></td></tr></tbody></table></div>
 <ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
+<h3 id="delete-api-users-user-id-2fa"><span class="verb delete">DELETE</span> <code>/api/users/{user_id}/2fa</code><a class="anchor" href="#delete-api-users-user-id-2fa" aria-label="Link to this endpoint">#</a></h3>
+<p>Turn off a locked-out user&#x27;s second factors (admin).</p>
+<p class="auth">Sign-in cookie only: API tokens are refused.</p>
+<div class="table-wrap"><table><thead><tr><th>Parameter</th><th>In</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>user_id</code> <small>required</small></td><td>path</td><td>integer</td><td>User id</td></tr></tbody></table></div>
+<ul class="codes"><li><code>200</code> OK: <a href="#schema-ok">Ok</a></li><li>Errors: <code>400</code>, <code>401</code>, <code>403</code>, <code>404</code></li></ul>
 <h2 id="board">Board<a class="anchor" href="#board" aria-label="Link to this section">#</a></h2>
 <h3 id="get-api-settings"><span class="verb get">GET</span> <code>/api/settings</code><a class="anchor" href="#get-api-settings" aria-label="Link to this endpoint">#</a></h3>
 <p>Board settings (admin).</p>
@@ -481,6 +553,10 @@
 <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>name</code></td><td>string</td><td></td></tr><tr><td><code>members</code></td><td>object[]</td><td></td></tr><tr><td><code>projects</code></td><td>integer[]</td><td>Project ids shared with the team</td></tr><tr><td><code>owner</code></td><td>boolean</td><td>You can manage it</td></tr><tr><td><code>webhook</code></td><td>string</td><td>Only shown to team owners</td></tr><tr><td><code>webhook_error</code></td><td>string</td><td></td></tr><tr><td><code>webhook_failed</code></td><td>string | null</td><td></td></tr></tbody></table></div>
 <h3 id="schema-token">Token<a class="anchor" href="#schema-token" aria-label="Link to this schema">#</a></h3>
 <div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>id</code></td><td>integer</td><td></td></tr><tr><td><code>name</code></td><td>string</td><td></td></tr><tr><td><code>created</code></td><td>string</td><td></td></tr><tr><td><code>used</code></td><td>string | null</td><td></td></tr><tr><td><code>role</code></td><td>string</td><td></td></tr><tr><td><code>projects</code></td><td>string[]</td><td>Paths the token is limited to; empty for all</td></tr></tbody></table></div>
+<h3 id="schema-twofactor">TwoFactor<a class="anchor" href="#schema-twofactor" aria-label="Link to this schema">#</a></h3>
+<div class="table-wrap"><table><thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead><tbody><tr><td><code>totp</code></td><td>boolean</td><td>Authenticator app on</td></tr><tr><td><code>passkeys</code></td><td>object[]</td><td></td></tr><tr><td><code>recovery_left</code></td><td>integer</td><td>Unused recovery codes</td></tr><tr><td><code>recovery</code></td><td>string[] | null</td><td>New recovery codes, only in the response that made them</td></tr></tbody></table></div>
+<h3 id="schema-passkeyoptions">PasskeyOptions<a class="anchor" href="#schema-passkeyoptions" aria-label="Link to this schema">#</a></h3>
+<p>object</p>
 	</article>
 </main>
 

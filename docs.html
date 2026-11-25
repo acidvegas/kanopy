@@ -142,6 +142,7 @@ venv/bin/python -m kanopy.app
 </ul>
 <h2 id="accounts-and-sharing">Accounts and sharing<a class="anchor" href="#accounts-and-sharing" aria-label="Link to this section">#</a></h2>
 <p>Everyone signs in with a username and password. The admin creates single-use invite links <em>(valid 7 days)</em> on the Settings page.</p>
+<p><strong>Two-factor sign-in</strong> is opt-in per person, under <strong>Settings, Two-factor sign-in</strong>. After the password, kanopy asks for a code from an authenticator app <em>(scan the QR code)</em> or a <strong>passkey</strong> <em>(this device, a phone or a security key; add several)</em>. Turning on the first one shows 10 one-time <strong>recovery codes</strong>. Every change there asks for your password again, and an admin can turn 2FA off for someone who is locked out <em>(Settings, Users, Reset 2FA)</em>. Passkeys need kanopy on https <em>(or localhost)</em> and are tied to its address, so set <code>KANOPY_URL</code> behind a proxy. API tokens and MCP are not affected.</p>
 <p>Projects are private to whoever made them until shared with a user or a team. Sharing a project includes its sub-projects.</p>
 <div class="table-wrap"><table>
 <thead>
@@ -175,7 +176,7 @@ venv/bin/python -m kanopy.app
 <p>Add the server:</p>
 <pre><code class="language-sh">claude mcp add --transport http -s user kanopy http://HOST:PORT/mcp --header &quot;X-Agent: claude&quot; --header &quot;X-Key: $TOKEN&quot;
 </code></pre>
-<p>Add <code>agents/hook.sh</code> as a <code>SessionStart</code> hook in <code>~/.claude/settings.json</code>. Each new session then starts with a briefing on the project for the current directory and its open tasks:</p>
+<p>Add <code>agents/hook.sh</code> as a <code>SessionStart</code> hook in <code>~/.claude/settings.json</code>. Each new session then starts with a briefing on the project for the current directory and its open tasks. It reads <code>KANOPY_KEY</code> and the address from the <code>.env</code> next to it: <code>KANOPY_URL</code> when set <em>(kanopy on another machine or behind a proxy)</em>, otherwise <code>KANOPY_HOST</code> and <code>KANOPY_PORT</code>:</p>
 <pre><code class="language-json">{
     &quot;hooks&quot;: {
         &quot;SessionStart&quot;: [{ &quot;hooks&quot;: [{ &quot;type&quot;: &quot;command&quot;, &quot;command&quot;: &quot;/path/to/kanopy/agents/hook.sh&quot; }] }]
